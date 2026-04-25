@@ -7,6 +7,7 @@ dependencies = [
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
     "langchain-google-genai>=2.1.4",
+    "fastapi>=0.115.0",
     "mcp[cli]>=1.0.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
@@ -15,6 +16,7 @@ dependencies = [
     "sentence-transformers>=5.4.1",
     "rank-bm25>=0.2.2",
     "tiktoken>=0.12.0",
+    "uvicorn>=0.30.0",
 ]
 
 [build-system]
@@ -26,6 +28,7 @@ packages = ["brain_agents"]
 
 [project.scripts]
 brain-mcp = "brain_agents.mcp_server:main"
+brain-api = "brain_agents.api.app:main"
 
 [tool.uv]
 package = true

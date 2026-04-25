@@ -4,12 +4,15 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING, List
 
 import yaml
 from langchain_core.tools import tool
 
-from .retrieval import RetrievalHit, Retriever
+from .retrieval import RetrievalHit
+from .services.retrieval_service import retrieval_service
+if TYPE_CHECKING:
+    from .retrieval import Retriever
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,21 +69,8 @@ def _parse_frontmatter_and_body(text: str) -> tuple[dict, str]:
     return fm, body
 
 
-# Lazy, process-wide cache of Retriever instances keyed by brain root path.
-# Building the index + loading BGE weights costs ~seconds; we only want to pay
-# that price once per (process, brain_root) pair. The Retriever itself is
-# safe to share across calls — query() is read-only and the BGE encoder is
-# stateless after corpus encoding.
-_RETRIEVER_CACHE: dict[str, Retriever] = {}
-
-
 def _get_retriever(brain_root: Path) -> Retriever:
-    key = str(brain_root.resolve())
-    r = _RETRIEVER_CACHE.get(key)
-    if r is None:
-        r = Retriever(brain_root=brain_root)
-        _RETRIEVER_CACHE[key] = r
-    return r
+    return retrieval_service.get(brain_root)
 
 
 def _format_hits(hits: list[RetrievalHit]) -> str:

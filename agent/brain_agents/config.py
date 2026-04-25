@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     gemini_thinking_budget: int = Field(default=-1, validation_alias="GEMINI_THINKING_BUDGET")
     brian_reference_dir: Path = Field(default=_DEFAULT_REFERENCE, validation_alias="BRIAN_REFERENCE_DIR")
     brain_dir: Path = Field(default=_DEFAULT_WORKING, validation_alias="BRAIN_DIR")
+    update_mode: str = Field(default="llm", validation_alias="UPDATE_MODE")
 
     @field_validator("brian_reference_dir", mode="before")
     @classmethod
@@ -64,4 +65,6 @@ def load_settings(validate: bool = True) -> Settings:
     s = Settings()
     if validate and not s.gemini_api_key.strip():
         raise ValueError("GEMINI_API_KEY is required in .env (see agent/.env.example)")
+    if str(s.update_mode).strip().lower() not in {"llm", "deterministic"}:
+        raise ValueError("UPDATE_MODE must be 'llm' or 'deterministic'")
     return s
