@@ -5,7 +5,7 @@ import {
   Brain,
   CheckCircle2,
   ChevronRight,
-  Copy,
+  Cpu,
   Database,
   GitBranch,
   MessageSquare,
@@ -62,6 +62,13 @@ export default async function Home() {
               <Brain size={16} />
               Explore the Brain
               <ArrowRight size={15} />
+            </Link>
+            <Link
+              href="/agent"
+              className="inline-flex items-center gap-2 rounded-full border border-violet-300/60 bg-violet-50/80 px-6 py-3 text-sm font-semibold text-violet-700 backdrop-blur-sm transition-all hover:bg-violet-100/80"
+            >
+              <Cpu size={14} className="text-violet-500" />
+              Watch Agent Live
             </Link>
             <form action="/api/demo" method="post">
               <button className="inline-flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/80 px-6 py-3 text-sm font-medium text-slate-700 backdrop-blur-sm transition-all hover:bg-white hover:border-slate-300">
@@ -222,6 +229,7 @@ export default async function Home() {
 
             <div className="mt-4 grid grid-cols-2 gap-2">
               {[
+                { href: "/agent",  label: "Agent live",   Icon: Bot,     desc: "Real-time trace" },
                 { href: "/events", label: "Event log",    Icon: Radio,   desc: "What came in" },
                 { href: "/search", label: "Search memory", Icon: Search,  desc: "Query the brain" },
               ].map(({ href, label, Icon, desc }) => (

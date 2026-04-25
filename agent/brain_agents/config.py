@@ -8,8 +8,9 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 _AGENT_DIR = Path(__file__).resolve().parent.parent
-_DEFAULT_REFERENCE = _AGENT_DIR.parent / "brian"
-_DEFAULT_WORKING = _AGENT_DIR.parent / "brain"
+_REPO_ROOT = _AGENT_DIR.parent
+_DEFAULT_REFERENCE = _REPO_ROOT / "brian"
+_DEFAULT_WORKING = _REPO_ROOT / "brain"
 
 
 def ensure_working_brain(reference: Path, working: Path) -> None:
@@ -27,21 +28,26 @@ def ensure_working_brain(reference: Path, working: Path) -> None:
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=(".env", str(_AGENT_DIR / ".env")),
+        # Search order: agent/.env → repo-root .env → environment variables
+        env_file=(
+            str(_AGENT_DIR / ".env"),
+            str(_REPO_ROOT / ".env"),
+        ),
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
+    # ── OpenAI (primary) ──────────────────────────────────────────────────────
+    openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-4o-mini", validation_alias="OPENAI_MODEL")
+
+    # ── Gemini (fallback if no OpenAI key) ────────────────────────────────────
     gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
-    gemini_model: str = Field(
-        default="gemini-2.5-flash",
-        validation_alias="GEMINI_MODEL",
-    )
-    gemini_include_thoughts: bool = Field(
-        default=True,
-        validation_alias="GEMINI_INCLUDE_THOUGHTS",
-    )
+    gemini_model: str = Field(default="gemini-2.5-flash", validation_alias="GEMINI_MODEL")
+    gemini_include_thoughts: bool = Field(default=True, validation_alias="GEMINI_INCLUDE_THOUGHTS")
     gemini_thinking_budget: int = Field(default=-1, validation_alias="GEMINI_THINKING_BUDGET")
+
+    # ── Shared ────────────────────────────────────────────────────────────────
     brian_reference_dir: Path = Field(default=_DEFAULT_REFERENCE, validation_alias="BRIAN_REFERENCE_DIR")
     brain_dir: Path = Field(default=_DEFAULT_WORKING, validation_alias="BRAIN_DIR")
     update_mode: str = Field(default="llm", validation_alias="UPDATE_MODE")
@@ -60,11 +66,20 @@ class Settings(BaseSettings):
             return _DEFAULT_WORKING
         return Path(v).expanduser()
 
+    @property
+    def provider(self) -> str:
+        """Return 'openai' if an OpenAI key is set, otherwise 'gemini'."""
+        return "openai" if self.openai_api_key.strip() else "gemini"
+
 
 def load_settings(validate: bool = True) -> Settings:
     s = Settings()
-    if validate and not s.gemini_api_key.strip():
-        raise ValueError("GEMINI_API_KEY is required in .env (see agent/.env.example)")
+    if validate:
+        if not s.openai_api_key.strip() and not s.gemini_api_key.strip():
+            raise ValueError(
+                "No LLM API key found. Set OPENAI_API_KEY or GEMINI_API_KEY in .env "
+                "(see agent/.env.example or the root .env file)"
+            )
     if str(s.update_mode).strip().lower() not in {"llm", "deterministic"}:
         raise ValueError("UPDATE_MODE must be 'llm' or 'deterministic'")
     return s

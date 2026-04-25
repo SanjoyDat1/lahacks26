@@ -1,8 +1,10 @@
+import path from "path";
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: __dirname,
+    // node_modules lives at the repo root (one level up from frontend/)
+    root: path.resolve(__dirname, ".."),
   },
 };
 
