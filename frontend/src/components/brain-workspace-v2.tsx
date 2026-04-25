@@ -20,7 +20,6 @@ import {
   Hash,
   LayoutDashboard,
   Link2,
-  Map as MapIcon,
   MessageSquare,
   Network,
   PlugZap,
@@ -182,7 +181,7 @@ const FILE_TYPE_ICON: Record<string, ComponentType<IconProps>> = {
   summary: BookOpen,
   context: FileText,
   goals: TrendingUp,
-  map: MapIcon,
+  map: Network,
   timeline: Clock,
   overview: LayoutDashboard,
 };
