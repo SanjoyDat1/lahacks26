@@ -4,7 +4,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -48,17 +48,16 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    openrouter_api_key: str = Field(default="", validation_alias="OPENROUTER_API_KEY")
-    openrouter_model: str = Field(
-        default="openai/gpt-4o-mini",
-        validation_alias="OPENROUTER_MODEL",
+    google_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("GOOGLE_API_KEY", "GEMINI_API_KEY"),
+    )
+    gemini_model: str = Field(
+        default="gemini-2.5-flash",
+        validation_alias="GEMINI_MODEL",
     )
     brian_reference_dir: Path = Field(default=_DEFAULT_REFERENCE, validation_alias="BRIAN_REFERENCE_DIR")
     brain_dir: Path = Field(default=_DEFAULT_WORKING, validation_alias="BRAIN_DIR")
-    openrouter_base_url: str = Field(
-        default="https://openrouter.ai/api/v1",
-        validation_alias="OPENROUTER_BASE_URL",
-    )
 
     @field_validator("brian_reference_dir", mode="before")
     @classmethod
@@ -77,6 +76,9 @@ class Settings(BaseSettings):
 
 def load_settings(validate: bool = True) -> Settings:
     s = Settings()
-    if validate and not s.openrouter_api_key.strip():
-        raise ValueError("OPENROUTER_API_KEY is required in .env (see agent/.env.example)")
+    if validate and not s.google_api_key.strip():
+        raise ValueError(
+            "GOOGLE_API_KEY or GEMINI_API_KEY is required in .env "
+            "(see agent/.env.example)"
+        )
     return s
