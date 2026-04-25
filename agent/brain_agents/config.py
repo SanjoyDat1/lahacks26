@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Any
 
@@ -15,30 +14,15 @@ _DEFAULT_WORKING = _AGENT_DIR.parent / "brain"
 
 def ensure_working_brain(reference: Path, working: Path) -> None:
     """
-    Materialize the on-demand working brain.
+    Validate brain paths without materializing the working brain.
 
-    If the working directory is missing or empty, copy the reference tree
-    (the `brian/` sample) so the runtime brain matches the intended shape.
-    If the working tree already has content, it is left unchanged.
+    The `brian/` tree is a read-only schema/example. The live working brain is
+    created lazily by prompt-driven tools so startup does not pre-populate files
+    the project has not proven it needs.
     """
     ref = reference.resolve()
-    wk = working.resolve()
     if not ref.is_dir():
         raise FileNotFoundError(f"Reference brain (example context) not found: {ref}")
-
-    def is_effectively_empty(d: Path) -> bool:
-        if not d.exists():
-            return True
-        for p in d.rglob("*"):
-            if p.is_file():
-                return False
-        return True
-
-    wk.parent.mkdir(parents=True, exist_ok=True)
-    if is_effectively_empty(wk):
-        if wk.exists():
-            shutil.rmtree(wk)
-        shutil.copytree(ref, wk)
 
 
 class Settings(BaseSettings):
@@ -48,14 +32,16 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    google_api_key: str = Field(
-        default="",
-        validation_alias=AliasChoices("GOOGLE_API_KEY", "GEMINI_API_KEY"),
-    )
+    gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
     gemini_model: str = Field(
         default="gemini-2.5-flash",
         validation_alias="GEMINI_MODEL",
     )
+    gemini_include_thoughts: bool = Field(
+        default=True,
+        validation_alias="GEMINI_INCLUDE_THOUGHTS",
+    )
+    gemini_thinking_budget: int = Field(default=-1, validation_alias="GEMINI_THINKING_BUDGET")
     brian_reference_dir: Path = Field(default=_DEFAULT_REFERENCE, validation_alias="BRIAN_REFERENCE_DIR")
     brain_dir: Path = Field(default=_DEFAULT_WORKING, validation_alias="BRAIN_DIR")
 
@@ -76,9 +62,6 @@ class Settings(BaseSettings):
 
 def load_settings(validate: bool = True) -> Settings:
     s = Settings()
-    if validate and not s.google_api_key.strip():
-        raise ValueError(
-            "GOOGLE_API_KEY or GEMINI_API_KEY is required in .env "
-            "(see agent/.env.example)"
-        )
+    if validate and not s.gemini_api_key.strip():
+        raise ValueError("GEMINI_API_KEY is required in .env (see agent/.env.example)")
     return s
