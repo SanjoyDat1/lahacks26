@@ -177,6 +177,8 @@ export function SessionStartPage() {
   const [isDone, setIsDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
+  /** False when agent /health omits bootstrap_ws_github (old process before GitHub WS support). */
+  const [bootstrapWsGithub, setBootstrapWsGithub] = useState<boolean | null>(null);
   const [stage, setStage] = useState<StageId>("upload");
   const [stageLabel, setStageLabel] = useState("Add a GitHub repo URL to start");
   const [, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
@@ -194,7 +196,9 @@ export function SessionStartPage() {
   const totalChars = useMemo(() => docs.reduce((sum, doc) => sum + doc.chars, 0), [docs]);
   const githubApiList = useMemo(() => githubReposForApi(githubRepos), [githubRepos]);
   const hasBootstrapSource = docs.length > 0 || githubApiList.length > 0;
+  const githubOnlyBootstrap = docs.length === 0 && githubApiList.length > 0;
   const sourceCount = docs.length + githubApiList.length;
+  const agentTooOldForGithubWs = agentOnline === true && bootstrapWsGithub === false;
   const buildMode = isRunning || isDone || createdFiles.length > 0;
   const completedStages = useMemo(() => {
     if (isDone) return STAGES.length;
@@ -208,9 +212,17 @@ export function SessionStartPage() {
       try {
         const res = await fetch("/api/agent/stream");
         const data = await res.json();
-        if (!cancelled) setAgentOnline(!data.offline);
+        if (!cancelled) {
+          setAgentOnline(!data.offline);
+          setBootstrapWsGithub(
+            data.offline ? null : data.bootstrap_ws_github === true,
+          );
+        }
       } catch {
-        if (!cancelled) setAgentOnline(false);
+        if (!cancelled) {
+          setAgentOnline(false);
+          setBootstrapWsGithub(null);
+        }
       }
     }
     checkAgent();
@@ -387,13 +399,23 @@ export function SessionStartPage() {
       return;
     }
     if (event.type === "error") {
-      setError(event.message);
+      let msg = event.message;
+      if (msg.includes("Upload at least one readable document")) {
+        msg = `${msg}\n\nYour agent API is probably an older build: it ignores GitHub URLs on the bootstrap WebSocket. Restart it from the latest repo: cd agent && uv run brain-api`;
+      }
+      setError(msg);
       setIsRunning(false);
     }
   }, []);
 
   const runBootstrap = useCallback(() => {
     if (!hasBootstrapSource || isRunning || agentOnline === false) return;
+    if (githubOnlyBootstrap && agentTooOldForGithubWs) {
+      setError(
+        "This agent API does not support GitHub-only bootstrap (or /health could not be read). Restart from the latest code: cd agent && uv run brain-api",
+      );
+      return;
+    }
 
     setIsRunning(true);
     setIsDone(false);
@@ -452,7 +474,17 @@ export function SessionStartPage() {
     ws.onclose = () => {
       setIsRunning(false);
     };
-  }, [agentOnline, docs, githubApiList, handleBootstrapEvent, hasBootstrapSource, isRunning, prompt]);
+  }, [
+    agentOnline,
+    agentTooOldForGithubWs,
+    docs,
+    githubApiList,
+    githubOnlyBootstrap,
+    handleBootstrapEvent,
+    hasBootstrapSource,
+    isRunning,
+    prompt,
+  ]);
 
   return (
     <main className="relative min-h-[calc(100vh-57px)] overflow-hidden px-6 py-8">
@@ -574,14 +606,26 @@ export function SessionStartPage() {
             supportingFiles
           />
 
+          {agentTooOldForGithubWs && (
+            <div className="w-full max-w-3xl rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-[11px] leading-relaxed text-amber-900">
+              <span className="font-semibold">Agent API needs a restart.</span> The running server does not report GitHub bootstrap support, so repo-only sessions will fail. From the repo root:{" "}
+              <code className="rounded bg-white/80 px-1.5 py-0.5 font-mono text-[10px]">cd agent &amp;&amp; uv run brain-api</code>
+            </div>
+          )}
+
           <div className="mt-6 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <AgentStatus online={agentOnline} compact />
             <button
               onClick={runBootstrap}
-              disabled={!hasBootstrapSource || isRunning || agentOnline === false}
+              disabled={
+                !hasBootstrapSource
+                || isRunning
+                || agentOnline === false
+                || (githubOnlyBootstrap && agentTooOldForGithubWs)
+              }
               className={cn(
                 "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all",
-                hasBootstrapSource && !isRunning && agentOnline !== false
+                hasBootstrapSource && !isRunning && agentOnline !== false && !(githubOnlyBootstrap && agentTooOldForGithubWs)
                   ? "bg-violet-600 text-white shadow-lg shadow-violet-300/40 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-violet-400/50"
                   : "cursor-not-allowed bg-white/70 text-slate-400 ring-1 ring-slate-200/70",
               )}
@@ -1172,7 +1216,7 @@ function ErrorBanner({ message }: { message: string }) {
       <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
       <div>
         <p className="text-xs font-semibold">Session failed</p>
-        <p className="mt-1 text-[11px] leading-4">{message}</p>
+        <p className="mt-1 whitespace-pre-line text-[11px] leading-4">{message}</p>
       </div>
     </div>
   );

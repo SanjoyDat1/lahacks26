@@ -15,6 +15,8 @@ class HealthResponse(BaseModel):
     brian_reference_dir: str
     brain_dir: str
     update_mode_default: UpdateMode
+    #: Declared so the session UI can warn when an old agent ignores ``github_repos`` on ``/bootstrap/ws``.
+    bootstrap_ws_github: bool = True
 
 
 class QueryRequest(BaseModel):
