@@ -177,8 +177,6 @@ export function SessionStartPage() {
   const [isDone, setIsDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
-  /** False when agent /health omits bootstrap_ws_github (old process before GitHub WS support). */
-  const [bootstrapWsGithub, setBootstrapWsGithub] = useState<boolean | null>(null);
   const [stage, setStage] = useState<StageId>("upload");
   const [stageLabel, setStageLabel] = useState("Add a GitHub repo URL to start");
   const [, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
@@ -198,7 +196,6 @@ export function SessionStartPage() {
   const hasBootstrapSource = docs.length > 0 || githubApiList.length > 0;
   const githubOnlyBootstrap = docs.length === 0 && githubApiList.length > 0;
   const sourceCount = docs.length + githubApiList.length;
-  const agentTooOldForGithubWs = agentOnline === true && bootstrapWsGithub === false;
   const buildMode = isRunning || isDone || createdFiles.length > 0;
   const completedStages = useMemo(() => {
     if (isDone) return STAGES.length;
@@ -212,17 +209,9 @@ export function SessionStartPage() {
       try {
         const res = await fetch("/api/agent/stream");
         const data = await res.json();
-        if (!cancelled) {
-          setAgentOnline(!data.offline);
-          setBootstrapWsGithub(
-            data.offline ? null : data.bootstrap_ws_github === true,
-          );
-        }
+        if (!cancelled) setAgentOnline(!data.offline);
       } catch {
-        if (!cancelled) {
-          setAgentOnline(false);
-          setBootstrapWsGithub(null);
-        }
+        if (!cancelled) setAgentOnline(false);
       }
     }
     checkAgent();
@@ -399,34 +388,82 @@ export function SessionStartPage() {
       return;
     }
     if (event.type === "error") {
-      let msg = event.message;
-      if (msg.includes("Upload at least one readable document")) {
-        msg = `${msg}\n\nYour agent API is probably an older build: it ignores GitHub URLs on the bootstrap WebSocket. Restart it from the latest repo: cd agent && uv run brain-api`;
-      }
-      setError(msg);
+      setError(event.message);
       setIsRunning(false);
     }
   }, []);
 
   const runBootstrap = useCallback(() => {
     if (!hasBootstrapSource || isRunning || agentOnline === false) return;
-    if (githubOnlyBootstrap && agentTooOldForGithubWs) {
-      setError(
-        "This agent API does not support GitHub-only bootstrap (or /health could not be read). Restart from the latest code: cd agent && uv run brain-api",
-      );
-      return;
-    }
 
     setIsRunning(true);
     setIsDone(false);
     setError(null);
     setStage("normalize");
-    setStageLabel("Connecting to the brain agent");
-    setNodes(INITIAL_NODES);
-    setEdges(INITIAL_EDGES);
     setTree([]);
     setCreatedFiles([]);
     setResultText("");
+
+    if (githubOnlyBootstrap) {
+      setStageLabel("Initializing brain from GitHub…");
+      setNodes(INITIAL_NODES);
+      setEdges(INITIAL_EDGES);
+      setThinking([
+        "GitHub-only bootstrap uses POST /initialize (no file uploads). This can take a minute while the repo is cloned and scanned.",
+        `Repositories: ${githubApiList.length}.`,
+      ]);
+      void (async () => {
+        try {
+          const res = await fetch("/api/agent/initialize", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              prompt,
+              github_repos: githubApiList,
+              overwrite: true,
+              max_files: 24,
+              apply: true,
+              clone_timeout_s: 300,
+            }),
+          });
+          const raw = (await res.json()) as { detail?: unknown; written_files?: string[]; result_text?: string };
+          if (!res.ok) {
+            setError(formatInitializeErrorDetail(raw, res.status));
+            setIsRunning(false);
+            setStage("upload");
+            setStageLabel("Add a GitHub repo URL to start");
+            return;
+          }
+          const written = Array.isArray(raw.written_files) ? raw.written_files : [];
+          setStage("done");
+          setStageLabel("Brain ready");
+          setIsDone(true);
+          setIsRunning(false);
+          setResultText(String(raw.result_text ?? ""));
+          setCreatedFiles(
+            written.map((path) => ({
+              path,
+              title: path.split("/").pop(),
+              status: "done" as const,
+            })),
+          );
+          setThinking((prev) => [
+            ...prev,
+            `Done. Wrote ${written.length} brain file${written.length === 1 ? "" : "s"}. Open the brain workspace to explore.`,
+          ]);
+        } catch (e) {
+          setError(e instanceof Error ? e.message : "Initialize request failed");
+          setIsRunning(false);
+          setStage("upload");
+          setStageLabel("Add a GitHub repo URL to start");
+        }
+      })();
+      return;
+    }
+
+    setStageLabel("Connecting to the brain agent");
+    setNodes(INITIAL_NODES);
+    setEdges(INITIAL_EDGES);
     setThinking([
       "Creating a new session. I will stream every important step instead of hiding the setup behind a spinner.",
       ...(githubApiList.length
@@ -474,17 +511,7 @@ export function SessionStartPage() {
     ws.onclose = () => {
       setIsRunning(false);
     };
-  }, [
-    agentOnline,
-    agentTooOldForGithubWs,
-    docs,
-    githubApiList,
-    githubOnlyBootstrap,
-    handleBootstrapEvent,
-    hasBootstrapSource,
-    isRunning,
-    prompt,
-  ]);
+  }, [agentOnline, docs, githubApiList, githubOnlyBootstrap, handleBootstrapEvent, hasBootstrapSource, isRunning, prompt]);
 
   return (
     <main className="relative min-h-[calc(100vh-57px)] overflow-hidden px-6 py-8">
@@ -606,26 +633,14 @@ export function SessionStartPage() {
             supportingFiles
           />
 
-          {agentTooOldForGithubWs && (
-            <div className="w-full max-w-3xl rounded-2xl border border-amber-200/80 bg-amber-50/90 px-4 py-3 text-[11px] leading-relaxed text-amber-900">
-              <span className="font-semibold">Agent API needs a restart.</span> The running server does not report GitHub bootstrap support, so repo-only sessions will fail. From the repo root:{" "}
-              <code className="rounded bg-white/80 px-1.5 py-0.5 font-mono text-[10px]">cd agent &amp;&amp; uv run brain-api</code>
-            </div>
-          )}
-
           <div className="mt-6 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <AgentStatus online={agentOnline} compact />
             <button
               onClick={runBootstrap}
-              disabled={
-                !hasBootstrapSource
-                || isRunning
-                || agentOnline === false
-                || (githubOnlyBootstrap && agentTooOldForGithubWs)
-              }
+              disabled={!hasBootstrapSource || isRunning || agentOnline === false}
               className={cn(
                 "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all",
-                hasBootstrapSource && !isRunning && agentOnline !== false && !(githubOnlyBootstrap && agentTooOldForGithubWs)
+                hasBootstrapSource && !isRunning && agentOnline !== false
                   ? "bg-violet-600 text-white shadow-lg shadow-violet-300/40 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-violet-400/50"
                   : "cursor-not-allowed bg-white/70 text-slate-400 ring-1 ring-slate-200/70",
               )}
@@ -1316,4 +1331,16 @@ function resolveBootstrapWsUrl() {
 
 function stageTitle(stage: StageId) {
   return STAGES.find((item) => item.id === stage)?.label ?? stage;
+}
+
+function formatInitializeErrorDetail(raw: { detail?: unknown }, status: number): string {
+  const d = raw.detail;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    return d
+      .map((item) => (typeof item === "object" && item && "msg" in item ? String((item as { msg: unknown }).msg) : JSON.stringify(item)))
+      .join("; ");
+  }
+  if (d != null && typeof d === "object") return JSON.stringify(d);
+  return `Initialize failed (${status})`;
 }

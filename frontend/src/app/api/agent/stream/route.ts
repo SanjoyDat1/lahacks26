@@ -54,17 +54,9 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const [toolsRes, healthRes] = await Promise.all([
-      fetch(`${AGENT_API}/tools`),
-      fetch(`${AGENT_API}/health`),
-    ]);
-    const data = await toolsRes.json();
-    let bootstrap_ws_github = false;
-    if (healthRes.ok) {
-      const health = (await healthRes.json()) as { bootstrap_ws_github?: boolean };
-      bootstrap_ws_github = health.bootstrap_ws_github === true;
-    }
-    return Response.json({ ...data, offline: false, bootstrap_ws_github });
+    const res = await fetch(`${AGENT_API}/tools`);
+    const data = await res.json();
+    return Response.json(data);
   } catch {
     return Response.json(
       {
@@ -76,7 +68,6 @@ export async function GET() {
         writer: ["upsert_working_file", "replace_working_file", "propose_update", "record_audit"],
         graph: null,
         offline: true,
-        bootstrap_ws_github: false,
       },
       { status: 200 },
     );
