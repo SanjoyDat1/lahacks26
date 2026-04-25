@@ -1,45 +1,41 @@
 ---
-id: hackathon.index
+id: brian.index
 type: index
-title: Hackathon Team Memory Project Brain
+title: Team Task Board Project Brain
 status: active
 importance: critical
 updated: 2026-04-25
 links:
   - summaries.project_summary
-  - context.open_questions
+  - architecture.system_overview
+  - architecture.runtime_flow
+  - decisions.decision_log
 keywords:
   - source of truth
   - project memory
-  - coding agent context
-  - hackathon
-  - team memory
+  - task management
 ---
 
-# Hackathon Team Memory Project Brain
+# Team Task Board Project Brain
 
-This folder is a structured project brain for the AI-assisted team memory tool. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.
+This folder is an example of a structured project brain for the Team Task Board application. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.
 
-Treat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through a clearly linked navigation file.
+Treat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through [Brain Map](map.md).
 
 ## Read Order For Agents
 
 1. Read [Project Summary](summaries/project_summary.md) for the shortest useful context.
-2. Read [Open Questions](context/open_questions.md) to understand unresolved design or product questions.
+2. Read [System Overview](architecture/system_overview.md) to understand the product.
+3. Read [Decision Log](decisions/decision_log.md) before making design changes.
+4. Read [Runtime Flow](architecture/runtime_flow.md) before changing API behavior.
 
 ## Current Product State
 
-The Hackathon Team Memory project is building an AI-assisted team memory tool. It features a Python CLI that orchestrates three main flows:
-
--   **Bootstrap:** Creates the initial working `brain/` folder from a user prompt and optional source files.
--   **Query:** Uses a reader agent to answer questions from the working brain, falling back to the reference `brian/` example only for structure guidance.
--   **Update:** Uses a writer agent to modify existing working brain files while preserving valid YAML frontmatter.
-
-The project utilizes OpenAI as its LLM provider for selection, generation, query, and update flows. OpenAI reasoning summaries should be printed when available to aid developer debugging. The reference `brian/` folder is read-only and acts as a schema, style guide, and example knowledge map, while the working `brain/` folder is created lazily from source context.
-
-Core product goals include preserving useful project knowledge, distilling only durable context (goals, constraints, architecture, decisions, unresolved questions, implementation notes), avoiding low-signal notes, making `index.md` the required starting point, ensuring all generated files are linked, and supporting a local demo workflow without external infrastructure.
+The Team Task Board is a full-stack application consisting of a FastAPI backend and a React frontend. It provides a simple in-memory REST API for task management, allowing users to create tasks and manage their statuses.
 
 ## Important Links
 
--   [Project Summary](summaries/project_summary.md)
--   [Open Questions](context/open_questions.md)
+- [Project Summary](summaries/project_summary.md)
+- [System Overview](architecture/system_overview.md)
+- [Runtime Flow](architecture/runtime_flow.md)
+- [Decision Log](decisions/decision_log.md)
