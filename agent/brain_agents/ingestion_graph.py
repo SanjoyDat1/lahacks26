@@ -7,7 +7,8 @@ import logging
 import re
 import sys
 from functools import lru_cache
-from typing import Any, Literal, cast
+from pathlib import Path
+from typing import Any, Iterator, Literal, cast
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from langgraph.graph import END, StateGraph, START
@@ -16,6 +17,7 @@ from .builder import (
     DocumentInput,
     SourceDocument,
     create_brain_from_documents,
+    create_brain_from_documents_streaming,
     normalize_documents,
 )
 from .builder import _source_digest
@@ -105,6 +107,10 @@ def _distill_node(state: IngestionState) -> dict[str, Any]:
     raw = _source_digest(docs)
     s = state["settings"]
     flow = state.get("flow_mode", "update")
+
+    if flow == "initialize":
+        _log_graph(f"distill END initialize raw context preserved raw_chars={len(raw)}")
+        return {"cleaned_context": raw, "source_digest": raw}
 
     if flow == "update" and state.get("update_mode") == "deterministic":
         _log_graph(f"distill END deterministic update bypass raw_chars={len(raw)}")
@@ -414,6 +420,305 @@ def run_initialize(
     }
 
 
+def _event(type_: str, **payload: Any) -> dict[str, Any]:
+    if "from_" in payload:
+        payload["from"] = payload.pop("from_")
+    return {"type": type_, **payload}
+
+
+def _file_preview(path: Path) -> tuple[str, str]:
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return "", ""
+    title = ""
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("# "):
+            title = stripped.removeprefix("# ").strip()
+            break
+        if stripped.startswith("title:"):
+            title = stripped.removeprefix("title:").strip().strip('"')
+    preview = " ".join(
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.strip().startswith("---")
+    )[:220]
+    return title, preview
+
+
+def _directory_snapshot(root: Path) -> list[dict[str, Any]]:
+    def walk(path: Path) -> dict[str, Any]:
+        children: list[dict[str, Any]] = []
+        if path.is_dir():
+            for child in sorted(path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())):
+                if child.name.startswith("."):
+                    continue
+                if child.is_dir() or child.suffix.lower() == ".md":
+                    children.append(walk(child))
+        return {
+            "name": path.name,
+            "path": str(path.relative_to(root.parent)).replace("\\", "/"),
+            "type": "directory" if path.is_dir() else "file",
+            "children": children,
+        }
+
+    if not root.exists():
+        return []
+    return [walk(root)]
+
+
+def run_initialize_streaming(
+    document_inputs: list[DocumentInput],
+    *,
+    initial_prompt: str,
+    settings: Settings,
+    max_files: int = 24,
+    overwrite: bool = True,
+) -> Iterator[dict[str, Any]]:
+    """Streaming initialize flow for the hackathon session-start experience."""
+    if max_files < 1:
+        yield _event("error", message="max_files must be at least 1")
+        return
+
+    st: IngestionState = cast(
+        IngestionState,
+        {
+            "flow_mode": "initialize",
+            "settings": settings,
+            "document_inputs": list(document_inputs) if document_inputs else [initial_prompt],
+            "initial_prompt": initial_prompt,
+            "max_files": max_files,
+            "overwrite": overwrite,
+        },
+    )
+
+    yield _event("stage_start", stage="normalize", label="Scanning uploaded documents")
+    yield _event("graph_node", id="documents", label="Uploaded documents", status="active")
+    yield _event("graph_node", id="normalize", label="Normalize", status="active")
+    yield _event("graph_edge", from_="documents", to="normalize", status="active")
+    yield _event("thinking", content="I am reading the uploaded files, filtering unsupported input, and converting everything into clean source documents.\n")
+    norm = _normalize_node(st)
+    st.update(norm)
+    if st.get("error"):
+        yield _event("error", message=str(st["error"]))
+        return
+    docs = list(st.get("normalized_docs", []))
+    for doc in docs:
+        yield _event("document", name=doc.name, chars=len(doc.text), status="scanned")
+    yield _event("graph_node", id="documents", label="Uploaded documents", status="done")
+    yield _event("graph_node", id="normalize", label="Normalize", status="done")
+    yield _event("graph_edge", from_="documents", to="normalize", status="done")
+
+    yield _event("stage_start", stage="distill", label="Distilling durable context")
+    yield _event("graph_node", id="distill", label="Distill facts", status="active")
+    yield _event("graph_edge", from_="normalize", to="distill", status="active")
+    yield _event("thinking", content="Now I am separating durable product context from noise: decisions, constraints, goals, owners, and open questions.\n")
+    distilled = _distill_node(st)
+    st.update(distilled)
+    if st.get("error"):
+        yield _event("error", message=str(st["error"]))
+        return
+    for doc in docs:
+        yield _event("document", name=doc.name, chars=len(doc.text), status="distilled")
+    yield _event("graph_node", id="distill", label="Distill facts", status="done")
+    yield _event("graph_edge", from_="normalize", to="distill", status="done")
+
+    yield _event("stage_start", stage="write", label="Creating the brain structure")
+    yield _event("graph_node", id="brain_files", label="Brain files", status="active")
+    yield _event("graph_edge", from_="distill", to="brain_files", status="active")
+    yield _event("thinking", content="I am planning a connected brain from the uploaded context itself. The reference brain guides structure, but the directories and Markdown nodes must match the source material.\n")
+    text = (st.get("cleaned_context") or "").strip()
+    write_docs = [SourceDocument(name="source-context", text=text)] if text else docs
+    written_map: dict[str, str] = {}
+    try:
+        for writer_event in create_brain_from_documents_streaming(
+            write_docs,
+            settings=settings,
+            initial_prompt=initial_prompt,
+            max_files=max_files,
+            overwrite=overwrite,
+        ):
+            event_type = writer_event.get("type")
+            rel_path = str(writer_event.get("path", ""))
+            if event_type == "file_planned" and rel_path:
+                title = str(writer_event.get("title", ""))
+                purpose = str(writer_event.get("purpose", ""))
+                links = writer_event.get("links", [])
+                yield _event("file_planned", path=rel_path, title=title, preview=purpose, links=links if isinstance(links, list) else [])
+                yield _event("directory_snapshot", tree=_directory_snapshot(settings.brain_dir))
+            elif event_type == "file_writing" and rel_path:
+                yield _event("file_writing", path=rel_path, title=str(writer_event.get("title", "")))
+            elif event_type == "file_created" and rel_path:
+                content = str(writer_event.get("content", ""))
+                written_map[rel_path] = content
+                title, preview = _file_preview(settings.brain_dir / rel_path)
+                yield _event("file_created", path=rel_path, title=title or str(writer_event.get("title", "")), preview=preview)
+                yield _event("directory_snapshot", tree=_directory_snapshot(settings.brain_dir))
+            elif event_type == "done":
+                maybe_written = writer_event.get("written")
+                if isinstance(maybe_written, dict):
+                    written_map = {str(path): str(content) for path, content in maybe_written.items()}
+    except (OSError, FileExistsError, ValueError) as exc:
+        _log_graph(f"bootstrap_write FAILED error={exc}")
+        yield _event("error", message=f"Bootstrap write failed: {exc}")
+        return
+    st["written_map"] = written_map
+    retrieval_service.invalidate(resolve_brain_root(settings))
+    yield _event("graph_node", id="brain_files", label="Brain files", status="done")
+    yield _event("graph_edge", from_="distill", to="brain_files", status="done")
+
+    yield _event("stage_start", stage="index", label="Indexing memory for retrieval")
+    yield _event("graph_node", id="index", label="Retrieval index", status="active")
+    yield _event("graph_edge", from_="brain_files", to="index", status="active")
+    yield _event("thinking", content="I am warming the retrieval layer so the observatory and future coding agents can search this brain immediately.\n")
+
+    yield _event("stage_start", stage="verify", label="Verifying the new brain")
+    verify = _verify_node(st)
+    st.update(verify)
+    yield _event("graph_node", id="index", label="Retrieval index", status="done")
+    yield _event("graph_edge", from_="brain_files", to="index", status="done")
+    yield _event("graph_node", id="ready", label="Brain ready", status="active")
+    yield _event("graph_edge", from_="index", to="ready", status="active")
+    final = _final_node(st)
+    st.update(final)
+    if st.get("error"):
+        yield _event("error", message=str(st["error"]))
+        return
+    yield _event("graph_node", id="ready", label="Brain ready", status="done")
+    yield _event("graph_edge", from_="index", to="ready", status="done")
+    yield _event("directory_snapshot", tree=_directory_snapshot(settings.brain_dir))
+    yield _event(
+        "done",
+        written_files=sorted(written_map.keys()),
+        result_text=str(st.get("result_text", "")),
+    )
+
+
+def run_update_streaming(
+    document_inputs: list[DocumentInput],
+    *,
+    settings: Settings,
+    update_mode: Literal["llm", "deterministic"] = "llm",
+) -> Iterator[dict[str, Any]]:
+    """Streaming update flow: normalize new docs, reconcile against existing brain, apply ops."""
+    _log_graph(f"run_update_streaming START docs={len(document_inputs)} mode={update_mode}")
+
+    st: IngestionState = cast(
+        IngestionState,
+        {
+            "flow_mode": "update",
+            "settings": settings,
+            "document_inputs": list(document_inputs),
+            "update_mode": update_mode,
+            "do_apply": True,
+        },
+    )
+
+    yield _event("stage_start", stage="normalize", label="Reading new documents")
+    yield _event("thinking", content="Scanning the uploaded documents and extracting text content.\n")
+    try:
+        docs = normalize_documents(list(document_inputs))
+    except (ValueError, OSError) as exc:
+        _log_graph(f"run_update_streaming normalize FAILED error={exc}")
+        yield _event("error", message=f"Could not normalize input: {exc}")
+        return
+    if not docs:
+        yield _event("error", message="No readable documents were provided.")
+        return
+    st["normalized_docs"] = docs
+    for doc in docs:
+        yield _event("document", name=doc.name, chars=len(doc.text), status="scanned")
+    yield _event("thinking", content=f"Loaded {len(docs)} document(s) with {sum(len(d.text) for d in docs)} characters.\n")
+
+    yield _event("stage_start", stage="distill", label="Distilling new context")
+    yield _event("thinking", content="Extracting durable facts from the new documents: decisions, constraints, goals, and key data.\n")
+
+    combined_text = "\n\n".join(d.text for d in docs)
+    st["update_prompt"] = combined_text
+    st["cleaned_context"] = combined_text
+
+    if update_mode != "deterministic":
+        distilled = _distill_node(st)
+        st.update(distilled)
+        if st.get("error"):
+            yield _event("error", message=str(st["error"]))
+            return
+    for doc in docs:
+        yield _event("document", name=doc.name, chars=len(doc.text), status="distilled")
+
+    yield _event("stage_start", stage="reconcile", label="Reconciling against existing brain")
+    yield _event("thinking", content="Comparing new information against every section in the current brain to decide what should change.\n")
+
+    s = settings
+    root = s.brain_dir if s.brain_dir.is_dir() else s.brian_reference_dir
+    incoming = (st.get("cleaned_context") or combined_text).strip()
+    use_llm: bool | str = "auto" if update_mode == "llm" else False
+
+    try:
+        retriever = retrieval_service.get(root)
+    except (FileNotFoundError, OSError) as exc:
+        _log_graph(f"run_update_streaming reconcile FAILED error={exc}")
+        yield _event("error", message=f"Could not open brain index: {exc}")
+        return
+
+    rec = Reconciler(retriever=retriever, use_llm=use_llm)
+    plan = rec.reconcile(incoming, source={})
+
+    if not plan.operations:
+        yield _event("thinking", content="The new documents did not introduce any information that changes the existing brain. Everything is already up to date.\n")
+        yield _event("done", ops_applied=0, files_touched=[], rationale=plan.rationale or "No changes needed.")
+        return
+
+    yield _event("thinking", content=f"Found {len(plan.operations)} operation(s) to apply. Confidence: {plan.confidence:.0%}. Rationale: {plan.rationale}\n")
+
+    for op in plan.operations:
+        yield _event(
+            "op_planned",
+            op={
+                "kind": op.kind,
+                "target_file": op.target_file,
+                "target_section_id": op.target_section_id,
+                "new_content": (op.new_content or "")[:500],
+                "reason": op.reason,
+            },
+        )
+
+    yield _event("stage_start", stage="apply", label="Applying changes to the brain")
+    yield _event("thinking", content="Writing the planned changes into brain files now.\n")
+
+    if not s.brain_dir.is_dir():
+        yield _event("error", message="Brain directory does not exist. Create a brain first.")
+        return
+
+    res = apply_reconciliation_plan(plan, settings=s)
+
+    touched = sorted(res.files_touched)
+    for path in touched:
+        change_type = "modified"
+        for op in plan.operations:
+            if op.target_file == path and op.kind == "create_section":
+                change_type = "added"
+                break
+        yield _event("op_applied", path=path, change_type=change_type, success=True)
+
+    yield _event("stage_start", stage="verify", label="Re-indexing retrieval")
+    yield _event("thinking", content="Invalidating retrieval cache and re-indexing so the updated brain is immediately searchable.\n")
+    try:
+        retrieval_service.invalidate(resolve_brain_root(s))
+    except (OSError, TypeError):
+        pass
+
+    yield _event("directory_snapshot", tree=_directory_snapshot(s.brain_dir))
+    yield _event(
+        "done",
+        ops_applied=int(res.applied_ops),
+        files_touched=touched,
+        rationale=plan.rationale or "",
+    )
+    _log_graph(f"run_update_streaming END ops={res.applied_ops} files={touched}")
+
+
 def run_update(
     prompt: str,
     *,
@@ -472,6 +777,8 @@ def run_update(
 __all__ = [
     "get_ingestion_workflow",
     "run_initialize",
+    "run_initialize_streaming",
     "run_update",
+    "run_update_streaming",
     "IngestionState",
 ]

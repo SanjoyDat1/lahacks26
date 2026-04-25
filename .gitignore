@@ -22,7 +22,8 @@ __pycache__/
 dist/
 *.egg-info/
 
-# Brain index (generated at runtime)
+# Brain outputs (generated at runtime)
+/brain/
 brian/.index/
 
 # OS

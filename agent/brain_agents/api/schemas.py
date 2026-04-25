@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 UpdateMode = Literal["llm", "deterministic"]
@@ -34,6 +34,32 @@ class BootstrapRequest(BaseModel):
     sources: list[str] = Field(default_factory=list)
     overwrite: bool = False
     max_files: int = Field(default=3, ge=1, le=50)
+
+
+class BootstrapDocument(BaseModel):
+    name: str = Field(min_length=1)
+    text: str | None = None
+    content_base64: str | None = None
+    mime_type: str | None = None
+    size: int | None = None
+
+    @model_validator(mode="after")
+    def has_readable_payload(self) -> "BootstrapDocument":
+        if (self.text and self.text.strip()) or (self.content_base64 and self.content_base64.strip()):
+            return self
+        raise ValueError("Each document must include text or content_base64")
+
+
+class BootstrapStreamRequest(BaseModel):
+    prompt: str = "Build my AI brain from these documents."
+    documents: list[BootstrapDocument] = Field(default_factory=list)
+    overwrite: bool = True
+    max_files: int = Field(default=24, ge=1, le=50)
+
+
+class UpdateStreamRequest(BaseModel):
+    documents: list[BootstrapDocument] = Field(default_factory=list)
+    update_mode: UpdateMode = "llm"
 
 
 class BootstrapResponse(BaseModel):

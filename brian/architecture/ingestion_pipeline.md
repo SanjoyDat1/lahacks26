@@ -4,18 +4,18 @@ type: architecture
 title: Ingestion Pipeline
 status: active
 importance: high
-updated: 2026-04-25
+updated: '2026-04-25'
 links:
   - architecture.runtime_flow
   - integrations.github
   - integrations.slack
   - integrations.meetings
+  - brian.index
 keywords:
   - ingestion
   - webhooks
   - normalization
 ---
-
 # Ingestion Pipeline
 
 The ingestion pipeline accepts external context and converts it into a normalized event that the rest of the app can process consistently.

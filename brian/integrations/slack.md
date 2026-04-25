@@ -4,17 +4,17 @@ type: integration
 title: Slack Integration
 status: active
 importance: medium
-updated: 2026-04-25
+updated: '2026-04-25'
 links:
   - architecture.ingestion_pipeline
   - context.constraints
+  - agents.coding_agent_prompt
 keywords:
   - Slack
   - channel
   - webhook
   - dev sync
 ---
-
 # Slack Integration
 
 Slack ingestion captures messages from selected project channels.

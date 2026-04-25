@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Minus, Plus, RotateCcw, Search, X } from "lucide-react";
 
-import type { GraphData, GraphNode } from "@/lib/brian/reader";
+import type { GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
 import type { Relevance } from "@/lib/brian/scenarios";
 import { cn } from "@/lib/utils";
 
@@ -84,16 +84,39 @@ function tick(nodes: SimNode[], links: SimLink[], alpha: number) {
   }
 }
 
+// ─── update visualization state ───────────────────────────────────────────────
+
+export type UpdateVisuState = {
+  active: { path: string; kind: string; reason: string } | null;
+  queued: Set<string>;
+  done: Set<string>;
+  totalOps: number;
+  appliedOps: number;
+};
+
 // ─── component ─────────────────────────────────────────────────────────────────
 
 interface Props {
   graphData: GraphData;
   onNodeSelect?: (node: GraphNode | null) => void;
+  onEdgeSelect?: (edge: GraphLink | null) => void;
+  onLinkCreate?: (sourceId: string, targetId: string) => Promise<void>;
   selectedId?: string;
+  selectedEdge?: GraphLink | null;
   highlightMap?: Map<string, Relevance>;
+  updateVisu?: UpdateVisuState;
 }
 
-export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }: Props) {
+export function BrainGraph({
+  graphData,
+  onNodeSelect,
+  onEdgeSelect,
+  onLinkCreate,
+  selectedId,
+  selectedEdge,
+  highlightMap,
+  updateVisu,
+}: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tooltipRef = useRef<HTMLDivElement>(null);
@@ -116,19 +139,43 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
 
   const hoverIdRef = useRef<string | null>(null);
   const selectedIdRef = useRef(selectedId);
+  const selectedEdgeRef = useRef<GraphLink | null | undefined>(selectedEdge);
   const draggingRef = useRef<SimNode | null>(null);
+  const connectDragRef = useRef<{ source: SimNode; x: number; y: number } | null>(null);
+  const connectTargetRef = useRef<SimNode | null>(null);
   const panRef = useRef<{ mx: number; my: number; ox0: number; oy0: number } | null>(null);
+  const mouseDownRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   const [tooltipNode, setTooltipNode] = useState<SimNode | null>(null);
+  const [hoverConnectionCount, setHoverConnectionCount] = useState(0);
+  const [isConnecting, setIsConnecting] = useState(false);
   const hoverNodeRef = useRef<SimNode | null>(null);
   // Connected node IDs for the currently hovered node
   const hovConnectedRef = useRef<Set<string>>(new Set());
 
   const highlightMapRef = useRef<Map<string, Relevance> | undefined>(highlightMap);
   const highlightAlphaRef = useRef(0);
+  const updateVisuRef = useRef<UpdateVisuState | undefined>(updateVisu);
+  const panTargetRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
-  useEffect(() => { highlightMapRef.current = highlightMap; }, [highlightMap]);
+  useEffect(() => { selectedEdgeRef.current = selectedEdge; }, [selectedEdge]);
+  useEffect(() => {
+    highlightMapRef.current = highlightMap;
+  }, [highlightMap]);
+
+  useEffect(() => {
+    updateVisuRef.current = updateVisu;
+  }, [updateVisu]);
+
+  // Pan camera to active update node
+  useEffect(() => {
+    if (updateVisu?.active) {
+      const path = updateVisu.active.path;
+      const node = nodesRef.current.find((n) => n.id === path || n.path === path);
+      if (node) panTargetRef.current = { x: node.x, y: node.y };
+    }
+  }, [updateVisu?.active?.path]);
   useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
   useEffect(() => { filterTypeRef2.current = filterType; }, [filterType]);
 
@@ -157,21 +204,36 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
     const searchQ = searchQueryRef.current.toLowerCase().trim();
     const fType = filterTypeRef2.current;
     const hovConnected = hovConnectedRef.current;
+    const selEdge = selectedEdgeRef.current;
+    const connectTarget = connectTargetRef.current;
 
-    const targetHL = hmap && hmap.size > 0 ? 1 : 0;
+    const uv = updateVisuRef.current;
+    const inUpdateMode = !!uv && (!!uv.active || uv.done.size > 0 || uv.queued.size > 0);
+
+    const targetHL = !inUpdateMode && hmap && hmap.size > 0 ? 1 : 0;
     highlightAlphaRef.current += (targetHL - highlightAlphaRef.current) * 0.07;
     const hl = highlightAlphaRef.current;
 
-    const pulse = Math.sin(Date.now() / 420) * 0.5 + 0.5;
+    const t = Date.now();
+    const pulse = Math.sin(t / 420) * 0.5 + 0.5;
+    const pulseFast = Math.sin(t / 240) * 0.5 + 0.5;
 
     ctx.clearRect(0, 0, w, h);
     ctx.save();
     ctx.translate(w / 2 + ox, h / 2 + oy);
     ctx.scale(k, k);
 
-    const inHighlightMode = hl > 0.1 && hmap && hmap.size > 0;
-    const inSearchMode = !inHighlightMode && (!!searchQ || !!fType);
-    const inHoverMode = !inHighlightMode && !!hovId;
+    const inHighlightMode = !inUpdateMode && hl > 0.1 && hmap && hmap.size > 0;
+    const inSearchMode = !inUpdateMode && !inHighlightMode && (!!searchQ || !!fType);
+    const inHoverMode = !inUpdateMode && !inHighlightMode && !!hovId;
+
+    function nodeUpdateState(n: SimNode): "active" | "queued" | "done" | "none" {
+      if (!inUpdateMode || !uv) return "none";
+      if (uv.active && (n.id === uv.active.path || n.path === uv.active.path)) return "active";
+      if (uv.done.has(n.id) || uv.done.has(n.path)) return "done";
+      if (uv.queued.has(n.id) || uv.queued.has(n.path)) return "queued";
+      return "none";
+    }
 
     // Helper: does a node match current filters?
     function nodeMatches(n: SimNode): boolean {
@@ -195,13 +257,40 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
       const bothHighlighted = hl > 0.1 && sRel && tRel;
       const isLinkedToHov = hovId && (s.id === hovId || t.id === hovId);
       const isLinkedToSel = selId && (s.id === selId || t.id === selId);
+      const isSelectedEdge = !!selEdge && selEdge.source === s.id && selEdge.target === t.id;
       const sMatches = nodeMatches(s), tMatches = nodeMatches(t);
+      const sUpdState = nodeUpdateState(s);
+      const tUpdState = nodeUpdateState(t);
 
       let lineColor: string;
       let lineWidth: number;
       let arrowColor: string;
 
-      if (bothHighlighted) {
+      if (isSelectedEdge) {
+        lineColor = "#8b5cf6";
+        lineWidth = 3 / k;
+        arrowColor = "#8b5cf6";
+      } else if (inUpdateMode) {
+        const sActive = sUpdState === "active", tActive = tUpdState === "active";
+        const sDone = sUpdState === "done", tDone = tUpdState === "done";
+        if (sActive || tActive) {
+          lineColor = `#f59e0bAA`;
+          lineWidth = 2 / k;
+          arrowColor = `#f59e0b77`;
+        } else if (sDone && tDone) {
+          lineColor = `#10b98166`;
+          lineWidth = 1.2 / k;
+          arrowColor = `#10b98144`;
+        } else if (sDone || tDone) {
+          lineColor = `#10b98133`;
+          lineWidth = 0.8 / k;
+          arrowColor = `#10b98122`;
+        } else {
+          lineColor = `rgba(100,116,139,0.04)`;
+          lineWidth = 0.4 / k;
+          arrowColor = `rgba(100,116,139,0.02)`;
+        }
+      } else if (bothHighlighted) {
         const bright = sRel === "primary" && tRel === "primary";
         lineColor = nodeColor(s.type) + (bright ? "CC" : "77");
         lineWidth = (bright ? 2 : 1.2) / k;
@@ -246,18 +335,54 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
       ctx.fill();
     }
 
+    const pending = connectDragRef.current;
+    if (pending && mouseDownRef.current?.moved) {
+      const target = connectTarget && connectTarget.id !== pending.source.id ? connectTarget : null;
+      const endX = target?.x ?? pending.x;
+      const endY = target?.y ?? pending.y;
+      const midX = (pending.source.x + endX) / 2;
+      const sourceColor = nodeColor(pending.source.type);
+      ctx.beginPath();
+      ctx.moveTo(pending.source.x, pending.source.y);
+      ctx.bezierCurveTo(midX, pending.source.y - 45 / k, midX, endY + 45 / k, endX, endY);
+      ctx.strokeStyle = target ? "#10b981" : sourceColor;
+      ctx.lineWidth = (target ? 3 : 2.2) / k;
+      ctx.setLineDash([8 / k, 6 / k]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.beginPath();
+      ctx.arc(pending.source.x, pending.source.y, nodeRadius(pending.source.val) + 12 / k, 0, Math.PI * 2);
+      ctx.strokeStyle = `${sourceColor}88`;
+      ctx.lineWidth = 1.5 / k;
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(endX, endY, (target ? nodeRadius(target.val) + 14 : 7) / k, 0, Math.PI * 2);
+      ctx.fillStyle = target ? "rgba(16,185,129,0.14)" : "rgba(139,92,246,0.18)";
+      ctx.fill();
+      ctx.strokeStyle = target ? "#10b981" : "#8b5cf6";
+      ctx.lineWidth = 1.5 / k;
+      ctx.stroke();
+    }
+
     // ── nodes ────────────────────────────────────────────────────────────────
     for (const n of nodesRef.current) {
       const r = nodeRadius(n.val);
       const c = nodeColor(n.type);
       const isHov = hovId === n.id;
       const isSel = selId === n.id;
-      const relevance = hmap?.get(n.id);
+      const isConnectTarget = connectTarget?.id === n.id;
+      const relevance = hmap?.get(n.id) ?? hmap?.get(n.path);
       const matches = nodeMatches(n);
       const isConnectedToHov = hovConnected.has(n.id);
+      const updState = nodeUpdateState(n);
 
+      // ── Opacity ──────────────────────────────────────────────────────────
       let opacity: number;
-      if (inHighlightMode) {
+      if (inUpdateMode) {
+        opacity = updState === "active" ? 1 : updState === "done" ? 0.88 : updState === "queued" ? 0.55 : 0.08;
+      } else if (inHighlightMode) {
         opacity = relevance ? 1 : Math.max(0.08, 0.2 - hl * 0.15);
       } else if (inSearchMode && !matches) {
         opacity = 0.1;
@@ -269,15 +394,60 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
 
       ctx.globalAlpha = opacity;
 
-      // Glow effects
-      if (relevance === "primary" && inHighlightMode) {
+      // ── Update-mode glows ────────────────────────────────────────────────
+      if (inUpdateMode) {
+        if (updState === "active") {
+          // Outer diffuse amber glow
+          const glowR = r + (22 + pulseFast * 14) / k;
+          const grd = ctx.createRadialGradient(n.x, n.y, r * 0.6, n.x, n.y, glowR);
+          grd.addColorStop(0, `#f59e0b${Math.round((0.45 + pulseFast * 0.3) * 255).toString(16).padStart(2, "0")}`);
+          grd.addColorStop(0.5, `#f59e0b22`);
+          grd.addColorStop(1, `#f59e0b00`);
+          ctx.beginPath(); ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+          ctx.fillStyle = grd; ctx.fill();
+          // Inner ring
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, r + (5 + pulseFast * 6) / k, 0, Math.PI * 2);
+          ctx.strokeStyle = `#f59e0b${Math.round((0.85 + pulseFast * 0.15) * 255).toString(16).padStart(2, "0")}`;
+          ctx.lineWidth = (2 + pulseFast * 1.5) / k;
+          ctx.stroke();
+          // Outer ring
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, r + (12 + pulseFast * 10) / k, 0, Math.PI * 2);
+          ctx.strokeStyle = `#f59e0b${Math.round((0.35 + pulseFast * 0.25) * 255).toString(16).padStart(2, "0")}`;
+          ctx.lineWidth = (1.2 + pulseFast) / k;
+          ctx.stroke();
+        } else if (updState === "done") {
+          // Soft emerald glow
+          const glowR = r + 14 / k;
+          const grd = ctx.createRadialGradient(n.x, n.y, r * 0.5, n.x, n.y, glowR);
+          grd.addColorStop(0, `#10b98155`); grd.addColorStop(1, `#10b98100`);
+          ctx.beginPath(); ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
+          ctx.fillStyle = grd; ctx.fill();
+          // Thin solid ring
+          ctx.beginPath();
+          ctx.arc(n.x, n.y, r + 3 / k, 0, Math.PI * 2);
+          ctx.strokeStyle = `#10b981BB`;
+          ctx.lineWidth = 1.5 / k;
+          ctx.stroke();
+        } else if (updState === "queued") {
+          // Dashed violet ring (waiting to be processed)
+          ctx.beginPath();
+          ctx.setLineDash([4 / k, 3 / k]);
+          ctx.arc(n.x, n.y, r + (4 + pulse * 2) / k, 0, Math.PI * 2);
+          ctx.strokeStyle = `#8b5cf677`;
+          ctx.lineWidth = 1.5 / k;
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      // ── Normal-mode glows ─────────────────────────────────────────────────
+      } else if (relevance === "primary" && inHighlightMode) {
         const glowR = r + (14 + pulse * 12) / k;
         const grd = ctx.createRadialGradient(n.x, n.y, r, n.x, n.y, glowR);
         grd.addColorStop(0, `${c}${Math.round((0.35 + pulse * 0.3) * 255).toString(16).padStart(2, "0")}`);
         grd.addColorStop(1, `${c}00`);
         ctx.beginPath(); ctx.arc(n.x, n.y, glowR, 0, Math.PI * 2);
         ctx.fillStyle = grd; ctx.fill();
-        // Pulsing ring
         ctx.beginPath();
         ctx.arc(n.x, n.y, r + (4 + pulse * 5) / k, 0, Math.PI * 2);
         ctx.strokeStyle = `${c}${Math.round((0.7 + pulse * 0.25) * 255).toString(16).padStart(2, "0")}`;
@@ -288,52 +458,92 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
         grd.addColorStop(0, `${c}33`); grd.addColorStop(1, `${c}00`);
         ctx.beginPath(); ctx.arc(n.x, n.y, r + 12 / k, 0, Math.PI * 2);
         ctx.fillStyle = grd; ctx.fill();
-      } else if ((isHov || isSel || isConnectedToHov) && !inHighlightMode) {
-        const glowSize = isHov ? 22 : isConnectedToHov ? 14 : 18;
+      } else if ((isHov || isSel || isConnectedToHov || isConnectTarget) && !inHighlightMode) {
+        const glowSize = isConnectTarget ? 28 : isHov ? 22 : isConnectedToHov ? 14 : 18;
         const grd = ctx.createRadialGradient(n.x, n.y, r * 0.4, n.x, n.y, r + glowSize / k);
-        grd.addColorStop(0, `${c}44`); grd.addColorStop(1, `${c}00`);
+        grd.addColorStop(0, `${isConnectTarget ? "#10b981" : c}44`); grd.addColorStop(1, `${c}00`);
         ctx.beginPath(); ctx.arc(n.x, n.y, r + glowSize / k, 0, Math.PI * 2);
         ctx.fillStyle = grd; ctx.fill();
       }
 
-      // Node fill
+      // ── Node fill ────────────────────────────────────────────────────────
       ctx.beginPath();
       ctx.arc(n.x, n.y, r, 0, Math.PI * 2);
-      const brightFill = (inHighlightMode && relevance) || isHov || isSel || isConnectedToHov;
-      ctx.fillStyle = brightFill ? c : `${c}BB`;
+      if (inUpdateMode) {
+        if (updState === "active") ctx.fillStyle = c;
+        else if (updState === "done") ctx.fillStyle = `#10b981`;
+        else if (updState === "queued") ctx.fillStyle = `${c}88`;
+        else ctx.fillStyle = `${c}22`;
+      } else {
+        const brightFill = (inHighlightMode && relevance) || isHov || isSel || isConnectedToHov;
+        ctx.fillStyle = brightFill ? c : `${c}BB`;
+      }
       ctx.fill();
 
-      // Node stroke
-      const strongBorder = isSel || (relevance === "primary" && hl > 0.5);
-      ctx.strokeStyle = strongBorder ? "rgba(139,92,246,0.85)" : "rgba(15,23,42,0.12)";
-      ctx.lineWidth = (strongBorder ? 2.5 : 0.8) / k;
+      // ── Node stroke ──────────────────────────────────────────────────────
+      if (inUpdateMode) {
+        if (updState === "active") {
+          ctx.strokeStyle = `#f59e0b`;
+          ctx.lineWidth = 2.5 / k;
+        } else if (updState === "done") {
+          ctx.strokeStyle = `#10b981CC`;
+          ctx.lineWidth = 2 / k;
+        } else if (updState === "queued") {
+          ctx.strokeStyle = `#8b5cf655`;
+          ctx.lineWidth = 1 / k;
+        } else {
+          ctx.strokeStyle = `rgba(15,23,42,0.06)`;
+          ctx.lineWidth = 0.6 / k;
+        }
+      } else {
+        const strongBorder = isSel || isConnectTarget || (relevance === "primary" && hl > 0.5);
+        ctx.strokeStyle = isConnectTarget ? "rgba(16,185,129,0.95)" : strongBorder ? "rgba(139,92,246,0.85)" : "rgba(15,23,42,0.12)";
+        ctx.lineWidth = (strongBorder ? 2.8 : 0.8) / k;
+      }
       ctx.stroke();
 
-      // Connection ring for hovered node
-      if (isHov && !inHighlightMode) {
+      // ── Hover ring (normal mode) ─────────────────────────────────────────
+      if (!inUpdateMode && isHov) {
         ctx.beginPath();
         ctx.arc(n.x, n.y, r + (3 + pulse * 2) / k, 0, Math.PI * 2);
         ctx.strokeStyle = `${c}${Math.round((0.6 + pulse * 0.3) * 255).toString(16).padStart(2, "0")}`;
         ctx.lineWidth = (1.5 + pulse) / k;
         ctx.stroke();
       }
+      if (!inUpdateMode && (isHov || isSel) && k > 0.25) {
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, r + (2 + pulse * 1.5) / k, 0, Math.PI * 2);
+        ctx.setLineDash([3 / k, 3 / k]);
+        ctx.strokeStyle = `${c}55`;
+        ctx.lineWidth = 1 / k;
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
 
       ctx.globalAlpha = 1;
 
-      // Label
+      // ── Label ────────────────────────────────────────────────────────────
       if (k >= 0.25) {
-        const labelOpacity = inHighlightMode
-          ? relevance === "primary" ? 1 : relevance === "secondary" ? 0.8 : relevance === "referenced" ? 0.55 : opacity
-          : inSearchMode && !matches ? 0.1
-          : inHoverMode && !isHov && !isConnectedToHov ? 0.2
-          : (isHov || isSel ? 1 : 0.75);
+        let labelOpacity: number;
+        if (inUpdateMode) {
+          labelOpacity = updState === "active" ? 1 : updState === "done" ? 0.9 : updState === "queued" ? 0.5 : 0.05;
+        } else {
+          labelOpacity = inHighlightMode
+            ? relevance === "primary" ? 1 : relevance === "secondary" ? 0.8 : relevance === "referenced" ? 0.55 : opacity
+            : inSearchMode && !matches ? 0.1
+            : inHoverMode && !isHov && !isConnectedToHov ? 0.2
+            : (isHov || isSel ? 1 : 0.75);
+        }
         ctx.globalAlpha = labelOpacity;
-        const isBold = relevance === "primary" || isHov || isSel;
-        ctx.font = `${isBold ? "600 " : ""}${Math.round(11 / Math.min(k, 1.5))}px -apple-system,BlinkMacSystemFont,sans-serif`;
+        const isBold = inUpdateMode ? updState === "active" : (relevance === "primary" || isHov || isSel);
         ctx.font = `${isBold ? "600 " : ""}11px -apple-system,BlinkMacSystemFont,sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillStyle = isHov || relevance === "primary" || isSel ? "#0f172a" : "#64748b";
+        if (inUpdateMode) {
+          ctx.fillStyle = updState === "active" ? "#f59e0b" : updState === "done" ? "#059669" : "#64748b";
+        } else {
+          ctx.fillStyle = isHov || relevance === "primary" || isSel ? "#0f172a" : "#64748b";
+        }
         const lbl = n.label.length > 22 ? n.label.slice(0, 20) + "…" : n.label;
         ctx.fillText(lbl, n.x, n.y + r + 3 / k);
         ctx.globalAlpha = 1;
@@ -343,10 +553,13 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
     ctx.restore();
 
     // Imperatively update tooltip position
-    if (hoverNodeRef.current && tooltipRef.current) {
+    if (hoverNodeRef.current && tooltipRef.current && !connectDragRef.current) {
       const n = hoverNodeRef.current;
-      const cx = w / 2 + ox + n.x * k + 16;
-      const cy = h / 2 + oy + n.y * k - 14;
+      const screenX = w / 2 + ox + n.x * k;
+      const screenY = h / 2 + oy + n.y * k;
+      const placeLeft = screenX > w - 300;
+      const cx = placeLeft ? screenX - 280 : screenX + 34;
+      const cy = Math.max(16, Math.min(h - 150, screenY + 28));
       tooltipRef.current.style.left = `${cx}px`;
       tooltipRef.current.style.top = `${cy}px`;
     }
@@ -365,6 +578,18 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
       if (alphaRef.current > 0.004) {
         alphaRef.current *= 0.97;
         tick(nodesRef.current, linksRef.current, alphaRef.current);
+      }
+      // Smooth camera pan to active update node
+      if (panTargetRef.current) {
+        const { x: tx, y: ty } = panTargetRef.current;
+        const { k } = viewRef.current;
+        const targetOx = -tx * k;
+        const targetOy = -ty * k;
+        viewRef.current.ox += (targetOx - viewRef.current.ox) * 0.06;
+        viewRef.current.oy += (targetOy - viewRef.current.oy) * 0.06;
+        if (Math.abs(targetOx - viewRef.current.ox) < 0.5 && Math.abs(targetOy - viewRef.current.oy) < 0.5) {
+          panTargetRef.current = null;
+        }
       }
       drawFrame();
       rafRef.current = requestAnimationFrame(frame);
@@ -390,60 +615,125 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
     return null;
   }
 
+  function findConnectHandle(cx: number, cy: number): SimNode | null {
+    const sim = toSim(cx, cy);
+    const { k } = viewRef.current;
+    for (const n of nodesRef.current) {
+      const r = nodeRadius(n.val);
+      const hx = n.x + r + 11 / k;
+      const dx = sim.x - hx, dy = sim.y - n.y;
+      if (dx * dx + dy * dy < (10 / k) ** 2) return n;
+    }
+    return null;
+  }
+
+  function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+    const dx = bx - ax, dy = by - ay;
+    const lenSq = dx * dx + dy * dy || 1;
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+    const x = ax + t * dx, y = ay + t * dy;
+    return Math.hypot(px - x, py - y);
+  }
+
+  function findLink(cx: number, cy: number): GraphLink | null {
+    const sim = toSim(cx, cy);
+    const { k } = viewRef.current;
+    for (const link of linksRef.current) {
+      const hit = distanceToSegment(sim.x, sim.y, link.source.x, link.source.y, link.target.x, link.target.y);
+      if (hit < 8 / k) return { source: link.source.id, target: link.target.id };
+    }
+    return null;
+  }
+
   // ── event handlers ─────────────────────────────────────────────────────────
   function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
     const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
-    const node = findNode(cx, cy);
+    mouseDownRef.current = { x: cx, y: cy, moved: false };
+    const node = findConnectHandle(cx, cy) ?? findNode(cx, cy);
     if (node) {
-      draggingRef.current = node;
-      alphaRef.current = Math.max(alphaRef.current, 0.3);
-    } else {
-      const { ox, oy } = viewRef.current;
-      panRef.current = { mx: cx, my: cy, ox0: ox, oy0: oy };
+      const sim = toSim(cx, cy);
+      connectDragRef.current = { source: node, x: sim.x, y: sim.y };
+      alphaRef.current = Math.max(alphaRef.current, 0.25);
+      return;
     }
+    const { ox, oy } = viewRef.current;
+    panRef.current = { mx: cx, my: cy, ox0: ox, oy0: oy };
   }
 
   function onMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
+    if (mouseDownRef.current && Math.hypot(cx - mouseDownRef.current.x, cy - mouseDownRef.current.y) > 4) {
+      mouseDownRef.current.moved = true;
+    }
 
-    if (draggingRef.current) {
-      const sim = toSim(cx, cy);
-      draggingRef.current.x = sim.x;
-      draggingRef.current.y = sim.y;
-      draggingRef.current.vx = 0;
-      draggingRef.current.vy = 0;
+    if (connectDragRef.current) {
+      if (mouseDownRef.current?.moved) {
+        if (!isConnecting) setIsConnecting(true);
+        const sim = toSim(cx, cy);
+        connectDragRef.current.x = sim.x;
+        connectDragRef.current.y = sim.y;
+        const target = findNode(cx, cy);
+        connectTargetRef.current = target && target.id !== connectDragRef.current.source.id ? target : null;
+      }
     } else if (panRef.current) {
       const { mx, my, ox0, oy0 } = panRef.current;
       viewRef.current = { ...viewRef.current, ox: ox0 + (cx - mx), oy: oy0 + (cy - my) };
     }
 
-    const node = findNode(cx, cy);
-    if (node?.id !== hoverIdRef.current) {
-      hoverIdRef.current = node?.id ?? null;
-      hoverNodeRef.current = node;
+    const nextHoverNode = connectDragRef.current ? null : findNode(cx, cy);
+    if (nextHoverNode?.id !== hoverIdRef.current) {
+      hoverIdRef.current = nextHoverNode?.id ?? null;
+      hoverNodeRef.current = nextHoverNode;
       // Compute connected nodes for hover glow
-      if (node) {
+      if (nextHoverNode) {
         const connected = new Set<string>();
         for (const link of linksRef.current) {
-          if (link.source.id === node.id) connected.add(link.target.id);
-          if (link.target.id === node.id) connected.add(link.source.id);
+          if (link.source.id === nextHoverNode.id) connected.add(link.target.id);
+          if (link.target.id === nextHoverNode.id) connected.add(link.source.id);
         }
         hovConnectedRef.current = connected;
+        setHoverConnectionCount(connected.size);
       } else {
         hovConnectedRef.current = new Set();
+        setHoverConnectionCount(0);
       }
-      setTooltipNode(node);
+      setTooltipNode(nextHoverNode);
     }
   }
 
-  function onMouseUp() {
-    draggingRef.current = null;
+  function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (connectDragRef.current) {
+      const source = connectDragRef.current.source;
+      if (mouseDownRef.current?.moved) {
+        const target = connectTargetRef.current ?? findNode(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+        if (target && target.id !== source.id) {
+          void onLinkCreate?.(source.id, target.id);
+        }
+      }
+      connectDragRef.current = null;
+      connectTargetRef.current = null;
+      setIsConnecting(false);
+    }
     panRef.current = null;
   }
 
   function onClick(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (mouseDownRef.current?.moved) return;
     const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
-    onNodeSelect?.(findNode(cx, cy) ?? null);
+    const node = findNode(cx, cy);
+    if (node) {
+      onEdgeSelect?.(null);
+      onNodeSelect?.(node);
+      return;
+    }
+    const link = findLink(cx, cy);
+    if (link) {
+      onNodeSelect?.(null);
+      onEdgeSelect?.(link);
+      return;
+    }
+    onNodeSelect?.(null);
+    onEdgeSelect?.(null);
   }
 
   function onWheel(e: React.WheelEvent<HTMLCanvasElement>) {
@@ -480,7 +770,7 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
         ref={canvasRef}
         width={size.w}
         height={size.h}
-        className="block cursor-grab active:cursor-grabbing"
+        className={cn("block", isConnecting ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing")}
         style={{ background: "radial-gradient(ellipse at 50% 25%, #dbeafe 0%, #eff6ff 55%, #f5f3ff 100%)" }}
         suppressHydrationWarning
         onMouseDown={onMouseDown}
@@ -488,10 +778,15 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
         onMouseUp={onMouseUp}
         onMouseLeave={() => {
           draggingRef.current = null;
+          connectDragRef.current = null;
+          connectTargetRef.current = null;
+          setIsConnecting(false);
           panRef.current = null;
+          mouseDownRef.current = null;
           hoverIdRef.current = null;
           hoverNodeRef.current = null;
           hovConnectedRef.current = new Set();
+          setHoverConnectionCount(0);
           setTooltipNode(null);
         }}
         onClick={onClick}
@@ -577,10 +872,90 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
         <ZoomBtn onClick={() => zoomBy(0.77)} title="Zoom out"><Minus size={13} /></ZoomBtn>
       </div>
 
+      {/* ── Connect drag help ─────────────────────────────────────────────── */}
+      <div
+        className="pointer-events-none absolute left-1/2 top-5 z-20 -translate-x-1/2 rounded-2xl border border-violet-200/70 bg-white/90 px-4 py-2 text-xs font-medium text-violet-700 shadow-lg shadow-violet-100/60 backdrop-blur-2xl transition-opacity duration-200"
+        style={{ opacity: isConnecting ? 1 : 0 }}
+      >
+        Drop on another node to link context
+      </div>
+
+      {/* ── Update visualization overlay ───────────────────────────────────── */}
+      {updateVisu && (updateVisu.active || updateVisu.done.size > 0 || updateVisu.queued.size > 0) && (
+        <div className="pointer-events-none absolute bottom-24 left-1/2 z-20 -translate-x-1/2 w-[360px]">
+          {/* Progress bar */}
+          <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/80 bg-white/90 px-4 py-2 shadow-lg backdrop-blur-2xl">
+            <div className="flex-1 overflow-hidden rounded-full bg-slate-100 h-1.5">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-400 to-emerald-400 transition-all duration-700"
+                style={{ width: `${updateVisu.totalOps ? (updateVisu.appliedOps / updateVisu.totalOps) * 100 : 0}%` }}
+              />
+            </div>
+            <span className="flex-shrink-0 text-[10px] font-semibold tabular-nums text-slate-500">
+              {updateVisu.appliedOps} / {updateVisu.totalOps}
+            </span>
+          </div>
+
+          {/* Active op card */}
+          {updateVisu.active && (
+            <div className="rounded-2xl border border-amber-200/70 bg-amber-50/95 px-4 py-3 shadow-xl shadow-amber-100/60 backdrop-blur-2xl">
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className={cn(
+                  "rounded-lg px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider",
+                  updateVisu.active.kind === "append" ? "bg-blue-100 text-blue-700" :
+                  updateVisu.active.kind === "supersede" ? "bg-amber-100 text-amber-700" :
+                  updateVisu.active.kind === "create_section" ? "bg-violet-100 text-violet-700" :
+                  updateVisu.active.kind === "flag_conflict" ? "bg-red-100 text-red-700" :
+                  "bg-slate-100 text-slate-600"
+                )}>
+                  {updateVisu.active.kind.replace("_", " ")}
+                </span>
+                <div className="h-1.5 w-1.5 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-[10px] font-semibold text-amber-700">Applying now</span>
+              </div>
+              <p className="font-mono text-[10px] font-semibold text-slate-700 truncate mb-1">
+                {updateVisu.active.path}
+              </p>
+              <p className="text-[10px] leading-4 text-slate-500 line-clamp-2">
+                {updateVisu.active.reason}
+              </p>
+            </div>
+          )}
+
+          {/* Queue indicator */}
+          {updateVisu.queued.size > 0 && !updateVisu.active && (
+            <div className="rounded-2xl border border-violet-200/60 bg-violet-50/90 px-4 py-2.5 shadow-md backdrop-blur-2xl">
+              <div className="flex items-center gap-2">
+                <div className="flex gap-0.5">
+                  {Array.from({ length: Math.min(5, updateVisu.queued.size) }).map((_, i) => (
+                    <div key={i} className="h-1.5 w-1.5 rounded-full bg-violet-400 opacity-70" style={{ animationDelay: `${i * 0.12}s` }} />
+                  ))}
+                </div>
+                <span className="text-[10px] font-medium text-violet-600">
+                  {updateVisu.queued.size} operation{updateVisu.queued.size === 1 ? "" : "s"} queued
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* Done state */}
+          {!updateVisu.active && updateVisu.queued.size === 0 && updateVisu.done.size > 0 && (
+            <div className="rounded-2xl border border-emerald-200/60 bg-emerald-50/90 px-4 py-2.5 shadow-md backdrop-blur-2xl">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-[10px] font-semibold text-emerald-700">
+                  {updateVisu.done.size} file{updateVisu.done.size === 1 ? "" : "s"} updated — refreshing brain...
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Hover tip ─────────────────────────────────────────────────────── */}
       {!tooltipNode && (
         <div className="pointer-events-none absolute bottom-20 right-5 rounded-xl border border-white/70 bg-white/70 px-3 py-1.5 backdrop-blur-xl">
-          <p className="text-[10px] text-slate-400">Scroll · Drag · Click node · Hover to explore</p>
+          <p className="text-[10px] text-slate-400">Scroll to zoom · Drag node to link · Click node to inspect · Click edge to edit</p>
         </div>
       )}
 
@@ -604,13 +979,13 @@ export function BrainGraph({ graphData, onNodeSelect, selectedId, highlightMap }
                 {tooltipNode.importance}
               </span>
               <span className="rounded-full border border-slate-200/60 bg-slate-50 px-2 py-0.5 text-[9px] text-slate-500">
-                {hovConnectedRef.current.size} connections
+                {hoverConnectionCount} connections
               </span>
             </div>
             {tooltipNode.keywords.length > 0 && (
               <p className="text-[10px] text-slate-400">{tooltipNode.keywords.slice(0, 4).join(" · ")}</p>
             )}
-            <p className="mt-1.5 text-[9px] text-slate-400">Click to open in editor</p>
+            <p className="mt-1.5 text-[9px] text-slate-400">Click to inspect · drag to connect</p>
           </>
         )}
       </div>

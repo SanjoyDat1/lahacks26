@@ -2,12 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Brain, LayoutDashboard, Radio, Search } from "lucide-react";
+import { Bot, Brain, LayoutDashboard, Plus, Radio, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const links = [
-  { href: "/",        label: "Dashboard", Icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
   { href: "/brain",   label: "Brain",     Icon: Brain           },
   { href: "/agent",   label: "Agent",     Icon: Bot             },
   { href: "/events",  label: "Events",    Icon: Radio           },
@@ -55,15 +55,15 @@ export function Nav() {
           })}
         </nav>
 
-        {/* Right: status indicator */}
-        <div className="hidden items-center gap-2 text-[11px] text-slate-400 sm:flex">
-          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
-          System ready
-        </div>
-        <div className="hidden items-center gap-2 text-[11px] text-slate-400 sm:flex">
-          <Link href="/agent" className="flex items-center gap-1.5 rounded-full border border-violet-200/60 bg-violet-50/80 px-2.5 py-1 text-[10px] font-medium text-violet-700 transition hover:bg-violet-100/80">
-            <Bot size={10} className="text-violet-500" />
-            Live Agent
+        {/* Right: primary demo action */}
+        <div className="hidden items-center gap-2 sm:flex">
+          <span className="hidden items-center gap-2 text-[11px] text-slate-400 lg:flex">
+            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
+            System ready
+          </span>
+          <Link href="/" className="flex items-center gap-1.5 rounded-full border border-violet-200/60 bg-violet-50/80 px-2.5 py-1 text-[10px] font-medium text-violet-700 transition hover:bg-violet-100/80">
+            <Plus size={10} className="text-violet-500" />
+            New Session
           </Link>
         </div>
       </div>

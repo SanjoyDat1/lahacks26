@@ -33,7 +33,7 @@ const WELCOME: Message = {
 
 type Mode = "chat" | "edit";
 
-export function BrainChat() {
+export function BrainChat({ contextHint }: { contextHint?: string }) {
   const [mode, setMode] = useState<Mode>("chat");
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
@@ -55,6 +55,7 @@ export function BrainChat() {
     if (!text || isPending) return;
     setInput("");
 
+    const contextualText = contextHint ? `${contextHint}\n\n${text}` : text;
     const userMsg: Message = { id: stableKey(), role: "user", content: text };
     const assistantId = stableKey();
     const placeholder: Message = { id: assistantId, role: "assistant", content: "", streaming: true };
@@ -64,7 +65,7 @@ export function BrainChat() {
     const history = messages
       .filter((m) => !m.streaming)
       .map(({ role, content }) => ({ role, content }));
-    history.push({ role: "user", content: text });
+    history.push({ role: "user", content: contextualText });
 
     startTransition(async () => {
       const response = await fetch("/api/chat", {
@@ -134,12 +135,13 @@ export function BrainChat() {
   async function generateEdit() {
     const text = editInstruction.trim();
     if (!text) return;
+    const instruction = contextHint ? `${contextHint}\n\n${text}` : text;
     setEditState({ status: "loading" });
     try {
       const res = await fetch("/api/brian/ai-edit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instruction: text }),
+        body: JSON.stringify({ instruction }),
       });
       const data = (await res.json()) as {
         file?: string; original?: string; newContent?: string; summary?: string; error?: string;
@@ -165,10 +167,11 @@ export function BrainChat() {
     const { file, summary } = editState;
     setEditState({ status: "applying" });
     try {
+      const instruction = contextHint ? `${contextHint}\n\n${editInstruction.trim()}` : editInstruction.trim();
       const res = await fetch("/api/brian/ai-edit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instruction: editInstruction.trim(), apply: true }),
+        body: JSON.stringify({ instruction, apply: true }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok || data.error) {
@@ -254,7 +257,7 @@ export function BrainChat() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
                 }}
-                placeholder="Ask about architecture, decisions, goals…"
+                placeholder={contextHint ? "Ask about the selected brain file…" : "Ask about architecture, decisions, goals…"}
                 className="flex-1 resize-none rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-400/15 transition-all backdrop-blur-sm"
                 rows={2}
               />
@@ -298,7 +301,9 @@ export function BrainChat() {
                     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void generateEdit(); }
                   }}
                   placeholder={
-                    "e.g. \"Add Redis to the tech stack decisions\"\n\"Update the auth architecture to use JWT\"\n\"Add a note that the database uses connection pooling\""
+                    contextHint
+                      ? "e.g. \"Add an open question to this file\"\n\"Summarize the risks in this node\"\n\"Connect this context to the architecture\""
+                      : "e.g. \"Add Redis to the tech stack decisions\"\n\"Update the auth architecture to use JWT\"\n\"Add a note that the database uses connection pooling\""
                   }
                   rows={4}
                   className="w-full resize-none rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-400/15 transition-all"

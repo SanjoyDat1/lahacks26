@@ -5,10 +5,11 @@ import logging
 import re
 import shutil
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Mapping
+from typing import Any, Iterable, Iterator, Mapping
 
 import yaml
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -37,9 +38,16 @@ TEXT_EXTENSIONS = {
 MAX_SOURCE_CHARS = 45_000
 MAX_TEMPLATE_CHARS = 12_000
 MAX_CATALOG_CHARS = 18_000
-DEFAULT_MAX_BOOTSTRAP_FILES = 3
-BATCH_GENERATION_SIZE = 5
+DEFAULT_MAX_BOOTSTRAP_FILES = 24
+BATCH_GENERATION_SIZE = 4
+MAX_PARALLEL_BATCHES = 3
 INDEX_PATH = "index.md"
+MIN_RICH_BOOTSTRAP_FILES = 12
+REQUIRED_BOOTSTRAP_PATHS = [
+    "index.md",
+    "map.md",
+    "summaries/project_summary.md",
+]
 
 
 def _log_bootstrap(message: str) -> None:
@@ -54,6 +62,18 @@ class SourceDocument:
     name: str
     text: str
     source_path: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class BrainFilePlan:
+    """A source-grounded Markdown file to generate for the working brain."""
+
+    path: str
+    title: str
+    purpose: str
+    template_path: str = ""
+    evidence: tuple[str, ...] = ()
+    links: tuple[str, ...] = ()
 
 
 DocumentInput = str | Path | SourceDocument | Mapping[str, str]
@@ -239,37 +259,119 @@ def _strip_fenced_json(text: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _select_relevant_files(
+def _safe_brain_path(path: str) -> str | None:
+    clean = path.replace("\\", "/").strip().strip("/")
+    clean = re.sub(r"/+", "/", clean)
+    if not clean or clean.startswith(".") or ".." in clean.split("/"):
+        return None
+    if clean.endswith("/"):
+        return None
+    if not clean.endswith(".md"):
+        clean += ".md"
+    if clean.startswith("/"):
+        return None
+    return clean
+
+
+def _coerce_file_plan(item: object, valid_paths: set[str]) -> BrainFilePlan | None:
+    if not isinstance(item, dict):
+        return None
+    raw_path = item.get("path")
+    if not isinstance(raw_path, str):
+        return None
+    path = _safe_brain_path(raw_path)
+    if not path:
+        return None
+
+    raw_template = item.get("template_path")
+    template_path = raw_template.replace("\\", "/").strip() if isinstance(raw_template, str) else ""
+    if template_path not in valid_paths:
+        template_path = path if path in valid_paths else ""
+
+    raw_evidence = item.get("evidence")
+    evidence: tuple[str, ...]
+    if isinstance(raw_evidence, list):
+        evidence = tuple(str(value).strip() for value in raw_evidence if str(value).strip())[:5]
+    else:
+        evidence = ()
+
+    raw_links = item.get("links")
+    if isinstance(raw_links, list):
+        links = tuple(str(value).strip() for value in raw_links if str(value).strip())[:8]
+    else:
+        links = ()
+
+    title = item.get("title")
+    purpose = item.get("purpose")
+    return BrainFilePlan(
+        path=path,
+        title=str(title).strip() if isinstance(title, str) and title.strip() else Path(path).stem.replace("_", " ").replace("-", " ").title(),
+        purpose=str(purpose).strip() if isinstance(purpose, str) and purpose.strip() else "Store source-grounded context for retrieval.",
+        template_path=template_path,
+        evidence=evidence,
+        links=links,
+    )
+
+
+def _required_plan(path: str, valid_paths: set[str]) -> BrainFilePlan:
+    titles = {
+        "index.md": "Brain Index",
+        "map.md": "Brain Map",
+        "summaries/project_summary.md": "Project Summary",
+    }
+    purposes = {
+        "index.md": "Entry point that links every generated context node.",
+        "map.md": "Visual knowledge map of the generated brain.",
+        "summaries/project_summary.md": "Shortest useful source-grounded summary.",
+    }
+    return BrainFilePlan(
+        path=path,
+        title=titles.get(path, Path(path).stem.replace("_", " ").replace("-", " ").title()),
+        purpose=purposes.get(path, "Required source-grounded brain file."),
+        template_path=path if path in valid_paths else "",
+        links=tuple(required for required in REQUIRED_BOOTSTRAP_PATHS if required != path),
+    )
+
+
+def _plan_brain_files(
     model: object,
     reference_dir: Path,
     source_digest: str,
     initial_prompt: str,
     max_files: int,
-) -> list[str]:
+) -> list[BrainFilePlan]:
     catalog, valid_paths = _reference_catalog(reference_dir)
     if not valid_paths:
         raise ValueError(f"Reference brain has no Markdown templates: {reference_dir}")
     _log_bootstrap(
-        "selecting relevant files "
+        "planning source-grounded brain files "
         f"templates={len(valid_paths)} catalog_chars={len(catalog)} "
         f"source_digest_chars={len(source_digest)} max_files={max_files}"
     )
 
+    minimum_files = min(max_files, MIN_RICH_BOOTSTRAP_FILES)
     system = SystemMessage(
-        "You select the smallest useful set of Markdown project-brain files to create "
-        "from source documents. The index.md file is mandatory. Return only JSON."
+        "You design a rich Markdown knowledge graph from uploaded source documents. "
+        "The uploaded source is the only source of truth. The reference catalog is only "
+        "a style/schema example, not content to copy. Return only JSON."
     )
     user = HumanMessage(
-        f"""Choose which reference templates are necessary for the initial working brain.
+        f"""Plan the Markdown files for a new working brain.
 
 Rules:
-- Always include `index.md`; it is the required entry point for every working brain.
-- Select only files whose purpose is directly supported by the initial prompt or source documents.
-- Do not include files just because they exist in the reference tree.
-- Prefer one concise summary file over many specialized files when the source material is thin.
-- Use the remaining file budget for documents that `index.md` should link to.
-- Select at most {max_files} file(s).
-- Return JSON exactly like: {{"files": ["path/from/catalog.md"], "rationale": "short reason"}}
+- Always include `index.md`, `map.md`, and `summaries/project_summary.md`.
+- Create a complex but relevant graph: at least {minimum_files} files and at most {max_files} files.
+- For substantial source material, prefer nested directories with 2-5 files each instead of one flat file per folder. Good examples: `projects/<project_slug>/overview.md`, `projects/<project_slug>/architecture.md`, `projects/<project_slug>/timeline.md`, `people/<person_slug>/role.md`, `requirements/<area>/constraints.md`, `risks/<area>/open_questions.md`.
+- File paths should be specific to the uploaded context. You may use catalog paths when they fit, or create new nested paths such as `concepts/...`, `people/...`, `products/...`, `projects/...`, `research/...`, `requirements/...`, `risks/...`, `timeline/...`, `evidence/...`, or domain-specific folders.
+- Use `template_path` only when a reference file is structurally helpful. Leave it empty for custom source-specific files.
+- Do NOT include Brian, AI Brain, Next.js, FastAPI, GitHub, Slack, Postgres, pgvector, OpenAI, or local demo mode unless those exact ideas appear in the uploaded source or initial prompt.
+- Do NOT create integrations, architecture, or coding-agent files unless the source actually discusses those concepts.
+- Every planned file must include 1-3 short `evidence` bullets copied or tightly paraphrased from the uploaded source.
+- Prefer source-specific concepts, entities, workflows, decisions, constraints, risks, questions, and relationships over generic template categories.
+- Make the graph query-efficient: related files should link to their local overview file, the local overview should link to important child files, and cross-domain relationships should be represented in `links`.
+- In every file plan, `links` must list 2-6 related planned file paths or ids that should connect in the final graph. Use paths from this same planned file set.
+- Return JSON exactly like:
+  {{"files": [{{"path": "index.md", "title": "Brain Index", "purpose": "Entry point", "template_path": "index.md", "evidence": ["source-backed point"], "links": ["summaries/project_summary.md"]}}], "rationale": "short reason"}}
 
 INITIAL PROMPT:
 ```text
@@ -290,37 +392,59 @@ SOURCE DOCUMENTS:
     response = invoke_chat_model(  # type: ignore[arg-type]
         model,
         [system, user],
-        label="bootstrap file selection",
+        label="bootstrap source-grounded file plan",
     )
     raw = _strip_fenced_json(_message_text(getattr(response, "content", response)))
     try:
         parsed = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise ValueError(f"Model did not return valid file-selection JSON: {raw[:500]}") from exc
+        raise ValueError(f"Model did not return valid brain-plan JSON: {raw[:500]}") from exc
 
     files = parsed.get("files") if isinstance(parsed, dict) else None
     if not isinstance(files, list):
-        raise ValueError("File-selection JSON must include a files list")
+        raise ValueError("Brain-plan JSON must include a files list")
 
-    selected: list[str] = []
-    for item in files:
-        if not isinstance(item, str):
-            continue
-        relative_path = item.replace("\\", "/").strip()
-        if relative_path in valid_paths and relative_path not in selected:
-            selected.append(relative_path)
-        if len(selected) >= max_files:
+    plans: list[BrainFilePlan] = []
+    for required_path in REQUIRED_BOOTSTRAP_PATHS:
+        if len(plans) >= max_files:
             break
+        plans.append(_required_plan(required_path, valid_paths))
 
-    if INDEX_PATH not in valid_paths:
-        selected_paths = selected[:max_files]
-        _log_bootstrap(f"selected files={selected_paths}")
-        return selected_paths
+    for item in files:
+        if len(plans) >= max_files:
+            break
+        plan = _coerce_file_plan(item, valid_paths)
+        if not plan:
+            continue
+        if plan.path in {existing.path for existing in plans}:
+            continue
+        plans.append(plan)
 
-    linked_files = [path for path in selected if path != INDEX_PATH]
-    selected_paths = [INDEX_PATH, *linked_files[: max_files - 1]]
-    _log_bootstrap(f"selected files={selected_paths}")
-    return selected_paths
+    if len(plans) < minimum_files:
+        fallback_paths = [
+            "context/key_facts.md",
+            "context/open_questions.md",
+            "risks/risks_and_constraints.md",
+            "concepts/core_concepts.md",
+            "timeline/source_timeline.md",
+        ]
+        for fallback_path in fallback_paths:
+            if len(plans) >= min(max_files, minimum_files):
+                break
+            if fallback_path in {existing.path for existing in plans}:
+                continue
+            plans.append(
+                BrainFilePlan(
+                    path=fallback_path,
+                    title=Path(fallback_path).stem.replace("_", " ").replace("-", " ").title(),
+                    purpose="Source-grounded supporting context created because the uploaded material needs a richer retrieval graph.",
+                    template_path=fallback_path if fallback_path in valid_paths else "",
+                    links=("index.md", "summaries/project_summary.md"),
+                )
+            )
+
+    _log_bootstrap(f"planned files={[plan.path for plan in plans]}")
+    return plans[:max_files]
 
 
 def _ensure_index_links(content: str, selected_paths: list[str]) -> str:
@@ -332,6 +456,41 @@ def _ensure_index_links(content: str, selected_paths: list[str]) -> str:
     lines = [content.rstrip(), "", "## Generated Brain Files", ""]
     lines.extend(f"- [{path}]({path})" for path in missing)
     return "\n".join(lines) + "\n"
+
+
+def _ensure_frontmatter_links(content: str, relative_path: str, selected_paths: list[str], plan_links: tuple[str, ...]) -> str:
+    valid_links = [
+        link
+        for link in plan_links
+        if link in selected_paths and link != relative_path
+    ]
+    if not valid_links:
+        valid_links = [
+            path
+            for path in selected_paths
+            if path != relative_path and (path == INDEX_PATH or path.startswith(relative_path.split("/")[0] + "/"))
+        ][:5]
+    if not valid_links:
+        return content
+
+    if not content.startswith("---\n"):
+        return content
+    end = content.find("\n---", 4)
+    if end == -1:
+        return content
+    frontmatter = content[4:end]
+    body = content[end:]
+    link_lines = "links:\n" + "\n".join(f"  - {link}" for link in valid_links)
+    if re.search(r"(?m)^links:\s*(?:\[[^\n]*\])?\s*$", frontmatter):
+        frontmatter = re.sub(
+            r"(?ms)^links:\s*(?:\[[^\n]*\])?\s*(?:\n\s+-\s+[^\n]+)*",
+            link_lines,
+            frontmatter,
+            count=1,
+        )
+    else:
+        frontmatter = frontmatter.rstrip() + "\n" + link_lines
+    return "---\n" + frontmatter.strip() + body
 
 
 def _strip_markdown_fence(content: str) -> str:
@@ -346,7 +505,7 @@ def _strip_markdown_fence(content: str) -> str:
     return "\n".join(lines).strip()
 
 
-def _batched(items: list[str], size: int) -> Iterable[list[str]]:
+def _batched(items: list[BrainFilePlan], size: int) -> Iterable[list[BrainFilePlan]]:
     for start in range(0, len(items), size):
         yield items[start : start + size]
 
@@ -354,18 +513,24 @@ def _batched(items: list[str], size: int) -> Iterable[list[str]]:
 def _generate_file_batch(
     model: object,
     reference_dir: Path,
-    batch_paths: list[str],
+    batch_plans: list[BrainFilePlan],
     source_digest: str,
     initial_prompt: str,
     selected_paths: list[str],
 ) -> dict[str, str]:
     templates = []
-    for relative_path in batch_paths:
-        template_file = reference_dir / relative_path
-        template = _read_text_file(template_file) if template_file.is_file() else ""
+    batch_paths = [plan.path for plan in batch_plans]
+    for plan in batch_plans:
+        template_file = reference_dir / plan.template_path if plan.template_path else None
+        template = _read_text_file(template_file) if template_file and template_file.is_file() else ""
         templates.append(
             {
-                "path": relative_path,
+                "path": plan.path,
+                "title": plan.title,
+                "purpose": plan.purpose,
+                "source_evidence": list(plan.evidence),
+                "planned_links": list(plan.links),
+                "template_path": plan.template_path,
                 "template": template[:MAX_TEMPLATE_CHARS],
             }
         )
@@ -376,19 +541,27 @@ def _generate_file_batch(
 
     system = SystemMessage(
         "You create Markdown project-brain files from raw source documents. "
-        "Return only valid JSON with generated file contents."
+        "The source documents are the only factual authority. Reference templates are "
+        "format examples only. Return only valid JSON with generated file contents."
     )
     user = HumanMessage(
         f"""Create these Markdown files for a new working brain: {", ".join(batch_paths)}.
 
-Use each template for that file's structure, frontmatter style, heading style, and level of detail.
-Replace Brian/sample-specific facts with facts supported by the source documents.
-Keep the same purpose as each template file. Preserve the same YAML keys when possible:
+Use the supplied file plan for each file's title, purpose, and source evidence.
+Use templates only for frontmatter style, heading style, and organization hints.
+Never copy Brian/sample-specific facts from a template.
+Never mention Brian, AI Brain, Next.js, FastAPI, GitHub, Slack, Discord, Postgres, pgvector, OpenAI, or local demo mode unless those facts appear in SOURCE DOCUMENTS or INITIAL PROMPT.
+Every factual statement must be supported by SOURCE DOCUMENTS or INITIAL PROMPT.
+If a file's area is under-specified, write a concise source-grounded note plus open questions instead of inventing details.
+Preserve useful YAML keys when possible:
 id, type, title, status, importance, updated, links, keywords.
 Use `{date.today().isoformat()}` only if the template has an updated field.
-Do not invent unsupported implementation details. If source material is thin, write a concise starter note and list open questions.
 Keep links limited to these selected files, and omit links to uncreated files: {", ".join(selected_paths) or "(none)"}
+Use each file plan's `planned_links` as the default frontmatter `links` for that file, plus any obviously related selected files.
+For frontmatter links, prefer exact selected file paths such as `projects/scootal/architecture.md`; ids are also allowed, but paths are safer.
 If creating `index.md`, treat it as the mandatory entry point and include Markdown links to every other selected file.
+If creating `map.md`, make the graph reflect the selected files and their real source-grounded relationships.
+Include a section named `## Source Evidence` in every non-index file with bullets from the file plan and/or SOURCE DOCUMENTS.
 
 Return JSON exactly like:
 {{"files": [{{"path": "index.md", "content": "---\\n...complete markdown...\\n"}}]}}
@@ -398,7 +571,7 @@ INITIAL PROMPT:
 {initial_prompt.strip() or "(none provided)"}
 ```
 
-TEMPLATES:
+FILE PLANS AND OPTIONAL TEMPLATES:
 ```json
 {json.dumps(templates, ensure_ascii=True)}
 ```
@@ -439,6 +612,9 @@ SOURCE DOCUMENTS:
         clean_content = _strip_markdown_fence(content)
         if relative_path == INDEX_PATH:
             clean_content = _ensure_index_links(clean_content, selected_paths).rstrip()
+        plan = next((candidate for candidate in batch_plans if candidate.path == relative_path), None)
+        if plan:
+            clean_content = _ensure_frontmatter_links(clean_content, relative_path, selected_paths, plan.links).rstrip()
         generated[relative_path] = clean_content.rstrip() + "\n"
 
     missing = [path for path in batch_paths if path not in generated]
@@ -448,7 +624,7 @@ SOURCE DOCUMENTS:
     return generated
 
 
-def create_brain_from_documents(
+def create_brain_from_documents_streaming(
     documents: Iterable[DocumentInput],
     *,
     output_dir: str | Path | None = None,
@@ -457,12 +633,13 @@ def create_brain_from_documents(
     overwrite: bool = False,
     initial_prompt: str = "",
     max_files: int = DEFAULT_MAX_BOOTSTRAP_FILES,
-) -> dict[str, str]:
+) -> Iterator[dict[str, Any]]:
     """
-    Create a minimal working brain from raw text/documents using `brian/` as schema guidance.
+    Create a source-grounded working brain and yield writer progress events.
 
-    A model first selects the smallest relevant subset of reference templates, then only
-    those files are created and filled with content distilled from the provided documents.
+    `brian/` is used as schema and style guidance only. The generated working brain
+    should be dynamically planned from the uploaded context and must not inherit
+    unsupported Brian-specific facts.
     """
 
     s = settings or load_settings(validate=True)
@@ -483,26 +660,93 @@ def create_brain_from_documents(
     _log_bootstrap(f"prepared output tree reference={ref} output={out}")
 
     model = make_chat_model(s)
-    selected_paths = _select_relevant_files(model, ref, source_digest, initial_prompt, max_files)
+    file_plans = _plan_brain_files(model, ref, source_digest, initial_prompt, max_files)
+    selected_paths = [plan.path for plan in file_plans]
     written: dict[str, str] = {}
-    batches = list(_batched(selected_paths, BATCH_GENERATION_SIZE))
-    _log_bootstrap(f"generating {len(selected_paths)} selected files in {len(batches)} batch(es)")
-    for index, batch_paths in enumerate(batches, 1):
-        _log_bootstrap(f"starting batch {index}/{len(batches)}")
-        batch_content = _generate_file_batch(
-            model,
-            ref,
-            batch_paths,
-            source_digest,
-            initial_prompt,
-            selected_paths,
+
+    for plan in file_plans:
+        output_file = out / plan.path
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        yield {
+            "type": "file_planned",
+            "path": plan.path,
+            "title": plan.title,
+            "purpose": plan.purpose,
+            "links": list(plan.links) or [path for path in selected_paths if path != plan.path][:5],
+        }
+
+    batches = list(_batched(file_plans, BATCH_GENERATION_SIZE))
+    _log_bootstrap(f"generating {len(file_plans)} planned files in {len(batches)} batch(es)")
+    for batch_plans in batches:
+        for plan in batch_plans:
+            yield {
+                "type": "file_writing",
+                "path": plan.path,
+                "title": plan.title,
+            }
+
+    def generate_batch(batch_index: int, batch_plans: list[BrainFilePlan]) -> tuple[int, dict[str, str]]:
+        _log_bootstrap(f"starting batch {batch_index}/{len(batches)}")
+        return (
+            batch_index,
+            _generate_file_batch(
+                model,
+                ref,
+                batch_plans,
+                source_digest,
+                initial_prompt,
+                selected_paths,
+            ),
         )
-        for relative_path, content in batch_content.items():
-            output_file = out / relative_path
-            output_file.parent.mkdir(parents=True, exist_ok=True)
-            output_file.write_text(content, encoding="utf-8")
-            written[relative_path] = content
-            _log_bootstrap(f"wrote file={relative_path} chars={len(content)}")
+
+    max_workers = min(MAX_PARALLEL_BATCHES, max(1, len(batches)))
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(generate_batch, index, batch_plans)
+            for index, batch_plans in enumerate(batches, 1)
+        ]
+        for future in as_completed(futures):
+            _, batch_content = future.result()
+            for relative_path, content in batch_content.items():
+                output_file = out / relative_path
+                output_file.parent.mkdir(parents=True, exist_ok=True)
+                output_file.write_text(content, encoding="utf-8")
+                written[relative_path] = content
+                _log_bootstrap(f"wrote file={relative_path} chars={len(content)}")
+                yield {
+                    "type": "file_created",
+                    "path": relative_path,
+                    "title": next((plan.title for plan in file_plans if plan.path == relative_path), ""),
+                    "content": content,
+                }
 
     _log_bootstrap(f"finished create_brain_from_documents written={sorted(written)}")
+    yield {"type": "done", "written": written}
+
+
+def create_brain_from_documents(
+    documents: Iterable[DocumentInput],
+    *,
+    output_dir: str | Path | None = None,
+    reference_dir: str | Path | None = None,
+    settings: Settings | None = None,
+    overwrite: bool = False,
+    initial_prompt: str = "",
+    max_files: int = DEFAULT_MAX_BOOTSTRAP_FILES,
+) -> dict[str, str]:
+    """Create a source-grounded working brain from raw text/documents."""
+    written: dict[str, str] = {}
+    for event in create_brain_from_documents_streaming(
+        documents,
+        output_dir=output_dir,
+        reference_dir=reference_dir,
+        settings=settings,
+        overwrite=overwrite,
+        initial_prompt=initial_prompt,
+        max_files=max_files,
+    ):
+        if event.get("type") == "done":
+            value = event.get("written")
+            if isinstance(value, dict):
+                written = {str(path): str(content) for path, content in value.items()}
     return written

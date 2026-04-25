@@ -5,10 +5,11 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 
 import { env } from "@/lib/env";
+import { resolveBrianDir } from "@/lib/brian/reader";
 
 // Read every .md file in the brian/ directory with its raw content (incl. frontmatter)
 function readAllRaw(): Array<{ relPath: string; raw: string }> {
-  const brianDir = path.join(process.cwd(), "brian");
+  const brianDir = resolveBrianDir();
   if (!fs.existsSync(brianDir)) return [];
   const out: Array<{ relPath: string; raw: string }> = [];
   collectRaw(brianDir, brianDir, out);
@@ -34,7 +35,7 @@ function collectRaw(
 }
 
 function writeBrianFile(relPath: string, content: string) {
-  const full = path.join(process.cwd(), "brian", relPath);
+  const full = path.join(resolveBrianDir(), relPath);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, content, "utf8");
 }

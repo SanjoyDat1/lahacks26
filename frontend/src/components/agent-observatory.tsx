@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   AlertCircle,
   Bot,
@@ -18,14 +20,36 @@ import {
   Send,
   Sparkles,
   Terminal,
+  Trash2,
   Wifi,
   WifiOff,
+  Wrench,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { LangGraphViz, type AgentEvent } from "@/components/langgraph-viz";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
+
+type ToolEntry = {
+  run_id: string;
+  tool: string;
+  agent: string;
+  input: Record<string, unknown>;
+  output?: string;
+};
+
+type ChatMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  ts: number;
+  streaming: boolean;
+  thinking: string;
+  tools: ToolEntry[];
+  status: "pending" | "streaming" | "done" | "error";
+  error?: string;
+};
 
 type EventLog =
   | { id: number; kind: "agent_start"; agent: string; ts: number }
@@ -37,10 +61,10 @@ type EventLog =
   | { id: number; kind: "error"; message: string; ts: number };
 
 const SAMPLE_PROMPTS = [
-  "What are the core architectural decisions in this project?",
+  "What are the core architectural decisions?",
   "Explain the brain storage and retrieval system",
   "What integrations does this system support?",
-  "What are the current open questions and constraints?",
+  "What are the current open questions?",
 ];
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -51,10 +75,7 @@ export function AgentObservatory() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [agentEvents, setAgentEvents] = useState<AgentEvent[]>([]);
   const [eventLog, setEventLog] = useState<EventLog[]>([]);
-  const [streamingText, setStreamingText] = useState("");
-  const [thinkingText, setThinkingText] = useState("");
-  const [finalResult, setFinalResult] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [agentStatus, setAgentStatus] = useState<"idle" | "reader" | "writer" | "done" | "error">("idle");
   const [isAgentOnline, setIsAgentOnline] = useState<boolean | null>(null);
   const [expandedLogs, setExpandedLogs] = useState<Set<number>>(new Set());
@@ -63,67 +84,90 @@ export function AgentObservatory() {
   const logIdRef = useRef(0);
   const abortRef = useRef<AbortController | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
-  const textEndRef = useRef<HTMLDivElement>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const activeMsgIdRef = useRef<string | null>(null);
 
   function nextId() { return ++logIdRef.current; }
 
-  // Health check with auto-retry while offline
   useEffect(() => {
-    let timer: ReturnType<typeof setInterval>;
     async function check() {
       try {
         const r = await fetch("/api/agent/stream");
         const d = await r.json();
-        const online = !d.offline;
-        setIsAgentOnline(online);
-        if (online) clearInterval(timer);
+        setIsAgentOnline(!d.offline);
       } catch {
         setIsAgentOnline(false);
       }
     }
     check();
-    timer = setInterval(check, 5000);
+    const timer = setInterval(check, 5000);
     return () => clearInterval(timer);
   }, []);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventLog.length]);
 
   useEffect(() => {
-    if (streamingText) textEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [streamingText]);
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages.length, isStreaming]);
 
-  const reset = useCallback(() => {
+  const clearMessages = useCallback(() => {
     abortRef.current?.abort();
     setIsStreaming(false);
     setAgentEvents([]);
     setEventLog([]);
-    setStreamingText("");
-    setThinkingText("");
-    setFinalResult("");
-    setError(null);
+    setMessages([]);
     setAgentStatus("idle");
     setExpandedLogs(new Set());
+    activeMsgIdRef.current = null;
   }, []);
 
   const runAgent = useCallback(async () => {
     if (!prompt.trim() || isStreaming || isAgentOnline === false) return;
-    reset();
+
+    const userPrompt = prompt.trim();
+    setPrompt("");
+
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: userPrompt,
+      ts: Date.now(),
+      streaming: false,
+      thinking: "",
+      tools: [],
+      status: "done",
+    };
+
+    const agentMsgId = `agent-${Date.now()}`;
+    activeMsgIdRef.current = agentMsgId;
+    const agentMsg: ChatMessage = {
+      id: agentMsgId,
+      role: "assistant",
+      content: "",
+      ts: Date.now(),
+      streaming: true,
+      thinking: "",
+      tools: [],
+      status: "streaming",
+    };
+
+    setMessages((prev) => [...prev, userMsg, agentMsg]);
+    setAgentEvents([]);
+    setEventLog([]);
+    setExpandedLogs(new Set());
 
     const ac = new AbortController();
     abortRef.current = ac;
     setIsStreaming(true);
     setAgentStatus("reader");
 
-    let localText = "";
-
     try {
       const res = await fetch("/api/agent/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: prompt.trim(), task }),
+        body: JSON.stringify({ prompt: userPrompt, task }),
         signal: ac.signal,
       });
 
@@ -154,6 +198,7 @@ export function AgentObservatory() {
 
           const id = nextId();
           const ts = Date.now();
+          const mid = agentMsgId;
 
           if (evt.type === "agent_start") {
             setAgentStatus(evt.agent as "reader" | "writer");
@@ -162,13 +207,26 @@ export function AgentObservatory() {
             setEventLog((prev) => [...prev, { id, kind: "agent_end", agent: evt.agent, text: evt.text, ts }]);
           } else if (evt.type === "tool_call") {
             setEventLog((prev) => [...prev, { id, kind: "tool_call", agent: evt.agent, tool: evt.tool, input: evt.input, run_id: evt.run_id, ts }]);
+            setMessages((prev) => prev.map((m) =>
+              m.id === mid
+                ? { ...m, tools: [...m.tools, { run_id: evt.run_id, tool: evt.tool, agent: evt.agent, input: evt.input }] }
+                : m,
+            ));
           } else if (evt.type === "tool_result") {
             setEventLog((prev) => [...prev, { id, kind: "tool_result", agent: evt.agent, tool: evt.tool, output: evt.output, run_id: evt.run_id, ts }]);
+            setMessages((prev) => prev.map((m) =>
+              m.id === mid
+                ? { ...m, tools: m.tools.map((t) => t.run_id === evt.run_id ? { ...t, output: evt.output } : t) }
+                : m,
+            ));
           } else if (evt.type === "token") {
-            localText += evt.content;
-            setStreamingText(localText);
+            setMessages((prev) => prev.map((m) =>
+              m.id === mid ? { ...m, content: m.content + evt.content } : m,
+            ));
           } else if (evt.type === "thinking") {
-            setThinkingText((p) => p + evt.content);
+            setMessages((prev) => prev.map((m) =>
+              m.id === mid ? { ...m, thinking: m.thinking + evt.content } : m,
+            ));
             setEventLog((prev) => {
               const last = prev.at(-1);
               if (last?.kind === "thinking" && last.agent === evt.agent)
@@ -176,28 +234,40 @@ export function AgentObservatory() {
               return [...prev, { id, kind: "thinking", agent: evt.agent, content: evt.content, ts }];
             });
           } else if (evt.type === "done") {
-            setFinalResult(evt.result);
+            setMessages((prev) => prev.map((m) =>
+              m.id === mid
+                ? { ...m, content: m.content || evt.result, streaming: false, status: "done" }
+                : m,
+            ));
             setAgentStatus("done");
             setIsStreaming(false);
             setEventLog((prev) => [...prev, { id, kind: "done", result: evt.result, ts }]);
           } else if (evt.type === "error") {
-            setError(evt.message);
+            setMessages((prev) => prev.map((m) =>
+              m.id === mid ? { ...m, streaming: false, status: "error", error: evt.message } : m,
+            ));
             setAgentStatus("error");
             setIsStreaming(false);
             setEventLog((prev) => [...prev, { id, kind: "error", message: evt.message, ts }]);
           } else if (evt.type === "stream_end") {
+            setMessages((prev) => prev.map((m) =>
+              m.id === mid && m.status === "streaming" ? { ...m, streaming: false, status: "done" } : m,
+            ));
             setIsStreaming(false);
           }
         }
       }
     } catch (err) {
       if (err instanceof Error && err.name !== "AbortError") {
-        setError(err.message);
+        const mid = agentMsgId;
+        setMessages((prev) => prev.map((m) =>
+          m.id === mid ? { ...m, streaming: false, status: "error", error: err.message } : m,
+        ));
         setAgentStatus("error");
       }
       setIsStreaming(false);
     }
-  }, [prompt, task, isStreaming, isAgentOnline, reset]);
+  }, [prompt, task, isStreaming, isAgentOnline]);
 
   const toggleLog = useCallback((id: number) => {
     setExpandedLogs((prev) => {
@@ -208,12 +278,11 @@ export function AgentObservatory() {
   }, []);
 
   const toolCalls = eventLog.filter((e) => e.kind === "tool_call");
-  const hasActivity = eventLog.length > 0 || isStreaming;
 
   return (
     <div className="flex h-[calc(100vh-57px)] flex-col overflow-hidden">
 
-      {/* ── Page header ────────────────────────────────────────────────────────── */}
+      {/* ── Page header ─────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between border-b border-slate-200/60 bg-white/70 px-6 py-3 backdrop-blur-xl">
         <div className="flex items-center gap-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-violet-100 ring-1 ring-violet-200/60">
@@ -226,7 +295,6 @@ export function AgentObservatory() {
         </div>
 
         <div className="flex items-center gap-2.5">
-          {/* API status pill */}
           <div className={cn(
             "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-all",
             isAgentOnline === true  ? "border-emerald-200/60 bg-emerald-50/80 text-emerald-700"
@@ -240,29 +308,25 @@ export function AgentObservatory() {
            : isAgentOnline         ? "Agent connected"
            :                         "Agent offline"}
           </div>
-
-          {/* Stats chips */}
           {toolCalls.length > 0 && (
             <div className="flex items-center gap-1.5 rounded-full border border-blue-200/60 bg-blue-50/80 px-2.5 py-1 text-[10px] font-medium text-blue-700">
               <Terminal size={9} />
               {toolCalls.length} tool call{toolCalls.length > 1 ? "s" : ""}
             </div>
           )}
-
-          {/* Reset */}
-          {hasActivity && (
+          {messages.length > 0 && (
             <button
-              onClick={reset}
-              className="flex items-center gap-1.5 rounded-xl border border-slate-200/60 bg-white/70 px-3 py-1.5 text-[11px] font-medium text-slate-500 transition hover:bg-white hover:text-slate-700 hover:shadow-sm"
+              onClick={clearMessages}
+              className="flex items-center gap-1.5 rounded-xl border border-slate-200/60 bg-white/70 px-3 py-1.5 text-[11px] font-medium text-slate-500 transition hover:bg-white hover:text-red-500"
             >
-              <RotateCcw size={11} />
-              Reset
+              <Trash2 size={11} />
+              Clear
             </button>
           )}
         </div>
       </div>
 
-      {/* ── Offline banner ─────────────────────────────────────────────────────── */}
+      {/* ── Offline banner ──────────────────────────────────────────────────── */}
       {isAgentOnline === false && (
         <div className="flex items-start gap-3 border-b border-amber-200/60 bg-amber-50/80 px-6 py-3">
           <WifiOff size={14} className="mt-0.5 flex-shrink-0 text-amber-500" />
@@ -272,24 +336,17 @@ export function AgentObservatory() {
               <code className="rounded-lg border border-amber-200/60 bg-white/70 px-2.5 py-1 font-mono text-[10px] text-slate-700">
                 cd agent &amp;&amp; uv run brain-api
               </code>
-              <span className="text-[10px] text-amber-600">or</span>
-              <code className="rounded-lg border border-amber-200/60 bg-white/70 px-2.5 py-1 font-mono text-[10px] text-slate-700">
-                ./start.sh
-              </code>
-              <span className="ml-1 text-[10px] text-amber-500">Retrying every 5 s…</span>
             </div>
           </div>
           <Loader2 size={12} className="mt-0.5 animate-spin text-amber-400" />
         </div>
       )}
 
-      {/* ── Body ───────────────────────────────────────────────────────────────── */}
+      {/* ── Body ────────────────────────────────────────────────────────────── */}
       <div className="flex min-h-0 flex-1 gap-0">
 
-        {/* ── Left: Graph + trace (60%) ───────────────────────────────────────── */}
+        {/* ── Left: Graph + trace (58%) ─────────────────────────────────────── */}
         <div className="flex w-[58%] min-w-0 flex-col border-r border-slate-200/60">
-
-          {/* Tab bar */}
           <div className="flex items-center gap-1 border-b border-slate-200/60 bg-white/50 px-3 py-2 backdrop-blur-sm">
             {[
               { id: "viz"   as const, label: "LangGraph",   icon: <Cpu size={12} /> },
@@ -308,26 +365,16 @@ export function AgentObservatory() {
                 {icon} {label}
               </button>
             ))}
-
-            {/* Breadcrumb: current agent */}
             {isStreaming && (
               <div className="ml-2 flex items-center gap-1.5">
                 <span className="text-slate-300">·</span>
                 <span className={cn(
                   "flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                  agentStatus === "reader" ? "bg-blue-100 text-blue-700"
-                : agentStatus === "writer" ? "bg-emerald-100 text-emerald-700"
-                : "bg-violet-100 text-violet-700",
+                  agentStatus === "reader" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700",
                 )}>
                   <span className="relative flex h-1.5 w-1.5">
-                    <span className={cn(
-                      "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
-                      agentStatus === "reader" ? "bg-blue-400" : "bg-emerald-400",
-                    )} />
-                    <span className={cn(
-                      "relative inline-flex h-1.5 w-1.5 rounded-full",
-                      agentStatus === "reader" ? "bg-blue-600" : "bg-emerald-600",
-                    )} />
+                    <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", agentStatus === "reader" ? "bg-blue-400" : "bg-emerald-400")} />
+                    <span className={cn("relative inline-flex h-1.5 w-1.5 rounded-full", agentStatus === "reader" ? "bg-blue-600" : "bg-emerald-600")} />
                   </span>
                   {agentStatus === "reader" ? "Reader running" : "Writer running"}
                 </span>
@@ -335,7 +382,6 @@ export function AgentObservatory() {
             )}
           </div>
 
-          {/* Graph / Trace content */}
           <div className="flex-1 overflow-hidden">
             {activeTab === "viz" ? (
               <div className="h-full p-4">
@@ -369,83 +415,37 @@ export function AgentObservatory() {
           </div>
         </div>
 
-        {/* ── Right: Reasoning + Input (42%) ─────────────────────────────────── */}
+        {/* ── Right: Chat thread (42%) ──────────────────────────────────────── */}
         <div className="flex w-[42%] min-w-0 flex-col bg-white/30">
 
-          {/* Reasoning stream */}
-          <div className="flex min-h-0 flex-1 flex-col">
-
-            {/* Panel header */}
-            <div className="flex items-center justify-between border-b border-slate-200/60 bg-white/60 px-4 py-2.5 backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <Brain size={13} className="text-violet-500" />
-                <span className="text-[11px] font-semibold text-slate-700">Agent Response</span>
-              </div>
-              <StatusBadge status={agentStatus} isStreaming={isStreaming} />
-            </div>
-
-            {/* Thinking section (if any) */}
-            {thinkingText && (
-              <div className="border-b border-violet-100/60 bg-violet-50/40 px-4 py-3">
-                <div className="mb-1.5 flex items-center gap-1.5">
-                  <Lightbulb size={10} className="text-violet-500" />
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-violet-500">Internal reasoning</span>
-                </div>
-                <p className="text-[12px] leading-[1.6] text-violet-600/80 italic">{thinkingText}</p>
-              </div>
-            )}
-
-            {/* Response text */}
-            <div className="flex-1 overflow-y-auto px-5 py-5">
-              {streamingText || finalResult ? (
-                <p className="text-[13px] leading-7 text-slate-700 whitespace-pre-wrap">
-                  {streamingText || finalResult}
-                  {isStreaming && streamingText && (
-                    <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-violet-500 align-middle" />
-                  )}
-                </p>
-              ) : agentStatus === "error" && error ? (
-                <ErrorState message={error} />
-              ) : agentStatus === "idle" ? (
-                <EmptyState />
-              ) : (
-                <div className="flex items-center gap-2 text-slate-400 text-xs pt-2">
-                  <Loader2 size={13} className="animate-spin text-violet-400" />
-                  <span>Agent working…</span>
-                </div>
+          {/* Header */}
+          <div className="flex items-center justify-between border-b border-slate-200/60 bg-white/60 px-4 py-2.5 backdrop-blur-sm">
+            <div className="flex items-center gap-2">
+              <Brain size={13} className="text-violet-500" />
+              <span className="text-[11px] font-semibold text-slate-700">Agent Chat</span>
+              {messages.length > 0 && (
+                <span className="rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-500">
+                  {Math.ceil(messages.length / 2)} exchange{Math.ceil(messages.length / 2) !== 1 ? "s" : ""}
+                </span>
               )}
-              <div ref={textEndRef} />
             </div>
+            <StatusBadge status={agentStatus} isStreaming={isStreaming} />
           </div>
 
-          {/* Tool call summary strip */}
-          {toolCalls.length > 0 && (
-            <div className="border-t border-slate-200/50 bg-white/40">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200/40">
-                <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                  Tool calls · {toolCalls.length}
-                </span>
-              </div>
-              <div className="max-h-[130px] overflow-y-auto divide-y divide-slate-100/70">
-                {toolCalls.map((e) => {
-                  if (e.kind !== "tool_call") return null;
-                  const result = eventLog.find((r) => r.kind === "tool_result" && r.run_id === e.run_id);
-                  return (
-                    <ToolCallRow
-                      key={e.id}
-                      tool={e.tool}
-                      agent={e.agent}
-                      input={e.input}
-                      output={result?.kind === "tool_result" ? result.output : undefined}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          )}
+          {/* Message thread */}
+          <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+            {messages.length === 0 ? (
+              <EmptyState />
+            ) : (
+              messages.map((msg) => (
+                <MessageBubble key={msg.id} message={msg} />
+              ))
+            )}
+            <div ref={chatEndRef} />
+          </div>
 
           {/* Input area */}
-          <div className="border-t border-slate-200/60 bg-white/70 px-4 py-4 backdrop-blur-xl">
+          <div className="border-t border-slate-200/60 bg-white/80 px-4 py-4 backdrop-blur-xl">
 
             {/* Mode toggle */}
             <div className="mb-3 flex items-center gap-2">
@@ -466,8 +466,8 @@ export function AgentObservatory() {
               ))}
             </div>
 
-            {/* Sample prompts (shown when idle) */}
-            {!hasActivity && (
+            {/* Sample prompts when no messages */}
+            {messages.length === 0 && (
               <div className="mb-3 flex flex-wrap gap-1.5">
                 {SAMPLE_PROMPTS.map((p) => (
                   <button
@@ -492,7 +492,9 @@ export function AgentObservatory() {
                 placeholder={
                   isAgentOnline === false
                     ? "Start the agent API first…"
-                    : "Ask anything about the brain, or give an update task…"
+                    : messages.length === 0
+                      ? "Ask anything about the brain…"
+                      : "Ask a follow-up question…"
                 }
                 rows={2}
                 disabled={isStreaming || isAgentOnline === false}
@@ -521,6 +523,192 @@ export function AgentObservatory() {
   );
 }
 
+// ── Message bubble ─────────────────────────────────────────────────────────────
+
+function MessageBubble({ message }: { message: ChatMessage }) {
+  const [thinkingOpen, setThinkingOpen] = useState(false);
+  const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
+  const isUser = message.role === "user";
+  const time = new Date(message.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+  function toggleTool(id: string) {
+    setExpandedTools((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  if (isUser) {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-[88%]">
+          <div className="flex items-center justify-end gap-2 mb-1 px-1">
+            <span className="text-[9px] text-slate-400">{time}</span>
+            <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">You</span>
+          </div>
+          <div className="rounded-2xl rounded-br-md bg-violet-600 px-4 py-3 text-[13px] leading-6 text-white shadow-sm">
+            {message.content}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Assistant bubble
+  return (
+    <div className="flex justify-start">
+      <div className="max-w-[96%] w-full">
+        <div className="flex items-center gap-2 mb-1.5 px-1">
+          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-violet-100">
+            <Bot size={10} className="text-violet-600" />
+          </div>
+          <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">Agent</span>
+          <span className="text-[9px] text-slate-400">{time}</span>
+          {message.status === "streaming" && (
+            <span className="flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[9px] font-semibold text-emerald-700">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" />
+              Streaming
+            </span>
+          )}
+          {message.status === "done" && message.content && (
+            <span className="flex items-center gap-1 text-[9px] text-emerald-600">
+              <CheckCircle2 size={9} /> Done
+            </span>
+          )}
+        </div>
+
+        <div className="rounded-2xl rounded-tl-md border border-slate-200/60 bg-white/85 shadow-sm backdrop-blur-sm overflow-hidden">
+
+          {/* Thinking strip */}
+          {message.thinking && (
+            <button
+              onClick={() => setThinkingOpen((v) => !v)}
+              className="flex w-full items-start gap-2 border-b border-violet-100/60 bg-violet-50/50 px-4 py-2.5 text-left transition hover:bg-violet-50/80"
+            >
+              <Lightbulb size={11} className="mt-0.5 flex-shrink-0 text-violet-500" />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-violet-600">Internal reasoning</span>
+                  {thinkingOpen ? <ChevronDown size={9} className="text-violet-400" /> : <ChevronRight size={9} className="text-violet-400" />}
+                </div>
+                {!thinkingOpen && (
+                  <p className="mt-0.5 truncate text-[10px] italic text-violet-500/80">
+                    {message.thinking.slice(0, 80)}…
+                  </p>
+                )}
+              </div>
+            </button>
+          )}
+          {message.thinking && thinkingOpen && (
+            <div className="border-b border-violet-100/60 bg-violet-50/30 px-4 py-3">
+              <p className="text-[11px] italic leading-[1.65] text-violet-600/80 whitespace-pre-wrap">
+                {message.thinking}
+              </p>
+            </div>
+          )}
+
+          {/* Tool calls */}
+          {message.tools.length > 0 && (
+            <div className="border-b border-slate-100/60 divide-y divide-slate-100/60">
+              {message.tools.map((tool) => {
+                const isExpanded = expandedTools.has(tool.run_id);
+                return (
+                  <div key={tool.run_id}>
+                    <button
+                      onClick={() => toggleTool(tool.run_id)}
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left transition hover:bg-slate-50/80"
+                    >
+                      <div className={cn(
+                        "flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md",
+                        tool.output ? "bg-emerald-100" : "bg-amber-100",
+                      )}>
+                        {tool.output
+                          ? <FileSearch size={9} className="text-emerald-600" />
+                          : <Loader2 size={9} className="animate-spin text-amber-500" />}
+                      </div>
+                      <span className="font-mono text-[10px] font-semibold text-slate-700">{tool.tool}</span>
+                      <span className={cn(
+                        "rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase",
+                        tool.agent === "reader" ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600",
+                      )}>
+                        {tool.agent}
+                      </span>
+                      {Object.keys(tool.input).length > 0 && (
+                        <span className="min-w-0 flex-1 truncate text-[10px] text-slate-400">
+                          {Object.entries(tool.input).map(([k, v]) => `${k}: ${String(v).slice(0, 28)}`).join(" · ")}
+                        </span>
+                      )}
+                      {tool.output && <span className="flex-shrink-0 text-[9px] text-emerald-600">{tool.output.length} chars</span>}
+                      <Wrench size={9} className="flex-shrink-0 text-slate-300" />
+                    </button>
+                    {isExpanded && (
+                      <div className="mx-3 mb-2 rounded-xl border border-slate-200/60 bg-slate-50/70 p-3 space-y-2">
+                        {Object.keys(tool.input).length > 0 && (
+                          <div>
+                            <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-slate-400">Input</p>
+                            <pre className="whitespace-pre-wrap break-all text-[10px] text-slate-600 leading-4">
+                              {JSON.stringify(tool.input, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                        {tool.output && (
+                          <div>
+                            <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-slate-400">Output</p>
+                            <pre className="max-h-36 overflow-y-auto whitespace-pre-wrap break-all text-[10px] text-emerald-700 leading-4">
+                              {tool.output}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Response content */}
+          <div className="px-4 py-3.5">
+            {message.status === "error" && message.error ? (
+              <div className="flex items-start gap-2 rounded-xl border border-red-200/60 bg-red-50/80 p-3">
+                <AlertCircle size={13} className="mt-0.5 flex-shrink-0 text-red-500" />
+                <div>
+                  <p className="text-[11px] font-semibold text-red-700">Agent error</p>
+                  <p className="mt-0.5 text-[11px] text-red-600">{message.error}</p>
+                </div>
+              </div>
+            ) : message.content ? (
+              <div className="prose prose-sm prose-slate max-w-none text-[13px] leading-6
+                [&>p]:my-2 [&>p:first-child]:mt-0 [&>p:last-child]:mb-0
+                [&>ul]:my-2 [&>ol]:my-2 [&>li]:my-0.5
+                [&>h1]:text-base [&>h2]:text-sm [&>h3]:text-xs
+                [&_strong]:font-semibold [&_strong]:text-slate-800
+                [&_em]:italic [&_em]:text-slate-600
+                [&_code]:rounded [&_code]:bg-slate-100 [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[11px] [&_code]:text-violet-700
+                [&_pre]:rounded-xl [&_pre]:bg-slate-900 [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:text-emerald-300 [&_pre_code]:px-0 [&_pre_code]:py-0
+                [&_blockquote]:border-l-2 [&_blockquote]:border-violet-300 [&_blockquote]:pl-3 [&_blockquote]:italic [&_blockquote]:text-slate-500
+              ">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {message.content}
+                </ReactMarkdown>
+                {message.streaming && (
+                  <span className="ml-0.5 inline-block h-3.5 w-0.5 animate-pulse bg-violet-500 align-middle" />
+                )}
+              </div>
+            ) : message.status === "streaming" ? (
+              <div className="flex items-center gap-2 text-slate-400">
+                <Loader2 size={13} className="animate-spin text-violet-400" />
+                <span className="text-[12px]">Thinking…</span>
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function StatusBadge({ status, isStreaming }: { status: string; isStreaming: boolean }) {
@@ -531,14 +719,9 @@ function StatusBadge({ status, isStreaming }: { status: string; isStreaming: boo
         "flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold",
         isBlue ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700",
       )}>
-        <span className={cn(
-          "relative flex h-1.5 w-1.5 rounded-full",
-          isBlue ? "bg-blue-500" : "bg-emerald-500",
-        )}>
-          <span className={cn(
-            "absolute inline-flex h-full w-full animate-ping rounded-full opacity-75",
-            isBlue ? "bg-blue-400" : "bg-emerald-400",
-          )} />
+        <span className="relative flex h-1.5 w-1.5 rounded-full">
+          <span className={cn("absolute inline-flex h-full w-full animate-ping rounded-full opacity-75", isBlue ? "bg-blue-400" : "bg-emerald-400")} />
+          <span className={cn("relative inline-flex h-1.5 w-1.5 rounded-full", isBlue ? "bg-blue-500" : "bg-emerald-500")} />
         </span>
         {status === "reader" ? "Reader" : "Writer"} active
       </div>
@@ -557,157 +740,76 @@ function StatusBadge({ status, isStreaming }: { status: string; isStreaming: boo
   return null;
 }
 
-function ToolCallRow({
-  tool, agent, input, output,
-}: {
-  tool: string; agent: string;
-  input: Record<string, unknown>; output?: string;
-}) {
-  const isRead = !["upsert_working_file","replace_working_file","propose_update","record_audit"].includes(tool);
-  return (
-    <div className="flex items-start gap-2.5 px-4 py-2.5">
-      <div className={cn(
-        "mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-md",
-        output ? "bg-emerald-100" : "bg-amber-100",
-      )}>
-        {output
-          ? <FileSearch size={9} className="text-emerald-600" />
-          : <Loader2 size={9} className="animate-spin text-amber-500" />}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="font-mono text-[11px] font-semibold text-slate-700">{tool}</span>
-          <span className={cn(
-            "rounded-full px-1.5 py-0.5 text-[8px] font-bold uppercase",
-            agent === "reader" ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600",
-          )}>
-            {agent}
-          </span>
-          {!output && <span className="text-[9px] text-amber-500">running…</span>}
-        </div>
-        {Object.keys(input).length > 0 && (
-          <p className="mt-0.5 truncate text-[10px] text-slate-400">
-            {Object.entries(input).map(([k, v]) => `${k}: ${String(v).slice(0, 35)}`).join(" · ")}
-          </p>
-        )}
-        {output && (
-          <p className="mt-0.5 line-clamp-1 text-[10px] text-emerald-600">
-            ↳ {output.slice(0, 90)}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function TraceEntry({
-  entry, expanded, onToggle,
-}: {
-  entry: EventLog; expanded: boolean; onToggle: () => void;
-}) {
+function TraceEntry({ entry, expanded, onToggle }: { entry: EventLog; expanded: boolean; onToggle: () => void; }) {
   const ts = new Date(entry.ts).toISOString().slice(11, 23);
 
   if (entry.kind === "agent_start") {
     return (
       <div className="flex items-center gap-2 rounded-lg px-2 py-1">
         <span className="w-[88px] flex-shrink-0 text-[9px] tabular-nums text-slate-400">{ts}</span>
-        <div className={cn(
-          "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold",
-          entry.agent === "reader" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700",
-        )}>
+        <div className={cn("flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold", entry.agent === "reader" ? "bg-blue-100 text-blue-700" : "bg-emerald-100 text-emerald-700")}>
           ▶ {entry.agent.toUpperCase()} START
         </div>
       </div>
     );
   }
-
   if (entry.kind === "agent_end") {
     return (
       <div className="flex items-center gap-2 rounded-lg px-2 py-1">
         <span className="w-[88px] flex-shrink-0 text-[9px] tabular-nums text-slate-400">{ts}</span>
-        <div className={cn(
-          "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
-          entry.agent === "reader" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600",
-        )}>
+        <div className={cn("flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold", entry.agent === "reader" ? "bg-blue-50 text-blue-600" : "bg-emerald-50 text-emerald-600")}>
           ✓ {entry.agent.toUpperCase()} END
         </div>
       </div>
     );
   }
-
   if (entry.kind === "tool_call") {
     return (
       <div>
-        <button
-          onClick={onToggle}
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/60"
-        >
+        <button onClick={onToggle} className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/60">
           <span className="w-[88px] flex-shrink-0 text-[9px] tabular-nums text-slate-400">{ts}</span>
           {expanded ? <ChevronDown size={10} className="text-slate-400" /> : <ChevronRight size={10} className="text-slate-400" />}
-          <div className="flex items-center gap-1 rounded-md border border-amber-200/60 bg-amber-50/80 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-700">
-            ⚙ {entry.tool}
-          </div>
+          <div className="flex items-center gap-1 rounded-md border border-amber-200/60 bg-amber-50/80 px-2 py-0.5 text-[10px] font-mono font-semibold text-amber-700">⚙ {entry.tool}</div>
           <span className="text-[9px] text-slate-400">call</span>
         </button>
         {expanded && (
           <div className="mx-[100px] mb-1 mt-0.5 rounded-xl border border-slate-200/60 bg-white/70 p-3">
             <p className="mb-1.5 text-[8px] font-bold uppercase tracking-widest text-slate-400">Input</p>
-            <pre className="whitespace-pre-wrap break-all text-[10px] text-slate-600">
-              {JSON.stringify(entry.input, null, 2)}
-            </pre>
+            <pre className="whitespace-pre-wrap break-all text-[10px] text-slate-600">{JSON.stringify(entry.input, null, 2)}</pre>
           </div>
         )}
       </div>
     );
   }
-
   if (entry.kind === "tool_result") {
     return (
       <div>
-        <button
-          onClick={onToggle}
-          className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/60"
-        >
+        <button onClick={onToggle} className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/60">
           <span className="w-[88px] flex-shrink-0 text-[9px] tabular-nums text-slate-400">{ts}</span>
           {expanded ? <ChevronDown size={10} className="text-slate-400" /> : <ChevronRight size={10} className="text-slate-400" />}
-          <div className="flex items-center gap-1 rounded-md border border-emerald-200/60 bg-emerald-50/80 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-700">
-            ✓ {entry.tool}
-          </div>
+          <div className="flex items-center gap-1 rounded-md border border-emerald-200/60 bg-emerald-50/80 px-2 py-0.5 text-[10px] font-mono font-semibold text-emerald-700">✓ {entry.tool}</div>
           <span className="text-[9px] text-slate-400">{entry.output.length} chars</span>
         </button>
         {expanded && (
           <div className="mx-[100px] mb-1 mt-0.5 rounded-xl border border-slate-200/60 bg-white/70 p-3">
             <p className="mb-1.5 text-[8px] font-bold uppercase tracking-widest text-slate-400">Output</p>
-            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-all text-[10px] text-slate-600">
-              {entry.output}
-            </pre>
+            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-all text-[10px] text-slate-600">{entry.output}</pre>
           </div>
         )}
       </div>
     );
   }
-
   if (entry.kind === "thinking") {
     return (
-      <button
-        onClick={onToggle}
-        className="flex w-full items-start gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/60"
-      >
+      <button onClick={onToggle} className="flex w-full items-start gap-2 rounded-lg px-2 py-1 text-left transition hover:bg-white/60">
         <span className="w-[88px] flex-shrink-0 text-[9px] tabular-nums text-slate-400">{ts}</span>
         {expanded ? <ChevronDown size={10} className="mt-0.5 text-slate-400" /> : <ChevronRight size={10} className="mt-0.5 text-slate-400" />}
-        <div className="flex items-center gap-1 rounded-md border border-violet-200/60 bg-violet-50/80 px-2 py-0.5 text-[10px] font-semibold text-violet-700">
-          💭 thinking
-        </div>
-        {!expanded && (
-          <span className="truncate text-[10px] italic text-slate-500">{entry.content.slice(0, 55)}</span>
-        )}
-        {expanded && (
-          <p className="mt-1 text-[11px] italic leading-5 text-violet-700/70 whitespace-pre-wrap">{entry.content}</p>
-        )}
+        <div className="flex items-center gap-1 rounded-md border border-violet-200/60 bg-violet-50/80 px-2 py-0.5 text-[10px] font-semibold text-violet-700">💭 thinking</div>
+        {!expanded && <span className="truncate text-[10px] italic text-slate-500">{entry.content.slice(0, 55)}</span>}
+        {expanded && <p className="mt-1 text-[11px] italic leading-5 text-violet-700/70 whitespace-pre-wrap">{entry.content}</p>}
       </button>
     );
   }
-
   if (entry.kind === "done") {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-emerald-200/50 bg-emerald-50/70 px-2 py-1.5">
@@ -718,7 +820,6 @@ function TraceEntry({
       </div>
     );
   }
-
   if (entry.kind === "error") {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-red-200/50 bg-red-50/70 px-2 py-1.5">
@@ -729,67 +830,35 @@ function TraceEntry({
       </div>
     );
   }
-
   return null;
 }
 
 function EmptyState() {
   return (
-    <div className="flex flex-col items-center gap-5 px-2 py-8 text-center">
+    <div className="flex flex-col items-center gap-5 px-2 py-6 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100/80 ring-1 ring-violet-200/60">
         <Sparkles size={22} className="text-violet-500" />
       </div>
       <div className="max-w-[280px]">
-        <p className="text-sm font-semibold text-slate-700">Ready to observe</p>
+        <p className="text-sm font-semibold text-slate-700">Ask the agent anything</p>
         <p className="mt-1.5 text-[12px] leading-5 text-slate-500">
-          Type a question below and watch the AI agent read your brain files, call tools, and reason step-by-step in real time.
+          Ask questions about your brain files and watch the agent read, think, and answer — step by step.
         </p>
       </div>
       <div className="w-full rounded-2xl border border-slate-200/60 bg-white/60 p-4 text-left">
         <p className="mb-2.5 text-[9px] font-bold uppercase tracking-widest text-slate-400">What you&apos;ll see</p>
         {[
-          { icon: <Cpu size={9} />, text: "Animated LangGraph — nodes light up as the agent moves" },
-          { icon: <Terminal size={9} />, text: "Every tool call with exact inputs and outputs" },
-          { icon: <Lightbulb size={9} />, text: "Internal reasoning traces from the model" },
-          { icon: <Brain size={9} />, text: "Which brain files are read or written, and why" },
+          { icon: <Cpu size={9} />, text: "LangGraph nodes lighting up as the agent moves through steps" },
+          { icon: <Wrench size={9} />, text: "Tool calls with exact inputs and outputs, inline in each reply" },
+          { icon: <Lightbulb size={9} />, text: "Internal reasoning shown as a collapsible thinking trace" },
+          { icon: <Brain size={9} />, text: "Full conversation history preserved across questions" },
         ].map(({ icon, text }, i) => (
           <div key={i} className="flex items-start gap-2.5 py-1">
-            <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-500 mt-0.5">
-              {icon}
-            </span>
+            <span className="flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full bg-violet-100 text-violet-500 mt-0.5">{icon}</span>
             <p className="text-[11px] leading-4 text-slate-500">{text}</p>
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function ErrorState({ message }: { message: string }) {
-  const needsStart  = message.includes("Cannot reach");
-  const needsApiKey = message.toLowerCase().includes("api_key") || message.toLowerCase().includes("api key");
-
-  return (
-    <div className="rounded-2xl border border-red-200/60 bg-red-50/80 p-4">
-      <div className="flex items-center gap-2 mb-2">
-        <AlertCircle size={13} className="text-red-500" />
-        <p className="text-sm font-semibold text-red-700">Agent error</p>
-      </div>
-      <p className="text-[12px] text-red-600">{message}</p>
-
-      {needsStart && (
-        <div className="mt-3 rounded-xl border border-red-200/50 bg-white/70 p-3 space-y-1">
-          <p className="text-[10px] font-semibold text-slate-600">Start the Python agent API:</p>
-          <code className="block font-mono text-[10px] text-emerald-700">cd agent &amp;&amp; uv run brain-api</code>
-          <code className="block font-mono text-[10px] text-emerald-700">./start.sh &nbsp;&nbsp;# starts everything together</code>
-        </div>
-      )}
-      {needsApiKey && (
-        <div className="mt-3 rounded-xl border border-red-200/50 bg-white/70 p-3 space-y-1">
-          <p className="text-[10px] font-semibold text-slate-600">Add your API key to <code className="font-mono">.env</code>:</p>
-          <code className="block font-mono text-[10px] text-violet-700">OPENAI_API_KEY=sk-…</code>
-        </div>
-      )}
     </div>
   );
 }

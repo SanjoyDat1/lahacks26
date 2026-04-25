@@ -4,18 +4,20 @@ type: agent_prompt
 title: Coding Agent Prompt
 status: active
 importance: critical
-updated: 2026-04-25
+updated: '2026-04-25'
 links:
   - brian.index
   - summaries.project_summary
   - architecture.system_overview
   - decisions.decision_log
+  - integrations.slack
+  - architecture.runtime_flow
+  - goals.product_goals
 keywords:
   - coding agent
   - system prompt
   - implementation
 ---
-
 # Coding Agent Prompt
 
 You are a coding agent working on the AI Brain project.

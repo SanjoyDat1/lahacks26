@@ -4,19 +4,19 @@ type: architecture
 title: Runtime Flow
 status: active
 importance: critical
-updated: 2026-04-25
+updated: '2026-04-25'
 links:
   - architecture.system_overview
   - architecture.ingestion_pipeline
   - architecture.distillation_pipeline
   - architecture.brain_storage
+  - agents.coding_agent_prompt
 keywords:
   - runtime
   - request flow
   - ingestion
   - distillation
 ---
-
 # Runtime Flow
 
 This file describes what happens when a new piece of human context enters the system.

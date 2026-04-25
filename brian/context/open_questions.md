@@ -4,16 +4,16 @@ type: context
 title: Open Questions
 status: active
 importance: medium
-updated: 2026-04-25
+updated: '2026-04-25'
 links:
   - architecture.distillation_pipeline
   - architecture.brain_storage
+  - agents.coding_agent_prompt
 keywords:
   - open questions
   - unknowns
   - future work
 ---
-
 # Open Questions
 
 ## Product Questions

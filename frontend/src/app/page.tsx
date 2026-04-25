@@ -3,7 +3,6 @@ import {
   ArrowRight,
   Bot,
   Brain,
-  CheckCircle2,
   ChevronRight,
   Cpu,
   Database,
@@ -17,9 +16,10 @@ import {
   Zap,
 } from "lucide-react";
 
+import { SessionStartPage } from "@/components/start/session-start-page";
 import { listBrainUpdates, listEvents, listIntegrations } from "@/lib/db/store";
 
-export default async function Home() {
+export async function DashboardHome() {
   const [events, updates, integrations] = await Promise.all([
     listEvents(8),
     listBrainUpdates(8),
@@ -444,4 +444,8 @@ function relativeTime(date: Date) {
   if (s < 3600) return `${Math.floor(s / 60)}m ago`;
   if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
   return `${Math.floor(s / 86400)}d ago`;
+}
+
+export default function Home() {
+  return <SessionStartPage />;
 }

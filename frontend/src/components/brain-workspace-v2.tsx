@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -19,16 +20,23 @@ import {
   Link2,
   MessageSquare,
   Network,
+  PlugZap,
+  Plus,
+  Trash2,
   TrendingUp,
-  Zap,
 } from "lucide-react";
 
 import { BrainAgentSim } from "@/components/brain-agent-sim";
 import { BrainChat } from "@/components/brain-chat";
 import { BrainGraph } from "@/components/brain-graph";
-import type { BrianFile, GraphData, GraphNode } from "@/lib/brian/reader";
+import type { UpdateVisuState } from "@/components/brain-graph";
+import { BrainUpdatePanel } from "@/components/brain-update-panel";
+import type { UpdateEvent } from "@/components/brain-update-panel";
+import type { BrianFile, GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
 import type { Relevance } from "@/lib/brian/scenarios";
 import { cn } from "@/lib/utils";
+
+const MODULE_LOAD_TIME = Date.now();
 
 // ─── type-to-style maps ─────────────────────────────────────────────────────
 
@@ -76,6 +84,7 @@ function importanceBadge(imp?: string) {
 // ─── main component ──────────────────────────────────────────────────────────
 
 type Tab = "graph" | "editor" | "overview" | "agent";
+type RightMode = "inspector" | "ai";
 
 interface Props {
   files: BrianFile[];
@@ -83,6 +92,7 @@ interface Props {
 }
 
 export function BrainWorkspaceV2({ files, graphData }: Props) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<Tab>("graph");
   const [selectedFile, setSelectedFile] = useState<BrianFile | null>(
     files.find((f) => f.frontmatter.importance === "critical") ?? files[0] ?? null,
@@ -90,25 +100,128 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
   const [showPreview, setShowPreview] = useState(true);
   const [leftOpen, setLeftOpen] = useState(true);
   const [rightOpen, setRightOpen] = useState(true);
+  const [rightMode, setRightMode] = useState<RightMode>("inspector");
+  const [selectedEdge, setSelectedEdge] = useState<GraphLink | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [highlightMap, setHighlightMap] = useState<Map<string, Relevance> | undefined>();
+  const [updateOpen, setUpdateOpen] = useState(false);
+  const [updateVisu, setUpdateVisu] = useState<UpdateVisuState>({
+    active: null, queued: new Set(), done: new Set(), totalOps: 0, appliedOps: 0,
+  });
+
+  // Queue-based sequential update visualization
+  const opQueueRef = useRef<Array<{ path: string; kind: string; reason: string }>>([]);
+  const updateProcessingRef = useRef(false);
+  const updateTotalRef = useRef(0);
+  const updateAppliedRef = useRef(0);
 
   const handleHighlightChange = useCallback(
     (map: Map<string, Relevance> | undefined) => setHighlightMap(map),
     [],
   );
 
+  const processNextUpdateOp = useCallback(() => {
+    if (!opQueueRef.current.length) {
+      updateProcessingRef.current = false;
+      return;
+    }
+    updateProcessingRef.current = true;
+    const op = opQueueRef.current.shift()!;
+    updateAppliedRef.current++;
+    const appliedNow = updateAppliedRef.current;
+
+    // Phase 1: show as "active" — camera will pan to this node
+    setUpdateVisu((prev) => ({
+      ...prev,
+      active: op,
+      queued: new Set([...prev.queued].filter((p) => p !== op.path)),
+      appliedOps: appliedNow,
+    }));
+
+    // Phase 2: after 750ms, mark as done and move to next
+    setTimeout(() => {
+      setUpdateVisu((prev) => ({
+        ...prev,
+        active: null,
+        done: new Set([...prev.done, op.path]),
+      }));
+      // Brief pause between ops so each result is visible
+      setTimeout(processNextUpdateOp, 280);
+    }, 780);
+  }, []);
+
+  const handleUpdateEvent = useCallback((event: UpdateEvent) => {
+    if (event.type === "op_planned" && event.op.target_file) {
+      const item = { path: event.op.target_file, kind: event.op.kind, reason: event.op.reason };
+      opQueueRef.current.push(item);
+      updateTotalRef.current++;
+      const total = updateTotalRef.current;
+      setUpdateVisu((prev) => ({
+        ...prev,
+        queued: new Set([...prev.queued, event.op.target_file]),
+        totalOps: total,
+      }));
+      if (!updateProcessingRef.current) processNextUpdateOp();
+    }
+  }, [processNextUpdateOp]);
+
+  const handleUpdateDone = useCallback(() => {
+    // Wait for the visual queue to drain before refreshing
+    const waitForDrain = () => {
+      if (updateProcessingRef.current || opQueueRef.current.length > 0) {
+        setTimeout(waitForDrain, 100);
+        return;
+      }
+      setTimeout(() => {
+        setUpdateVisu({ active: null, queued: new Set(), done: new Set(), totalOps: 0, appliedOps: 0 });
+        opQueueRef.current = [];
+        updateTotalRef.current = 0;
+        updateAppliedRef.current = 0;
+        router.refresh();
+      }, 1400);
+    };
+    waitForDrain();
+  }, [router]);
+
   function openFile(file: BrianFile, tab?: Tab) {
     setSelectedFile(file);
     setActiveTab(tab ?? "editor");
+    setSelectedEdge(null);
+    setRightMode("inspector");
+    setRightOpen(true);
     setShowPreview(true);
   }
 
-  function handleNodeSelect(node: GraphNode | null) {
+  function handleNodeSelect(node: GraphNode | null, switchToEditor = false) {
     if (!node) return;
     const f = files.find(
       (file) => file.frontmatter.id === node.id || file.path === node.path,
     );
-    if (f) openFile(f);
+    if (f) {
+      setSelectedFile(f);
+      setSelectedEdge(null);
+      setRightMode("inspector");
+      setRightOpen(true);
+      setShowPreview(true);
+      if (switchToEditor) setActiveTab("editor");
+    }
+  }
+
+  async function mutateLink(method: "POST" | "DELETE", sourceId: string, targetId: string) {
+    setSaveState("saving");
+    const res = await fetch("/api/brain/links", {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ sourceId, targetId }),
+    });
+    if (!res.ok) {
+      setSaveState("error");
+      return;
+    }
+    setSaveState("saved");
+    setSelectedEdge(null);
+    router.refresh();
+    setTimeout(() => setSaveState("idle"), 1400);
   }
 
   const grouped = groupByFolder(files);
@@ -212,6 +325,21 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
             </button>
           ))}
 
+          <div className="ml-auto flex items-center gap-1.5">
+            <button
+              onClick={() => { setUpdateOpen(true); setRightOpen(true); }}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-all duration-150",
+                updateOpen
+                  ? "bg-violet-100 text-violet-700 shadow-sm ring-1 ring-violet-200/70"
+                  : "text-slate-500 hover:bg-violet-50 hover:text-violet-600",
+              )}
+            >
+              <Plus size={13} />
+              Update Brain
+            </button>
+          </div>
+
           {activeTab === "editor" && selectedFile && (
             <>
               <div className="mx-2 h-3.5 w-px bg-slate-200" />
@@ -244,8 +372,18 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
           >
             <BrainGraph
               graphData={graphData}
-              onNodeSelect={handleNodeSelect}
+              onNodeSelect={(node) => handleNodeSelect(node, false)}
+              onEdgeSelect={(edge) => {
+                setSelectedEdge(edge);
+                if (edge) {
+                  setRightMode("inspector");
+                  setRightOpen(true);
+                }
+              }}
+              onLinkCreate={(sourceId, targetId) => mutateLink("POST", sourceId, targetId)}
               selectedId={selectedId}
+              selectedEdge={selectedEdge}
+              updateVisu={updateOpen ? updateVisu : undefined}
             />
           </div>
 
@@ -259,8 +397,11 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
             <div className="flex-1 overflow-hidden">
               <BrainGraph
                 graphData={graphData}
-                onNodeSelect={handleNodeSelect}
+                onNodeSelect={(node) => handleNodeSelect(node, false)}
+                onEdgeSelect={setSelectedEdge}
+                onLinkCreate={(sourceId, targetId) => mutateLink("POST", sourceId, targetId)}
                 selectedId={selectedId}
+                selectedEdge={selectedEdge}
                 highlightMap={highlightMap}
               />
             </div>
@@ -356,27 +497,70 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
       >
         <div className="flex items-center justify-between border-b border-slate-200/50 px-4 py-3.5">
           <div className="flex items-center gap-2">
-            {activeTab === "agent" ? (
-              <Bot size={13} className="text-violet-500" />
-            ) : (
-              <MessageSquare size={13} className="text-violet-500" />
-            )}
+            {updateOpen ? <Plus size={13} className="text-violet-500" /> : rightMode === "ai" ? <Bot size={13} className="text-violet-500" /> : <MessageSquare size={13} className="text-violet-500" />}
             <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {activeTab === "agent" ? "Graph Legend" : "Ask Brian"}
+              {updateOpen ? "Update Brain" : rightMode === "ai" ? "Ask Brian" : selectedEdge ? "Connection" : "Context Inspector"}
             </span>
           </div>
+          {!updateOpen && (
+            <div className="ml-auto mr-2 flex rounded-xl border border-slate-200/60 bg-white/70 p-0.5">
+              <button
+                onClick={() => setRightMode("inspector")}
+                className={cn("rounded-lg px-2 py-1 text-[10px] font-medium transition", rightMode === "inspector" ? "bg-violet-100 text-violet-700" : "text-slate-400 hover:text-slate-600")}
+              >
+                Inspect
+              </button>
+              <button
+                onClick={() => setRightMode("ai")}
+                className={cn("rounded-lg px-2 py-1 text-[10px] font-medium transition", rightMode === "ai" ? "bg-violet-100 text-violet-700" : "text-slate-400 hover:text-slate-600")}
+              >
+                AI
+              </button>
+            </div>
+          )}
           <button
-            onClick={() => setRightOpen(false)}
+            onClick={() => { setRightOpen(false); if (updateOpen) setUpdateOpen(false); }}
             className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100/70 hover:text-slate-600"
           >
             <ChevronRight size={12} />
           </button>
         </div>
         <div className="flex-1 overflow-hidden">
-          {activeTab === "agent" ? (
+          {updateOpen ? (
+            <BrainUpdatePanel
+              onClose={() => setUpdateOpen(false)}
+              onEvent={handleUpdateEvent}
+              onDone={handleUpdateDone}
+            />
+          ) : rightMode === "ai" ? (
+            <BrainChat contextHint={selectedFile ? `Selected brain file: ${selectedFile.path}\nTitle: ${selectedFile.frontmatter.title ?? selectedFile.path}\nContent:\n${selectedFile.content}` : undefined} />
+          ) : activeTab === "agent" ? (
             <AgentLegend hasHighlight={!!highlightMap?.size} />
+          ) : selectedEdge ? (
+            <EdgeInspector
+              edge={selectedEdge}
+              files={files}
+              saveState={saveState}
+              onOpenNode={(id) => {
+                const node = graphData.nodes.find((n) => n.id === id);
+                if (node) handleNodeSelect(node, false);
+              }}
+              onDelete={() => mutateLink("DELETE", selectedEdge.source, selectedEdge.target)}
+            />
+          ) : selectedFile ? (
+            <GraphNodeInspector
+              file={selectedFile}
+              files={files}
+              graphData={graphData}
+              onOpenFile={(file) => {
+                setSelectedFile(file);
+                setSelectedEdge(null);
+              }}
+              onOpenEditor={() => setActiveTab("editor")}
+              onAskAI={() => setRightMode("ai")}
+            />
           ) : (
-            <BrainChat />
+            <EmptyInspector />
           )}
         </div>
       </aside>
@@ -393,6 +577,249 @@ function groupByFolder(files: BrianFile[]): Record<string, BrianFile[]> {
     (result[folder] ??= []).push(file);
   }
   return result;
+}
+
+function fileId(file: BrianFile) {
+  return file.frontmatter.id ?? file.path;
+}
+
+function summarizeFile(file: BrianFile) {
+  const firstParagraph = file.content
+    .split(/\n\s*\n/)
+    .map((block) => block.replace(/^#+\s+/gm, "").trim())
+    .find((block) => block.length > 60);
+  return (firstParagraph ?? file.content.replace(/^#+\s+/gm, "").trim()).slice(0, 360);
+}
+
+function aiOverview(file: BrianFile) {
+  const content = file.content
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/^#+\s+/gm, "")
+    .replace(/\*\*/g, "")
+    .trim();
+  const sourceEvidence = content.match(/## Source Evidence\s+([\s\S]*?)(?:\n## |\n# |$)/i)?.[1]
+    ?.split(/\r?\n/)
+    .map((line) => line.replace(/^[-*]\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 2);
+  const summary = summarizeFile(file).replace(/\s+/g, " ").trim();
+  const relationHint = file.frontmatter.links?.length
+    ? ` It connects to ${file.frontmatter.links.length} nearby context node${file.frontmatter.links.length === 1 ? "" : "s"} for retrieval.`
+    : " It is currently light on explicit links, so it may be a good candidate for more context connections.";
+  const evidenceHint = sourceEvidence?.length ? ` Key evidence: ${sourceEvidence.join(" ")}` : "";
+  return `${summary}${relationHint}${evidenceHint}`.slice(0, 520);
+}
+
+function findById(files: BrianFile[], id: string) {
+  return files.find((file) => fileId(file) === id || file.path === id);
+}
+
+function GraphNodeInspector({
+  file,
+  files,
+  graphData,
+  onOpenFile,
+  onOpenEditor,
+  onAskAI,
+}: {
+  file: BrianFile;
+  files: BrianFile[];
+  graphData: GraphData;
+  onOpenFile: (file: BrianFile) => void;
+  onOpenEditor: () => void;
+  onAskAI: () => void;
+}) {
+  const id = fileId(file);
+  const outbound = (file.frontmatter.links ?? [])
+    .map((link) => findById(files, link))
+    .filter((item): item is BrianFile => Boolean(item));
+  const inbound = files
+    .filter((candidate) =>
+      (candidate.frontmatter.links ?? []).some((link) => link === id || link === file.path),
+    )
+    // Deduplicate inbound results to prevent React key errors
+    .filter((file, index, self) => self.findIndex((f) => f.path === file.path) === index);
+
+  // Also deduplicate outbound to prevent duplicate keys
+  const uniqueOutbound = Array.from(new Map(outbound.map((item) => [item.path, item])).values());
+  const connectionCount = graphData.links.filter((link) => link.source === id || link.target === id).length;
+
+  return (
+    <div key={file.path} className="flex h-full flex-col overflow-hidden [animation:inspector-in_420ms_cubic-bezier(.2,.9,.2,1)_both]">
+      <style>{`
+        @keyframes inspector-in {
+          from { opacity: 0; transform: translateX(18px) scale(.985); filter: blur(6px); }
+          to { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+        }
+        @keyframes overview-glow {
+          0%, 100% { box-shadow: 0 0 0 rgba(139,92,246,0); }
+          50% { box-shadow: 0 18px 60px rgba(139,92,246,.16); }
+        }
+      `}</style>
+      <div className="border-b border-slate-200/60 px-4 py-4">
+        <div className="mb-3 flex items-start gap-3">
+          <div className={cn("mt-1 h-3 w-3 flex-shrink-0 rounded-full", typeDot(file.frontmatter.type))} />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold leading-5 text-slate-800">{file.frontmatter.title ?? file.path}</h3>
+            <p className="mt-1 truncate font-mono text-[10px] text-violet-500">{file.path}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize", importanceBadge(file.frontmatter.importance))}>
+            {file.frontmatter.importance ?? "medium"}
+          </span>
+          <span className="rounded-full border border-slate-200/60 bg-slate-50 px-2 py-0.5 text-[10px] text-slate-500 capitalize">
+            {(file.frontmatter.type ?? "unknown").replace(/_/g, " ")}
+          </span>
+          <span className="rounded-full border border-blue-200/60 bg-blue-50 px-2 py-0.5 text-[10px] text-blue-600">
+            {connectionCount} connections
+          </span>
+        </div>
+      </div>
+
+      <div className="flex-1 space-y-4 overflow-y-auto px-4 py-4">
+        <section className="rounded-[1.5rem] border border-violet-100/80 bg-gradient-to-br from-white via-violet-50/70 to-sky-50/80 p-4 shadow-sm [animation:overview-glow_1.2s_ease-out_1]">
+          <div className="mb-2 flex items-center gap-2">
+            <Bot size={14} className="text-violet-500" />
+            <p className="text-[10px] font-bold uppercase tracking-widest text-violet-500">AI overview</p>
+          </div>
+          <p className="text-xs leading-5 text-slate-600">{aiOverview(file)}</p>
+        </section>
+
+        <section>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Summary</p>
+          <p className="rounded-2xl border border-white/80 bg-white/70 p-3 text-xs leading-5 text-slate-600 shadow-sm">
+            {summarizeFile(file)}
+          </p>
+        </section>
+
+        <ConnectionList title="Outgoing context" files={uniqueOutbound} empty="No outgoing links yet" onOpenFile={onOpenFile} />
+        <ConnectionList title="Referenced by" files={inbound} empty="No inbound links yet" onOpenFile={onOpenFile} />
+
+        <section>
+          <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">Full Markdown</p>
+          <div className="max-h-80 overflow-y-auto rounded-2xl border border-slate-200/60 bg-white/80 p-3">
+            <div className="prose prose-sm prose-slate max-w-none text-xs leading-5 [&>h1]:text-base [&>h2]:text-sm [&>p]:my-2">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{file.content}</ReactMarkdown>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 border-t border-slate-200/60 p-3">
+        <button onClick={onAskAI} className="rounded-xl bg-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-sm shadow-violet-200 transition hover:bg-violet-700">
+          Ask AI
+        </button>
+        <button onClick={onOpenEditor} className="rounded-xl border border-slate-200/70 bg-white px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+          Open Editor
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ConnectionList({
+  title,
+  files,
+  empty,
+  onOpenFile,
+}: {
+  title: string;
+  files: BrianFile[];
+  empty: string;
+  onOpenFile: (file: BrianFile) => void;
+}) {
+  return (
+    <section>
+      <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-400">{title}</p>
+      <div className="space-y-1.5">
+        {files.length ? files.map((file) => (
+          <button
+            key={`${file.path}-${file.frontmatter.id || ""}`}
+            onClick={() => onOpenFile(file)}
+            className="flex w-full items-center gap-2 rounded-xl border border-slate-200/60 bg-white/75 px-3 py-2 text-left transition hover:bg-white"
+          >
+            <Link2 size={11} className="flex-shrink-0 text-violet-400" />
+            <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-600">
+              {file.frontmatter.title ?? file.path}
+            </span>
+          </button>
+        )) : (
+          <p className="rounded-xl border border-dashed border-slate-200/70 bg-slate-50/70 px-3 py-3 text-center text-[11px] text-slate-400">
+            {empty}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function EdgeInspector({
+  edge,
+  files,
+  saveState,
+  onOpenNode,
+  onDelete,
+}: {
+  edge: GraphLink;
+  files: BrianFile[];
+  saveState: "idle" | "saving" | "saved" | "error";
+  onOpenNode: (id: string) => void;
+  onDelete: () => void;
+}) {
+  const source = findById(files, edge.source);
+  const target = findById(files, edge.target);
+  return (
+    <div className="flex h-full flex-col">
+      <div className="border-b border-slate-200/60 px-4 py-4">
+        <div className="flex items-center gap-2">
+          <PlugZap size={15} className="text-violet-500" />
+          <h3 className="text-sm font-semibold text-slate-800">Context connection</h3>
+        </div>
+        <p className="mt-1 text-xs leading-5 text-slate-400">This edge is stored as a Markdown frontmatter link.</p>
+      </div>
+      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        {[
+          ["Source", source, edge.source],
+          ["Target", target, edge.target],
+        ].map(([label, file, fallback]) => (
+          <button
+            key={String(label)}
+            onClick={() => onOpenNode(String(fallback))}
+            className="w-full rounded-2xl border border-slate-200/60 bg-white/75 p-3 text-left transition hover:bg-white"
+          >
+            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{String(label)}</p>
+            <p className="mt-1 text-sm font-semibold text-slate-700">{(file as BrianFile | undefined)?.frontmatter.title ?? String(fallback)}</p>
+            <p className="mt-1 truncate font-mono text-[10px] text-violet-500">{(file as BrianFile | undefined)?.path ?? String(fallback)}</p>
+          </button>
+        ))}
+      </div>
+      <div className="border-t border-slate-200/60 p-3">
+        <button
+          onClick={onDelete}
+          disabled={saveState === "saving"}
+          className="flex w-full items-center justify-center gap-2 rounded-xl border border-red-200/70 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100 disabled:opacity-50"
+        >
+          <Trash2 size={12} />
+          {saveState === "saving" ? "Disconnecting..." : "Disconnect context"}
+        </button>
+        {saveState === "saved" && <p className="mt-2 text-center text-[10px] text-emerald-600">Saved to Markdown frontmatter</p>}
+        {saveState === "error" && <p className="mt-2 text-center text-[10px] text-red-500">Could not save this connection</p>}
+      </div>
+    </div>
+  );
+}
+
+function EmptyInspector() {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-6 text-center">
+      <Network size={32} className="mb-3 text-slate-300" />
+      <p className="text-sm font-semibold text-slate-700">Select a graph element</p>
+      <p className="mt-1 text-xs leading-5 text-slate-400">
+        Click a node to inspect its Markdown or click a connection to edit the relationship.
+      </p>
+    </div>
+  );
 }
 
 // ─── Overview tab ─────────────────────────────────────────────────────────────
@@ -438,7 +865,7 @@ function Overview({
   const stale = files.filter((f) => {
     if (!f.frontmatter.updated) return true;
     const d = new Date(f.frontmatter.updated);
-    return (Date.now() - d.getTime()) / 86400000 > STALE_DAYS;
+    return (MODULE_LOAD_TIME - d.getTime()) / 86400000 > STALE_DAYS;
   });
   const noKeywords = files.filter((f) => !f.frontmatter.keywords?.length);
   const healthIssues = [
@@ -935,7 +1362,7 @@ function DocumentPreview({
               <span className="text-xs text-slate-400">· linked from frontmatter</span>
             </div>
             <div className="grid grid-cols-2 gap-3 max-w-3xl">
-              {fm.links.map((linkId) => {
+              {[...new Set(fm.links)].map((linkId) => {
                 const linked = files.find((f) => f.frontmatter.id === linkId);
                 return linked ? (
                   <button
@@ -996,41 +1423,3 @@ const TYPE_PILL: Record<string, string> = {
   index: "border-amber-300/60 bg-amber-50 text-amber-700",
 };
 
-function FrontmatterCard({ file }: { file: BrianFile }) {
-  const fm = file.frontmatter;
-  if (!fm.type && !fm.importance && !fm.keywords?.length && !fm.updated) return null;
-
-  return (
-    <div className="mb-6 rounded-2xl border border-slate-200/60 bg-white/80 p-4 shadow-sm backdrop-blur-sm">
-      <div className="flex flex-wrap items-center gap-2">
-        {fm.type && (
-          <span className={cn("rounded-full border px-2.5 py-0.5 text-[11px] font-medium capitalize", TYPE_PILL[fm.type] ?? "border-slate-200/60 bg-slate-50 text-slate-600")}>
-            {fm.type.replace(/_/g, " ")}
-          </span>
-        )}
-        {fm.importance && (
-          <span className={cn("rounded-full border px-2.5 py-0.5 text-[11px] font-medium capitalize", IMPORTANCE_PILL[fm.importance] ?? "border-slate-200/60 bg-slate-50 text-slate-500")}>
-            {fm.importance} importance
-          </span>
-        )}
-        {fm.status && (
-          <span className="rounded-full border border-slate-200/60 bg-slate-50 px-2.5 py-0.5 text-[11px] text-slate-500 capitalize">
-            {fm.status}
-          </span>
-        )}
-        {fm.updated && (
-          <span className="ml-auto text-[11px] text-slate-400">Updated {fm.updated}</span>
-        )}
-      </div>
-      {fm.keywords && fm.keywords.length > 0 && (
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {fm.keywords.map((kw) => (
-            <span key={kw} className="rounded-full border border-violet-200/60 bg-violet-50/80 px-2.5 py-0.5 text-[11px] text-violet-600">
-              {kw}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
