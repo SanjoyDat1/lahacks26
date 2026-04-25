@@ -27,7 +27,7 @@ The core goal is to distill and preserve only durable context—goals, constrain
 *   The `bootstrap` command creates an initial working `brain/` folder from a user prompt and optional source files.
 *   The `query` command uses a reader agent to answer questions based on the content of the working brain.
 *   The `update` command uses a writer agent to modify existing working brain files while preserving their YAML frontmatter.
-*   Gemini serves as the LLM provider for selection, generation, query, and update operations.
+*   OpenAI serves as the LLM provider for selection, generation, query, and update operations.
 *   LLM "thinking summaries" are printed to the console to aid developers in debugging file selection or generation rationale.
 *   The working `brain/` folder is created lazily, containing only the files selected for the current project.
 *   `index.md` is always created as the critical navigation entry point and links to all other generated files.

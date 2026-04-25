@@ -21,7 +21,7 @@ cd /Users/albertzheng/Documents/lahacks26/agent
 cp .env.example .env
 ```
 
-2. Edit `.env` and add your `GOOGLE_API_KEY` (or `GEMINI_API_KEY`).
+2. Edit `.env` and add your `OPENAI_API_KEY`.
 
 3. Install dependencies:
 

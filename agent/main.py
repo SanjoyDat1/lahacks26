@@ -96,8 +96,8 @@ def bootstrap_working_brain(
     except Exception as exc:
         if _is_quota_error(exc):
             raise SystemExit(
-                "Gemini quota was exhausted while bootstrapping. The model call failed "
-                "before files were generated. Check GEMINI_MODEL and GEMINI_API_KEY "
+                "OpenAI quota was exhausted while bootstrapping. The model call failed "
+                "before files were generated. Check OPENAI_MODEL and OPENAI_API_KEY "
                 "billing/quota."
             ) from exc
         raise

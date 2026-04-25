@@ -23,8 +23,8 @@ Current Architecture:
 - Update uses a writer agent to modify existing working brain files while preserving valid YAML frontmatter.
 - The reference `brian/` folder is read-only and acts as a schema, style guide, and example knowledge map.
 - The working `brain/` folder is created lazily from source context and should contain only the files selected for the current project.
-- Gemini is the LLM provider for selection, generation, query, and update flows.
-- Gemini thinking summaries should be printed when the provider returns them so developers can debug why a file was selected or generated.
+- OpenAI is the LLM provider for selection, generation, query, and update flows.
+- OpenAI reasoning summaries should be printed when the provider returns them so developers can debug why a file was selected or generated.
 
 Bootstrap Requirements:
 - Always create `index.md`; it is the critical navigation entry point.

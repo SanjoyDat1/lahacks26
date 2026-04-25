@@ -37,15 +37,9 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # ── OpenAI (primary) ──────────────────────────────────────────────────────
+    # ── OpenAI ────────────────────────────────────────────────────────────────
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
     openai_model: str = Field(default="gpt-4o-mini", validation_alias="OPENAI_MODEL")
-
-    # ── Gemini (fallback if no OpenAI key) ────────────────────────────────────
-    gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
-    gemini_model: str = Field(default="gemini-2.5-flash", validation_alias="GEMINI_MODEL")
-    gemini_include_thoughts: bool = Field(default=True, validation_alias="GEMINI_INCLUDE_THOUGHTS")
-    gemini_thinking_budget: int = Field(default=-1, validation_alias="GEMINI_THINKING_BUDGET")
 
     # ── Shared ────────────────────────────────────────────────────────────────
     brian_reference_dir: Path = Field(default=_DEFAULT_REFERENCE, validation_alias="BRIAN_REFERENCE_DIR")
@@ -66,18 +60,12 @@ class Settings(BaseSettings):
             return _DEFAULT_WORKING
         return Path(v).expanduser()
 
-    @property
-    def provider(self) -> str:
-        """Return 'openai' if an OpenAI key is set, otherwise 'gemini'."""
-        return "openai" if self.openai_api_key.strip() else "gemini"
-
-
 def load_settings(validate: bool = True) -> Settings:
     s = Settings()
     if validate:
-        if not s.openai_api_key.strip() and not s.gemini_api_key.strip():
+        if not s.openai_api_key.strip():
             raise ValueError(
-                "No LLM API key found. Set OPENAI_API_KEY or GEMINI_API_KEY in .env "
+                "No LLM API key found. Set OPENAI_API_KEY in .env "
                 "(see agent/.env.example or the root .env file)"
             )
     if str(s.update_mode).strip().lower() not in {"llm", "deterministic"}:

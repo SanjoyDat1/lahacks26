@@ -56,31 +56,15 @@ def _usage_summary(response: object) -> str:
 
 
 def make_chat_model(settings: Settings):
-    """Return a LangChain chat model based on available API keys.
+    """Return the configured OpenAI LangChain chat model."""
+    from langchain_openai import ChatOpenAI
 
-    Priority: OpenAI (if OPENAI_API_KEY is set) → Gemini (GEMINI_API_KEY).
-    """
-    if settings.provider == "openai":
-        from langchain_openai import ChatOpenAI
-
-        return ChatOpenAI(
-            model=settings.openai_model,
-            api_key=settings.openai_api_key,  # type: ignore[arg-type]
-            temperature=0,
-            streaming=True,
-        )
-
-    # Gemini fallback
-    from langchain_google_genai import ChatGoogleGenerativeAI
-
-    kwargs: dict[str, Any] = {
-        "model": settings.gemini_model,
-        "google_api_key": settings.gemini_api_key,
-        "include_thoughts": settings.gemini_include_thoughts,
-    }
-    if "2.5" in settings.gemini_model:
-        kwargs["thinking_budget"] = settings.gemini_thinking_budget
-    return ChatGoogleGenerativeAI(**kwargs)
+    return ChatOpenAI(
+        model=settings.openai_model,
+        api_key=settings.openai_api_key,  # type: ignore[arg-type]
+        temperature=0,
+        streaming=True,
+    )
 
 
 def _extract_thinking_blocks(content: object) -> list[str]:
@@ -117,10 +101,6 @@ def print_model_thinking(response: object, label: str) -> None:
         print(f"[reasoning tokens] {reasoning_tokens}")
 
 
-# Keep old name as alias for backward compat
-print_gemini_thinking = print_model_thinking
-
-
 def invoke_chat_model(
     model: Any,
     messages: Sequence[BaseMessage],
@@ -132,7 +112,7 @@ def invoke_chat_model(
     prompt_chars = sum(_message_text_size(message) for message in messages)
     started = time.monotonic()
     _log_progress(
-        f"Gemini request {request_id} START label={label!r} model={model_name} "
+        f"OpenAI request {request_id} START label={label!r} model={model_name} "
         f"messages={len(messages)} prompt_chars={prompt_chars}"
     )
     try:
@@ -140,14 +120,14 @@ def invoke_chat_model(
     except Exception as exc:
         elapsed = time.monotonic() - started
         _log_progress(
-            f"Gemini request {request_id} FAILED label={label!r} "
+            f"OpenAI request {request_id} FAILED label={label!r} "
             f"elapsed={elapsed:.2f}s error_type={type(exc).__name__} error={exc}"
         )
         raise
 
     elapsed = time.monotonic() - started
     _log_progress(
-        f"Gemini request {request_id} END label={label!r} "
+        f"OpenAI request {request_id} END label={label!r} "
         f"elapsed={elapsed:.2f}s {_usage_summary(response)}"
     )
     print_model_thinking(response, label)

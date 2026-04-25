@@ -152,8 +152,8 @@ class BrainWorkflowE2ETest(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_agent_generates_retrieves_and_updates_brain_from_noisy_documents(self) -> None:
-        if not self.settings.gemini_api_key.strip():
-            self.skipTest("GEMINI_API_KEY is required for the real brain-generation E2E test")
+        if not self.settings.openai_api_key.strip():
+            self.skipTest("OPENAI_API_KEY is required for the real brain-generation E2E test")
 
         source_documents = _source_documents()
         expectations = _scenario_expectations()
@@ -169,7 +169,7 @@ class BrainWorkflowE2ETest(unittest.TestCase):
                 )
             except Exception as exc:
                 if _is_quota_error(exc):
-                    self.skipTest(f"Gemini quota exhausted during live brain-generation E2E: {exc}")
+                    self.skipTest(f"OpenAI quota exhausted during live brain-generation E2E: {exc}")
                 raise
 
             self.assertIn("index.md", written)

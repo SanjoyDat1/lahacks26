@@ -35,7 +35,7 @@ The Hackathon Team Memory project is building an AI-assisted team memory tool. I
 -   **Query:** Uses a reader agent to answer questions from the working brain, falling back to the reference `brian/` example only for structure guidance.
 -   **Update:** Uses a writer agent to modify existing working brain files while preserving valid YAML frontmatter.
 
-The project utilizes Gemini as its LLM provider for selection, generation, query, and update flows. Gemini thinking summaries should be printed to aid developer debugging. The reference `brian/` folder is read-only and acts as a schema, style guide, and example knowledge map, while the working `brain/` folder is created lazily from source context.
+The project utilizes OpenAI as its LLM provider for selection, generation, query, and update flows. OpenAI reasoning summaries should be printed when available to aid developer debugging. The reference `brian/` folder is read-only and acts as a schema, style guide, and example knowledge map, while the working `brain/` folder is created lazily from source context.
 
 Core product goals include preserving useful project knowledge, distilling only durable context (goals, constraints, architecture, decisions, unresolved questions, implementation notes), avoiding low-signal notes, making `index.md` the required starting point, ensuring all generated files are linked, and supporting a local demo workflow without external infrastructure.
 

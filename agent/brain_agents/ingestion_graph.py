@@ -102,8 +102,8 @@ def _distill_node(state: IngestionState) -> dict[str, Any]:
         _log_graph(f"distill END deterministic update bypass raw_chars={len(raw)}")
         return {"cleaned_context": raw, "source_digest": raw}
 
-    if not (getattr(s, "gemini_api_key", "") or "").strip():
-        _log_graph(f"distill END no Gemini key bypass raw_chars={len(raw)}")
+    if not (getattr(s, "openai_api_key", "") or "").strip():
+        _log_graph(f"distill END no OpenAI key bypass raw_chars={len(raw)}")
         return {"cleaned_context": raw, "source_digest": raw}
 
     system = SystemMessage(
