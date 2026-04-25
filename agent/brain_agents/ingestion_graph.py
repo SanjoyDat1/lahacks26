@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
+import sys
 from functools import lru_cache
 from typing import Any, Literal, cast
 
@@ -24,17 +26,27 @@ from .services.reconciliation_apply import apply_reconciliation_plan, resolve_br
 from .services.retrieval_service import retrieval_service
 from .update import ReconciliationPlan, Reconciler
 
+logger = logging.getLogger(__name__)
+
+
+def _log_graph(message: str) -> None:
+    logger.info(message)
+    print(f"[brain-agent] graph: {message}", file=sys.stderr, flush=True)
+
 
 def _after_distill_router(state: IngestionState) -> Literal["init", "update"]:
     mode = state.get("flow_mode", "update")
+    _log_graph(f"routing after distill flow_mode={mode}")
     if mode == "initialize":
         return "init"
     return "update"
 
 
 def _normalize_node(state: IngestionState) -> dict[str, Any]:
+    _log_graph(f"normalize START flow_mode={state.get('flow_mode', 'update')}")
     s = state.get("settings")
     if s is None:
+        _log_graph("normalize FAILED settings missing")
         return {"error": "settings missing", "result_text": "Internal error: settings missing."}
     flow = state.get("flow_mode", "update")
     try:
@@ -43,16 +55,21 @@ def _normalize_node(state: IngestionState) -> dict[str, Any]:
                 state.get("document_inputs") or []
             ) or [state.get("initial_prompt", "")]
             docs = normalize_documents(inputs)
+            _log_graph(f"normalize loaded initialize docs={len(docs)}")
         else:
             prompt = str(state.get("update_prompt", "")).strip()
             if not prompt:
+                _log_graph("normalize FAILED empty update prompt")
                 return {"error": "empty_update_prompt", "result_text": "No update text was provided."}
             docs = [SourceDocument(name="user-prompt", text=prompt)]
+            _log_graph(f"normalize loaded update prompt chars={len(prompt)}")
     except (ValueError, OSError) as exc:
+        _log_graph(f"normalize FAILED error={exc}")
         return {
             "error": str(exc),
             "result_text": f"Could not normalize input: {exc}",
         }
+    _log_graph(f"normalize END docs={len(docs)}")
     return {"normalized_docs": docs, "error": None}
 
 
@@ -67,9 +84,12 @@ def _strip_json_fence(text: str) -> str:
 
 def _distill_node(state: IngestionState) -> dict[str, Any]:
     if state.get("error"):
+        _log_graph(f"distill SKIP prior_error={state.get('error')}")
         return {}
+    _log_graph(f"distill START flow_mode={state.get('flow_mode', 'update')}")
     docs = list(state.get("normalized_docs", []))
     if not docs:
+        _log_graph("distill FAILED no documents")
         return {
             "error": "no_documents",
             "result_text": "No documents to process.",
@@ -79,9 +99,11 @@ def _distill_node(state: IngestionState) -> dict[str, Any]:
     flow = state.get("flow_mode", "update")
 
     if flow == "update" and state.get("update_mode") == "deterministic":
+        _log_graph(f"distill END deterministic update bypass raw_chars={len(raw)}")
         return {"cleaned_context": raw, "source_digest": raw}
 
     if not (getattr(s, "gemini_api_key", "") or "").strip():
+        _log_graph(f"distill END no Gemini key bypass raw_chars={len(raw)}")
         return {"cleaned_context": raw, "source_digest": raw}
 
     system = SystemMessage(
@@ -112,15 +134,20 @@ def _distill_node(state: IngestionState) -> dict[str, Any]:
         if isinstance(data, dict) and isinstance(data.get("distilled_text"), str):
             d = str(data["distilled_text"]).strip()
             if d:
+                _log_graph(f"distill END cleaned_chars={len(d)} raw_chars={len(raw)}")
                 return {"cleaned_context": d, "source_digest": raw}
-    except (json.JSONDecodeError, OSError, TypeError, ValueError):
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
+        _log_graph(f"distill FALLBACK raw context after error={type(exc).__name__}: {exc}")
         pass
+    _log_graph(f"distill END fallback raw_chars={len(raw)}")
     return {"cleaned_context": raw, "source_digest": raw}
 
 
 def _bootstrap_write_node(state: IngestionState) -> dict[str, Any]:
     if state.get("error"):
+        _log_graph(f"bootstrap_write SKIP prior_error={state.get('error')}")
         return {}
+    _log_graph("bootstrap_write START")
     s = state["settings"]
     text = (state.get("cleaned_context") or "").strip()
     docs: list[SourceDocument]
@@ -137,20 +164,25 @@ def _bootstrap_write_node(state: IngestionState) -> dict[str, Any]:
             overwrite=bool(state.get("overwrite", False)),
         )
     except (OSError, FileExistsError, ValueError) as exc:  # noqa: BLE001
+        _log_graph(f"bootstrap_write FAILED error={exc}")
         return {
             "error": str(exc),
             "result_text": f"Bootstrap write failed: {exc}",
         }
     retrieval_service.invalidate(resolve_brain_root(s))
+    _log_graph(f"bootstrap_write END files={sorted(written)}")
     return {"written_map": written, "error": state.get("error")}
 
 
 def _retrieve_node(state: IngestionState) -> dict[str, Any]:
     if state.get("error"):
+        _log_graph(f"retrieve SKIP prior_error={state.get('error')}")
         return {}
+    _log_graph("retrieve START")
     s = state["settings"]
     q = (state.get("cleaned_context") or state.get("update_prompt", "")).strip()
     if not q:
+        _log_graph("retrieve END empty query")
         return {
             "retrieval_hits": [],
             "candidate_files": [],
@@ -160,6 +192,7 @@ def _retrieve_node(state: IngestionState) -> dict[str, Any]:
         retriever = retrieval_service.get(root)
         hits = retriever.query(q, top_k=6, token_budget=1500)
     except (FileNotFoundError, OSError, ValueError) as exc:  # noqa: BLE001
+        _log_graph(f"retrieve END failed error={exc}")
         return {
             "retrieval_hits": [],
             "candidate_files": [],
@@ -182,7 +215,9 @@ def _retrieve_node(state: IngestionState) -> dict[str, Any]:
 
 def _reconcile_node(state: IngestionState) -> dict[str, Any]:
     if state.get("error"):
+        _log_graph(f"reconcile SKIP prior_error={state.get('error')}")
         return {"plan": None}
+    _log_graph(f"reconcile START update_mode={state.get('update_mode', 'llm')}")
     s = state["settings"]
     root = s.brain_dir if s.brain_dir.is_dir() else s.brian_reference_dir
     incoming = (state.get("cleaned_context") or state.get("update_prompt", "")).strip()
@@ -190,6 +225,7 @@ def _reconcile_node(state: IngestionState) -> dict[str, Any]:
     try:
         retriever = retrieval_service.get(root)
     except (FileNotFoundError, OSError) as exc:  # noqa: BLE001
+        _log_graph(f"reconcile FAILED error={exc}")
         return {
             "error": str(exc),
             "plan": None,
@@ -197,25 +233,31 @@ def _reconcile_node(state: IngestionState) -> dict[str, Any]:
         }
     rec = Reconciler(retriever=retriever, use_llm=use_llm)
     plan = rec.reconcile(incoming, source=state.get("source", {}) or {})
+    _log_graph(f"reconcile END ops={len(plan.operations)} confidence={plan.confidence}")
     return {"plan": plan, "error": state.get("error")}
 
 
 def _apply_node(state: IngestionState) -> dict[str, Any]:
     if state.get("error"):
+        _log_graph(f"apply SKIP prior_error={state.get('error')}")
         return {}
+    _log_graph(f"apply START do_apply={state.get('do_apply', True)}")
     s = state["settings"]
     plan: ReconciliationPlan | None = state.get("plan")
     if not state.get("do_apply", True):
+        _log_graph("apply END skipped apply=false")
         return {
             "applied_result_ops": 0,
             "applied_files": [],
         }
     if not plan or not s.brain_dir.is_dir():
+        _log_graph("apply END no plan or missing brain dir")
         return {
             "applied_result_ops": 0,
             "applied_files": [],
         }
     res = apply_reconciliation_plan(plan, settings=s)
+    _log_graph(f"apply END applied_ops={res.applied_ops} files={sorted(res.files_touched)}")
     return {
         "applied_result_ops": int(res.applied_ops),
         "applied_files": sorted(res.files_touched),
@@ -223,15 +265,19 @@ def _apply_node(state: IngestionState) -> dict[str, Any]:
 
 
 def _verify_node(state: IngestionState) -> dict[str, Any]:
+    _log_graph("verify START")
     s = state["settings"]
     try:
         retrieval_service.invalidate(resolve_brain_root(s))
     except (OSError, TypeError) as exc:  # noqa: BLE001
+        _log_graph(f"verify END invalidate failed error={exc}")
         return {"verify_line": f"invalidate: {exc}"}
     if state.get("error"):
+        _log_graph(f"verify END prior_error={state.get('error')}")
         return {}
     q = (state.get("cleaned_context") or state.get("update_prompt", ""))[:2000]
     if not (q and q.strip()) or state.get("flow_mode") == "initialize":
+        _log_graph("verify END cache invalidated")
         return {"verify_line": "cache invalidated; brain ready for retrieval."}
     root = s.brain_dir if s.brain_dir.is_dir() else s.brian_reference_dir
     try:
@@ -244,14 +290,19 @@ def _verify_node(state: IngestionState) -> dict[str, Any]:
                 f"(rerank={getattr(h, 'rerank_score', 0):.2f})",
             }
     except (FileNotFoundError, OSError, ValueError) as exc:  # noqa: BLE001
+        _log_graph(f"verify END query skipped error={exc}")
         return {"verify_line": f"verify query skipped: {exc}"}
+    _log_graph("verify END no hits")
     return {"verify_line": "index warm; no hits for smoke query."}
 
 
 def _final_node(state: IngestionState) -> dict[str, Any]:
+    _log_graph("final START")
     if state.get("result_text"):
+        _log_graph("final END existing result_text")
         return {}
     if state.get("error"):
+        _log_graph(f"final END error={state.get('error', 'unknown error')}")
         return {"result_text": str(state.get("error", "unknown error"))}
     if state.get("flow_mode") == "initialize" and not state.get("error"):
         wm = state.get("written_map", {})
@@ -323,6 +374,7 @@ def run_initialize(
     overwrite: bool = False,
 ) -> dict[str, Any]:
     """Entry: bootstrap / create working brain from documents."""
+    _log_graph(f"run_initialize START max_files={max_files} overwrite={overwrite}")
     if max_files < 1:
         raise ValueError("max_files must be at least 1")
     s = settings
@@ -341,6 +393,7 @@ def run_initialize(
     wf: Any = get_ingestion_workflow()
     out: dict[str, Any] = cast(dict[str, Any], wf.invoke(st))
     wm = out.get("written_map") or {}
+    _log_graph(f"run_initialize END files={sorted(wm.keys()) if isinstance(wm, dict) else []}")
     return {
         "written_files": sorted(wm.keys()) if isinstance(wm, dict) else [],
         "result_text": str(out.get("result_text", "")),
@@ -356,6 +409,7 @@ def run_update(
     settings: Settings,
 ) -> dict[str, Any]:
     """Entry: reconcile incoming text against the brain, optionally apply."""
+    _log_graph(f"run_update START update_mode={update_mode} apply={apply}")
     st: IngestionState = cast(
         IngestionState,
         {
@@ -381,11 +435,13 @@ def run_update(
         "plan": plan_d,
     }
     if not apply:
+        _log_graph("run_update END apply=false")
         result["applied"] = None
         result["applied_ops"] = None
         result["files_touched"] = None
         return result
     if plan_d is None or not settings.brain_dir.is_dir():
+        _log_graph("run_update END not applied")
         result["applied"] = False
         result["applied_ops"] = 0
         result["files_touched"] = []
@@ -393,6 +449,9 @@ def run_update(
     result["applied"] = True
     result["applied_ops"] = int(raw.get("applied_result_ops", 0) or 0)
     result["files_touched"] = list(raw.get("applied_files", []))
+    _log_graph(
+        f"run_update END applied_ops={result['applied_ops']} files={result['files_touched']}"
+    )
     return result
 
 
