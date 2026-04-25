@@ -190,6 +190,27 @@ export function SessionStartPage() {
   const inputRef = useRef<HTMLInputElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const thinkingEndRef = useRef<HTMLDivElement>(null);
+  /** Browser timer ids (number); avoid NodeJS.Timeout from global setInterval typing. */
+  const restBootstrapTimersRef = useRef<number[]>([]);
+  const restProgressIntervalRef = useRef<number | null>(null);
+  const restFetchDoneRef = useRef(false);
+
+  const [githubRestPipeline, setGithubRestPipeline] = useState(false);
+  const [restProgress, setRestProgress] = useState(0);
+
+  const cleanupRestBootstrap = useCallback(() => {
+    restBootstrapTimersRef.current.forEach((id) => window.clearTimeout(id));
+    restBootstrapTimersRef.current = [];
+    if (restProgressIntervalRef.current != null) {
+      window.clearInterval(restProgressIntervalRef.current);
+      restProgressIntervalRef.current = null;
+    }
+    restFetchDoneRef.current = false;
+    setGithubRestPipeline(false);
+    setRestProgress(0);
+  }, []);
+
+  useEffect(() => () => cleanupRestBootstrap(), [cleanupRestBootstrap]);
 
   const totalChars = useMemo(() => docs.reduce((sum, doc) => sum + doc.chars, 0), [docs]);
   const githubApiList = useMemo(() => githubReposForApi(githubRepos), [githubRepos]);
@@ -233,6 +254,7 @@ export function SessionStartPage() {
   }, [isDone, router]);
 
   const resetRun = useCallback(() => {
+    cleanupRestBootstrap();
     socketRef.current?.close();
     socketRef.current = null;
     setIsRunning(false);
@@ -250,7 +272,7 @@ export function SessionStartPage() {
     ]);
     setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
     setGithubRepos([newGithubRepoRow()]);
-  }, []);
+  }, [cleanupRestBootstrap]);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
     setError(null);
@@ -405,13 +427,48 @@ export function SessionStartPage() {
     setResultText("");
 
     if (githubOnlyBootstrap) {
-      setStageLabel("Initializing brain from GitHub…");
+      const scheduleRest = (ms: number, fn: () => void) => {
+        const id = window.setTimeout(fn, ms) as unknown as number;
+        restBootstrapTimersRef.current.push(id);
+      };
+
+      cleanupRestBootstrap();
+      setGithubRestPipeline(true);
+      setRestProgress(6);
       setNodes(INITIAL_NODES);
       setEdges(INITIAL_EDGES);
+      setStage("normalize");
+      setStageLabel("Hand-off to brain agent…");
       setThinking([
-        "GitHub-only bootstrap uses POST /initialize (no file uploads). This can take a minute while the repo is cloned and scanned.",
-        `Repositories: ${githubApiList.length}.`,
+        "Starting the GitHub → brain pipeline. Your repo is being shallow-cloned and scanned server-side—this story plays out in real time below.",
+        githubApiList.length === 1
+          ? `Repository: ${githubApiList[0]!.repo_url}`
+          : `${githubApiList.length} repositories will be processed in order.`,
       ]);
+
+      const narrativeBeats: { t: number; stage: StageId; label: string; line: string }[] = [
+        { t: 400, stage: "normalize", label: "Cloning & reading the tree…", line: "Git is fetching objects; next we walk text files and rank them for context." },
+        { t: 2800, stage: "normalize", label: "Ranking source excerpts…", line: "README, manifests, and high-signal paths are prioritized like an IDE index." },
+        { t: 5600, stage: "distill", label: "Distilling durable facts…", line: "Noise is stripped; decisions, stack, entry points, and boundaries stay." },
+        { t: 9200, stage: "write", label: "Authoring brain markdown…", line: "The model is shaping projects/, architecture, and cross-links you can browse." },
+        { t: 12800, stage: "index", label: "Wiring retrieval…", line: "Sections are prepared so search and agents can use this brain immediately." },
+        { t: 16800, stage: "verify", label: "Still working—large repos take longer…", line: "Hang tight; the server is still generating files. Progress below keeps moving until the response lands." },
+      ];
+
+      narrativeBeats.forEach((beat) => {
+        scheduleRest(beat.t, () => {
+          if (restFetchDoneRef.current) return;
+          setStage(beat.stage);
+          setStageLabel(beat.label);
+          setThinking((prev) => [...prev, beat.line]);
+        });
+      });
+
+      restProgressIntervalRef.current = window.setInterval(() => {
+        if (restFetchDoneRef.current) return;
+        setRestProgress((p) => Math.min(90, p + 0.35 + Math.random() * 0.9));
+      }, 420) as unknown as number;
+
       void (async () => {
         try {
           const res = await fetch("/api/agent/initialize", {
@@ -427,31 +484,81 @@ export function SessionStartPage() {
             }),
           });
           const raw = (await res.json()) as { detail?: unknown; written_files?: string[]; result_text?: string };
+
+          restFetchDoneRef.current = true;
+          restBootstrapTimersRef.current.forEach((tid) => window.clearTimeout(tid));
+          restBootstrapTimersRef.current = [];
+          if (restProgressIntervalRef.current != null) {
+            window.clearInterval(restProgressIntervalRef.current);
+            restProgressIntervalRef.current = null;
+          }
+
           if (!res.ok) {
+            setRestProgress(0);
+            setGithubRestPipeline(false);
             setError(formatInitializeErrorDetail(raw, res.status));
             setIsRunning(false);
             setStage("upload");
             setStageLabel("Add a GitHub repo URL to start");
             return;
           }
+
           const written = Array.isArray(raw.written_files) ? raw.written_files : [];
-          setStage("done");
-          setStageLabel("Brain ready");
-          setIsDone(true);
-          setIsRunning(false);
-          setResultText(String(raw.result_text ?? ""));
-          setCreatedFiles(
-            written.map((path) => ({
-              path,
-              title: path.split("/").pop(),
-              status: "done" as const,
-            })),
-          );
+          setRestProgress(96);
+          setStage("write");
+          setStageLabel("Materializing brain files on the canvas…");
           setThinking((prev) => [
             ...prev,
-            `Done. Wrote ${written.length} brain file${written.length === 1 ? "" : "s"}. Open the brain workspace to explore.`,
+            `Response received. Animating ${written.length} file${written.length === 1 ? "" : "s"} into the construction graph.`,
           ]);
+
+          let delay = 320;
+          const step = 155;
+          for (const path of written) {
+            const rel = path;
+            scheduleRest(delay, () => {
+              setCreatedFiles((prev) => [...prev, { path: rel, title: rel.split("/").pop(), status: "planned" }]);
+            });
+            delay += step;
+            scheduleRest(delay, () => {
+              setCreatedFiles((prev) => prev.map((f) => (f.path === rel ? { ...f, status: "writing" } : f)));
+            });
+            delay += step;
+            scheduleRest(delay, () => {
+              setCreatedFiles((prev) => prev.map((f) => (f.path === rel ? { ...f, status: "done" } : f)));
+            });
+            delay += step + 35;
+          }
+
+          if (written.length === 0) {
+            scheduleRest(500, () => {
+              setThinking((prev) => [...prev, "No new file paths were reported—check the agent logs or open the brain workspace anyway."]);
+            });
+          }
+
+          scheduleRest(delay + 400, () => {
+            setRestProgress(100);
+            setStage("done");
+            setStageLabel("Brain ready");
+            setResultText(String(raw.result_text ?? ""));
+            setThinking((prev) => [
+              ...prev,
+              `Done. ${written.length} brain file${written.length === 1 ? "" : "s"} staged. Opening the full workspace is one click away.`,
+            ]);
+            setIsDone(true);
+            setIsRunning(false);
+            setGithubRestPipeline(false);
+          });
         } catch (e) {
+          restFetchDoneRef.current = true;
+          restBootstrapTimersRef.current.forEach((tid) => window.clearTimeout(tid));
+          restBootstrapTimersRef.current = [];
+          if (restProgressIntervalRef.current != null) {
+            window.clearInterval(restProgressIntervalRef.current);
+            restProgressIntervalRef.current = null;
+          }
+          setRestProgress(0);
+          setGithubRestPipeline(false);
           setError(e instanceof Error ? e.message : "Initialize request failed");
           setIsRunning(false);
           setStage("upload");
@@ -460,6 +567,8 @@ export function SessionStartPage() {
       })();
       return;
     }
+
+    cleanupRestBootstrap();
 
     setStageLabel("Connecting to the brain agent");
     setNodes(INITIAL_NODES);
@@ -511,7 +620,17 @@ export function SessionStartPage() {
     ws.onclose = () => {
       setIsRunning(false);
     };
-  }, [agentOnline, docs, githubApiList, githubOnlyBootstrap, handleBootstrapEvent, hasBootstrapSource, isRunning, prompt]);
+  }, [
+    agentOnline,
+    cleanupRestBootstrap,
+    docs,
+    githubApiList,
+    githubOnlyBootstrap,
+    handleBootstrapEvent,
+    hasBootstrapSource,
+    isRunning,
+    prompt,
+  ]);
 
   return (
     <main className="relative min-h-[calc(100vh-57px)] overflow-hidden px-6 py-8">
@@ -663,7 +782,11 @@ export function SessionStartPage() {
                   </span>
                   <div>
                     <p className="text-sm font-semibold text-slate-800">{stageLabel}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">Live WebSocket initialization: logs, files, graph.</p>
+                    <p className="mt-0.5 text-xs text-slate-400">
+                      {githubRestPipeline
+                        ? "GitHub run: the timeline and log advance while the API works; files pop onto the graph one by one when the response returns."
+                        : "Live WebSocket stream: logs, files, and graph update from the agent."}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -673,7 +796,36 @@ export function SessionStartPage() {
                 <Metric label="Brain files" value={createdFiles.length.toString()} />
               </div>
             </div>
-            <BootstrapTimeline current={stage} completed={completedStages} />
+            <BootstrapTimeline current={stage} completed={completedStages} restPulse={githubRestPipeline} />
+            {githubRestPipeline && (
+              <div className="mt-4 overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-50/90 via-white/80 to-sky-50/70 p-4 shadow-sm">
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
+                      <GitBranch size={15} />
+                    </span>
+                    <div>
+                      <p className="text-xs font-semibold text-slate-800">GitHub → brain</p>
+                      <p className="text-[10px] text-slate-500">Clone, scan, distill—then we paint each markdown node</p>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-white/90 px-2.5 py-1 font-mono text-[11px] font-bold tabular-nums text-violet-700 ring-1 ring-violet-200/80">
+                    {Math.min(100, Math.round(restProgress))}%
+                  </span>
+                </div>
+                <div className="relative h-2.5 overflow-hidden rounded-full bg-white/90 ring-1 ring-violet-100">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-sky-500 transition-[width] duration-700 ease-out"
+                    style={{ width: `${Math.min(100, restProgress)}%` }}
+                  />
+                </div>
+                <p className="mt-3 text-[11px] leading-relaxed text-slate-600">
+                  <span className="font-semibold text-violet-800">{stageLabel}</span>
+                  <span className="text-slate-400"> · </span>
+                  Watch the stage cards above and the agent log on the right—nothing is frozen, even during a long POST.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-5">
@@ -816,7 +968,15 @@ function DocumentDropzone({
   );
 }
 
-function BootstrapTimeline({ current, completed }: { current: StageId; completed: number }) {
+function BootstrapTimeline({
+  current,
+  completed,
+  restPulse = false,
+}: {
+  current: StageId;
+  completed: number;
+  restPulse?: boolean;
+}) {
   return (
     <div className="grid gap-2 md:grid-cols-6">
       {STAGES.map((step, index) => {
@@ -828,12 +988,13 @@ function BootstrapTimeline({ current, completed }: { current: StageId; completed
               <ChevronRight size={13} className="absolute -right-2 top-5 hidden text-slate-300 md:block" />
             )}
             <div className={cn(
-              "h-full rounded-2xl border p-3 transition-all",
+              "h-full rounded-2xl border p-3 transition-all duration-500",
               done
                 ? "border-emerald-200/70 bg-emerald-50/80 text-emerald-700"
                 : active
                 ? "border-violet-200/70 bg-violet-50/80 text-violet-700 shadow-sm"
                 : "border-slate-200/60 bg-white/70 text-slate-400",
+              restPulse && active && !done && "ring-2 ring-violet-400/60 ring-offset-2 ring-offset-violet-50/80 shadow-[0_0_20px_rgba(139,92,246,0.2)]",
             )}>
               <div className="flex items-center gap-2">
                 <span className={cn(
