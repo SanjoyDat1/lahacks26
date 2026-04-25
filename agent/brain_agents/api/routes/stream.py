@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import time
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
@@ -10,6 +12,7 @@ from ...graph import run_task_streaming
 from ..schemas import StreamRequest
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 @router.post("/stream")
@@ -24,16 +27,37 @@ async def stream_agent(req: StreamRequest) -> StreamingResponse:
     """
 
     async def event_generator():
+        request_id = f"{int(time.time() * 1000)}-{id(req):x}"
+        event_count = 0
+        logger.info(
+            "agent stream start request_id=%s task=%s prompt_chars=%s",
+            request_id,
+            req.task,
+            len(req.prompt),
+        )
         try:
             settings = load_settings(validate=True)
             async for evt in run_task_streaming(
                 req.prompt, task=req.task, settings=settings
             ):
+                event_count += 1
+                evt_type = evt.get("type", "unknown")
+                if evt_type not in {"token", "thinking"}:
+                    logger.info(
+                        "agent stream event request_id=%s count=%s type=%s agent=%s tool=%s",
+                        request_id,
+                        event_count,
+                        evt_type,
+                        evt.get("agent"),
+                        evt.get("tool"),
+                    )
                 yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n"
         except Exception as exc:  # noqa: BLE001
+            logger.exception("agent stream error request_id=%s count=%s", request_id, event_count)
             err_payload = json.dumps({"type": "error", "message": str(exc)})
             yield f"data: {err_payload}\n\n"
         finally:
+            logger.info("agent stream end request_id=%s count=%s", request_id, event_count)
             yield 'data: {"type":"stream_end"}\n\n'
 
     return StreamingResponse(

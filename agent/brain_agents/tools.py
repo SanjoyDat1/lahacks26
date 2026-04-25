@@ -347,6 +347,19 @@ _READER_TOOL_NAMES: frozenset[str] = frozenset(
     }
 )
 
+_UPDATE_READER_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "list_working_brain",
+        "read_working_file",
+        "list_reference_brain",
+        "read_reference_file",
+        "search_working_brain",
+        "search_reference_brain",
+        "semantic_search",
+        "get_brief",
+    }
+)
+
 _WRITER_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "upsert_working_file",
@@ -360,6 +373,11 @@ _WRITER_TOOL_NAMES: frozenset[str] = frozenset(
 def build_reader_toolkit(ctx: BrainContext) -> list:
     """Read-side toolkit: file listing/reading + retrieval (no mutations)."""
     return [t for t in build_all_tools(ctx) if t.name in _READER_TOOL_NAMES]
+
+
+def build_update_reader_toolkit(ctx: BrainContext) -> list:
+    """Narrower read-side toolkit for update tasks to avoid tool-looping."""
+    return [t for t in build_all_tools(ctx) if t.name in _UPDATE_READER_TOOL_NAMES]
 
 
 def build_writer_toolkit(ctx: BrainContext) -> list:

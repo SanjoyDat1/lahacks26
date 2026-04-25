@@ -9,7 +9,12 @@ from langgraph.prebuilt import create_react_agent
 
 from .config import Settings, ensure_working_brain, load_settings
 from .llm import make_chat_model, print_model_thinking
-from .tools import BrainContext, build_reader_toolkit, build_writer_toolkit
+from .tools import (
+    BrainContext,
+    build_reader_toolkit,
+    build_update_reader_toolkit,
+    build_writer_toolkit,
+)
 
 
 READER_SYSTEM = """You are the **Reader** agent for a project brain.
@@ -19,6 +24,20 @@ There are two Markdown trees:
 2. **Working brain** (on-demand `brain/` or `BRAIN_DIR`): this is the live store. For questions, prefer reading the **working** files. Use the reference when the user asks about structure or when the working copy is empty.
 
 You have **read** tools only (list/search/read for reference and working). Do not claim to have written files."""
+
+UPDATE_READER_SYSTEM = """You are the **Reader** agent for an UPDATE task on a project brain.
+
+Your only job is to gather just enough context for the Writer to make one focused change.
+
+Rules:
+- Prefer the **working** `brain/` files over the read-only `brian/` reference.
+- Start with `semantic_search` or `get_brief` unless the user explicitly names a file or section.
+- Use `search_working_brain` or `search_reference_brain` when the prompt contains exact wording that is likely to appear verbatim (for example a known section title or exact rule text).
+- Read at most 3 files before stopping.
+- Do not keep exploring once you have identified the likely target file(s) and relevant surrounding context.
+- Return a concise handoff for the Writer instead of continuing to browse.
+
+You have read-only tools only. Do not claim to have written files."""
 
 
 WRITER_SYSTEM = """You are the **Writer** agent. You may only change the **working brain** (not the `brian/` example).
@@ -62,7 +81,9 @@ def _prepare_user_message(
         )
     return HumanMessage(
         f"(Task: UPDATE working brain — not the reference.)\n\n{user}\n\n"
-        "Start by listing or searching the **working** brain, then read files you need. "
+        "Use `semantic_search` or `get_brief` first unless the user names a file or section directly. "
+        "Use plain text search when the request includes exact words likely to appear in a heading or bullet. "
+        "Read at most 3 files, identify the target note(s), then stop and hand off to the Writer. "
         "The next step (Writer) can apply `replace_working_file` or `upsert_working_file`."
     )
 
@@ -111,11 +132,13 @@ async def run_task_streaming(
     ensure_working_brain(s.brian_reference_dir, s.brain_dir)
     model = make_chat_model(s)
     ctx = BrainContext(s.brian_reference_dir, s.brain_dir)
+    reader_prompt = UPDATE_READER_SYSTEM if task == "update" else READER_SYSTEM
+    reader_tools = build_update_reader_toolkit(ctx) if task == "update" else build_reader_toolkit(ctx)
 
     reader = create_react_agent(
         model,
-        build_reader_toolkit(ctx),
-        prompt=SystemMessage(READER_SYSTEM),  # type: ignore[call-arg]
+        reader_tools,
+        prompt=SystemMessage(reader_prompt),  # type: ignore[call-arg]
     )
     m0 = _prepare_user_message(user, task)
 
@@ -257,11 +280,13 @@ def run_task(
     ensure_working_brain(s.brian_reference_dir, s.brain_dir)
     model = make_chat_model(s)
     ctx = BrainContext(s.brian_reference_dir, s.brain_dir)
+    reader_prompt = UPDATE_READER_SYSTEM if task == "update" else READER_SYSTEM
+    reader_tools = build_update_reader_toolkit(ctx) if task == "update" else build_reader_toolkit(ctx)
 
     reader = create_react_agent(
         model,
-        build_reader_toolkit(ctx),
-        prompt=SystemMessage(READER_SYSTEM),  # type: ignore[call-arg]
+        reader_tools,
+        prompt=SystemMessage(reader_prompt),  # type: ignore[call-arg]
     )
     m0 = _prepare_user_message(user, task)
     st = reader.invoke({"messages": [m0]})
