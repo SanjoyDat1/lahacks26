@@ -151,9 +151,8 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
   }, []);
 
   const handleUpdateEvent = useCallback((event: UpdateEvent) => {
+    // Queue planned ops so the graph can show queued (violet dashed) nodes
     if (event.type === "op_planned" && event.op.target_file) {
-      const item = { path: event.op.target_file, kind: event.op.kind, reason: event.op.reason };
-      opQueueRef.current.push(item);
       updateTotalRef.current++;
       const total = updateTotalRef.current;
       setUpdateVisu((prev) => ({
@@ -161,6 +160,12 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
         queued: new Set([...prev.queued, event.op.target_file]),
         totalOps: total,
       }));
+      return;
+    }
+    // Drive sequential visualization from op_applied events (actual writes)
+    if (event.type === "op_applied" && event.path && event.success && event.change_type !== "ignored") {
+      const item = { path: event.path, kind: event.change_type ?? "modified", reason: "" };
+      opQueueRef.current.push(item);
       if (!updateProcessingRef.current) processNextUpdateOp();
     }
   }, [processNextUpdateOp]);

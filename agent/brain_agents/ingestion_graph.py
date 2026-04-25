@@ -24,7 +24,7 @@ from .builder import _source_digest
 from .config import Settings
 from .ingestion_state import IngestionState
 from .llm import invoke_chat_model, make_chat_model
-from .services.reconciliation_apply import apply_reconciliation_plan, resolve_brain_root
+from .services.reconciliation_apply import apply_reconciliation_plan, apply_single_operation, resolve_brain_root
 from .services.retrieval_service import retrieval_service
 from .update import ReconciliationPlan, Reconciler
 
@@ -691,32 +691,35 @@ def run_update_streaming(
         yield _event("error", message="Brain directory does not exist. Create a brain first.")
         return
 
-    res = apply_reconciliation_plan(plan, settings=s)
+    # Apply each operation individually so the frontend can visualise them one-by-one
+    touched: set[str] = set()
+    applied = 0
+    for op in plan.operations:
+        ok, change_type = apply_single_operation(op, brain_root=s.brain_dir)
+        if ok and op.kind != "ignore":
+            applied += 1
+            touched.add(op.target_file)
+        yield _event("op_applied", path=op.target_file, change_type=change_type, success=ok)
 
-    touched = sorted(res.files_touched)
-    for path in touched:
-        change_type = "modified"
-        for op in plan.operations:
-            if op.target_file == path and op.kind == "create_section":
-                change_type = "added"
-                break
-        yield _event("op_applied", path=path, change_type=change_type, success=True)
+    # Invalidate retrieval index once after all ops
+    if touched:
+        try:
+            retrieval_service.invalidate(resolve_brain_root(s))
+        except (OSError, TypeError):
+            pass
 
     yield _event("stage_start", stage="verify", label="Re-indexing retrieval")
     yield _event("thinking", content="Invalidating retrieval cache and re-indexing so the updated brain is immediately searchable.\n")
-    try:
-        retrieval_service.invalidate(resolve_brain_root(s))
-    except (OSError, TypeError):
-        pass
 
     yield _event("directory_snapshot", tree=_directory_snapshot(s.brain_dir))
+    touched_sorted = sorted(touched)
     yield _event(
         "done",
-        ops_applied=int(res.applied_ops),
-        files_touched=touched,
+        ops_applied=applied,
+        files_touched=touched_sorted,
         rationale=plan.rationale or "",
     )
-    _log_graph(f"run_update_streaming END ops={res.applied_ops} files={touched}")
+    _log_graph(f"run_update_streaming END ops={applied} files={touched_sorted}")
 
 
 def run_update(
