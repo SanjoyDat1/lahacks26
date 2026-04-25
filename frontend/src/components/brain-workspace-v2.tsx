@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -10,14 +10,17 @@ import {
   Bot,
   Calendar,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Clock,
   FileText,
+  Folder,
   GitBranch,
   Hash,
   LayoutDashboard,
   Link2,
+  Map as MapIcon,
   MessageSquare,
   Network,
   PlugZap,
@@ -108,6 +111,8 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
   const [updateVisu, setUpdateVisu] = useState<UpdateVisuState>({
     active: null, queued: new Set(), done: new Set(), totalOps: 0, appliedOps: 0,
   });
+  /** Sidebar folder keys; omitted or true = expanded, false = collapsed */
+  const [navExpanded, setNavExpanded] = useState<Record<string, boolean>>({});
 
   // Queue-based sequential update visualization
   const opQueueRef = useRef<Array<{ path: string; kind: string; reason: string }>>([]);
@@ -229,9 +234,16 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
     setTimeout(() => setSaveState("idle"), 1400);
   }
 
-  const grouped = groupByFolder(files);
+  const fileTree = buildFileTree(files);
   const selectedId =
     selectedFile?.frontmatter.id ?? selectedFile?.path ?? undefined;
+
+  const toggleNavFolder = useCallback((pathKey: string) => {
+    setNavExpanded((prev) => {
+      const expanded = prev[pathKey] !== false;
+      return { ...prev, [pathKey]: !expanded };
+    });
+  }, []);
 
   return (
     <div className="flex h-[calc(100vh-57px)] overflow-hidden">
@@ -239,57 +251,38 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
       <aside
         className={cn(
           "flex flex-col border-r border-slate-200/60 transition-all duration-300 ease-out",
-          "bg-white/60 backdrop-blur-2xl",
-          leftOpen ? "w-56 min-w-56" : "w-0 min-w-0 overflow-hidden",
+          "bg-gradient-to-b from-slate-50/90 to-violet-50/30 backdrop-blur-2xl",
+          leftOpen ? "w-64 min-w-64" : "w-0 min-w-0 overflow-hidden",
         )}
       >
-        <div className="flex items-center justify-between border-b border-slate-200/50 px-4 py-3.5">
+        <div className="flex items-center justify-between border-b border-slate-200/50 px-3 py-3">
           <div className="flex items-center gap-2">
-            <div className="h-2 w-2 rounded-full bg-violet-500 shadow-[0_0_6px_rgba(139,92,246,0.5)]" />
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Brian
-            </span>
+            <div className="flex h-7 w-7 items-center justify-center rounded-xl bg-violet-100 ring-1 ring-violet-200/50">
+              <BookOpen size={14} className="text-violet-600" />
+            </div>
+            <div>
+              <span className="block text-[11px] font-semibold text-slate-800">Brain</span>
+              <span className="text-[9px] text-slate-400">Notes &amp; context</span>
+            </div>
           </div>
           <button
             onClick={() => setLeftOpen(false)}
-            className="rounded-lg p-1 text-slate-400 transition hover:bg-slate-100/70 hover:text-slate-600"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/80 hover:text-slate-600"
+            title="Collapse sidebar"
           >
-            <ChevronLeft size={12} />
+            <ChevronLeft size={14} />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-2 pr-1">
-          {Object.entries(grouped).map(([folder, folderFiles]) => (
-            <div key={folder} className="mb-1">
-              {folder !== "_root" && (
-                <p className="px-4 pb-1 pt-2.5 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-                  {folder}
-                </p>
-              )}
-              {folderFiles.map((file) => {
-                const name =
-                  file.path.split("/").pop()?.replace(".md", "").replace(/_/g, " ") ??
-                  file.path;
-                const active = selectedFile?.path === file.path;
-                return (
-                  <button
-                    key={file.path}
-                    onClick={() => openFile(file)}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-xl px-3 py-1.5 mx-1 text-xs transition-all duration-150",
-                      active
-                        ? "bg-violet-100/80 text-violet-700 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.2)]"
-                        : "text-slate-600 hover:bg-slate-100/70 hover:text-slate-800",
-                    )}
-                    style={{ width: "calc(100% - 8px)" }}
-                  >
-                    <div className={cn("h-1.5 w-1.5 flex-shrink-0 rounded-full", typeDot(file.frontmatter.type))} />
-                    <span className="truncate capitalize">{name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          ))}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 px-1.5">
+          <BrainSidebarTree
+            node={fileTree}
+            depth={0}
+            selectedPath={selectedFile?.path}
+            navExpanded={navExpanded}
+            onToggleFolder={toggleNavFolder}
+            onSelectFile={openFile}
+          />
         </div>
       </aside>
 
@@ -573,16 +566,249 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
   );
 }
 
-// ─── helpers ─────────────────────────────────────────────────────────────────
+// ─── sidebar file tree ───────────────────────────────────────────────────────
 
-function groupByFolder(files: BrianFile[]): Record<string, BrianFile[]> {
-  const result: Record<string, BrianFile[]> = {};
-  for (const file of files) {
-    const folder = file.path.includes("/") ? file.path.split("/")[0] : "_root";
-    (result[folder] ??= []).push(file);
-  }
-  return result;
+const importanceRank: Record<string, number> = {
+  critical: 0,
+  high: 1,
+  medium: 2,
+  low: 3,
+};
+
+function compareFilesForNav(a: BrianFile, b: BrianFile) {
+  const ao = importanceRank[a.frontmatter.importance ?? "medium"] ?? 2;
+  const bo = importanceRank[b.frontmatter.importance ?? "medium"] ?? 2;
+  if (ao !== bo) return ao - bo;
+  return a.path.localeCompare(b.path);
 }
+
+type FileTreeNode = {
+  pathKey: string;
+  segment: string;
+  children: FileTreeNode[];
+  files: BrianFile[];
+};
+
+function humanizePathSegment(segment: string): string {
+  const spaced = segment.replace(/_/g, " ").replace(/-/g, " ");
+  return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function buildFileTree(files: BrianFile[]): FileTreeNode {
+  const root: FileTreeNode = { pathKey: "", segment: "", children: [], files: [] };
+
+  function ensureChild(parent: FileTreeNode, segment: string): FileTreeNode {
+    const pathKey = parent.pathKey ? `${parent.pathKey}/${segment}` : segment;
+    let child = parent.children.find((c) => c.pathKey === pathKey);
+    if (!child) {
+      child = { pathKey, segment, children: [], files: [] };
+      parent.children.push(child);
+    }
+    return child;
+  }
+
+  for (const file of files) {
+    const segments = file.path.split("/").filter(Boolean);
+    if (!segments.length) continue;
+    const dirParts = segments.slice(0, -1);
+    let node = root;
+    for (const seg of dirParts) {
+      node = ensureChild(node, seg);
+    }
+    node.files.push(file);
+  }
+
+  function sortTree(node: FileTreeNode) {
+    node.children.sort((a, b) =>
+      a.segment.localeCompare(b.segment, undefined, { sensitivity: "base" }),
+    );
+    node.files.sort(compareFilesForNav);
+    node.children.forEach(sortTree);
+  }
+  sortTree(root);
+  return root;
+}
+
+function filePrimaryLabel(file: BrianFile): string {
+  const t = file.frontmatter.title?.trim();
+  if (t) return t;
+  const base = file.path.split("/").pop()?.replace(/\.md$/i, "") ?? file.path;
+  return humanizePathSegment(base);
+}
+
+function fileContextPath(file: BrianFile): string {
+  const i = file.path.lastIndexOf("/");
+  if (i <= 0) return "";
+  return file.path.slice(0, i).replace(/\//g, " · ");
+}
+
+type IconProps = { size?: number; className?: string };
+const FILE_TYPE_ICON: Record<string, ComponentType<IconProps>> = {
+  index: Hash,
+  architecture: LayoutDashboard,
+  decision: AlertTriangle,
+  decision_log: AlertTriangle,
+  integration: PlugZap,
+  agent_prompt: Bot,
+  summary: BookOpen,
+  context: FileText,
+  goals: TrendingUp,
+  map: MapIcon,
+  timeline: Clock,
+  overview: LayoutDashboard,
+};
+
+const FILE_TYPE_ICON_CLASS: Record<string, string> = {
+  index: "text-amber-500",
+  architecture: "text-blue-500",
+  decision: "text-red-500",
+  decision_log: "text-red-500",
+  integration: "text-emerald-500",
+  agent_prompt: "text-violet-500",
+  summary: "text-cyan-500",
+  context: "text-slate-500",
+  goals: "text-pink-500",
+  map: "text-orange-500",
+  timeline: "text-sky-500",
+  overview: "text-indigo-500",
+};
+
+function FileRowIcon({ type }: { type?: string }) {
+  const Icon = FILE_TYPE_ICON[type ?? ""] ?? FileText;
+  const cls = FILE_TYPE_ICON_CLASS[type ?? ""] ?? "text-slate-400";
+  return <Icon size={14} className={cn("flex-shrink-0", cls)} />;
+}
+
+function BrainSidebarTree({
+  node,
+  depth,
+  selectedPath,
+  navExpanded,
+  onToggleFolder,
+  onSelectFile,
+}: {
+  node: FileTreeNode;
+  depth: number;
+  selectedPath?: string;
+  navExpanded: Record<string, boolean>;
+  onToggleFolder: (pathKey: string) => void;
+  onSelectFile: (file: BrianFile, tab?: Tab) => void;
+}) {
+  const pad = depth === 0 ? "pl-1" : depth === 1 ? "pl-2" : "pl-3";
+
+  return (
+    <div className={cn(pad, depth > 0 && "border-l border-slate-200/70 ml-2.5")}>
+      {depth === 0 && node.files.length > 0 && (
+        <div className="mb-2">
+          <p className="px-2 py-1.5 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+            Top level
+          </p>
+          {node.files.map((file) => (
+            <SidebarFileButton
+              key={file.path}
+              file={file}
+              active={selectedPath === file.path}
+              onSelect={() => onSelectFile(file)}
+            />
+          ))}
+        </div>
+      )}
+
+      {node.children.map((child) => {
+        const expanded = navExpanded[child.pathKey] !== false;
+        const totalInTree = countFilesInSubtree(child);
+        return (
+          <div key={child.pathKey} className="mb-0.5">
+            <button
+              type="button"
+              onClick={() => onToggleFolder(child.pathKey)}
+              className={cn(
+                "flex w-full items-center gap-1 rounded-lg px-2 py-1.5 text-left transition-colors",
+                "hover:bg-white/70 text-slate-700",
+              )}
+              style={{ paddingLeft: depth === 0 ? 6 : 4 }}
+            >
+              <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center text-slate-400">
+                {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+              </span>
+              <Folder size={13} className="flex-shrink-0 text-violet-400" />
+              <span className="min-w-0 flex-1 truncate text-[11px] font-medium text-slate-800">
+                {humanizePathSegment(child.segment)}
+              </span>
+              <span className="flex-shrink-0 rounded-md bg-slate-100/90 px-1.5 py-0.5 text-[9px] font-semibold tabular-nums text-slate-500">
+                {totalInTree}
+              </span>
+            </button>
+
+            {expanded && (
+              <div className="mt-0.5 space-y-0.5">
+                {child.files.map((file) => (
+                  <SidebarFileButton
+                    key={file.path}
+                    file={file}
+                    active={selectedPath === file.path}
+                    onSelect={() => onSelectFile(file)}
+                  />
+                ))}
+                <BrainSidebarTree
+                  node={child}
+                  depth={depth + 1}
+                  selectedPath={selectedPath}
+                  navExpanded={navExpanded}
+                  onToggleFolder={onToggleFolder}
+                  onSelectFile={onSelectFile}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function countFilesInSubtree(node: FileTreeNode): number {
+  let n = node.files.length;
+  for (const c of node.children) n += countFilesInSubtree(c);
+  return n;
+}
+
+function SidebarFileButton({
+  file,
+  active,
+  onSelect,
+}: {
+  file: BrianFile;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const primary = filePrimaryLabel(file);
+  const ctx = fileContextPath(file);
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={cn(
+        "flex w-full items-start gap-2 rounded-xl px-2 py-2 text-left transition-all duration-150",
+        active
+          ? "bg-violet-100/90 text-violet-900 shadow-[inset_0_0_0_1px_rgba(139,92,246,0.25)]"
+          : "text-slate-700 hover:bg-white/80 hover:shadow-sm",
+      )}
+    >
+      <FileRowIcon type={file.frontmatter.type} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-[11px] font-medium leading-tight">{primary}</span>
+        {ctx ? (
+          <span className="mt-0.5 block truncate font-mono text-[9px] leading-tight text-slate-400" title={file.path}>
+            {ctx}
+          </span>
+        ) : null}
+      </span>
+    </button>
+  );
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────────────
 
 function fileId(file: BrianFile) {
   return file.frontmatter.id ?? file.path;
