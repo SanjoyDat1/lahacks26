@@ -213,7 +213,7 @@ def _build_chat_model() -> Any | None:
         return None
     try:
         settings = load_settings(validate=False)
-        if not (settings.openrouter_api_key or "").strip():
+        if not (settings.gemini_api_key or "").strip():
             return None
         return make_chat_model(settings)
     except Exception as exc:

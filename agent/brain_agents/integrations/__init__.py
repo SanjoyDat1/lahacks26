@@ -1,0 +1,2 @@
+"""Integration adapters (MCP, etc.)."""
+

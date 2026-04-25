@@ -1,0 +1,812 @@
+{
+  "version": 1,
+  "file_mtimes": {
+    "context/constraints.md": 1777138976.7483895,
+    "context/open_questions.md": 1777138955.760018,
+    "decisions/decision_log.md": 1777138925.3856277,
+    "goals/product_goals.md": 1777138906.007623,
+    "index.md": 1777138873.3533173,
+    "map.md": 1777138976.5510526,
+    "summaries/project_summary.md": 1777138889.9981472
+  },
+  "sections": [
+    {
+      "file_path": "context/constraints.md",
+      "section_id": "context/constraints.md#_intro",
+      "heading": "Intro",
+      "content": "# Constraints",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions/decision_log.md",
+          "context/open_questions.md",
+          "goals/product_goals.md"
+        ],
+        "keywords": [
+          "constraints",
+          "scope",
+          "data sources",
+          "privacy",
+          "reliability"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/constraints.md",
+      "section_id": "context/constraints.md#product-scope-features",
+      "heading": "Product Scope & Features",
+      "content": "*   The initial pilot release scope is limited to displaying a personalized class schedule (with a schoolwide fallback), front-office approved announcements, lunch menu information, and club/activity calendar items.\n*   The home screen must be centered on today's schedule, announcements, and lunch information.\n*   Push notifications are strictly limited to urgent announcements, schedule changes, and emergency alerts. General club meetings or lunch menu updates will not trigger notifications.\n*   Direct student-to-teacher messaging is explicitly not approved for the first release.\n*   Student comment threads on announcements are not approved for the first release.\n*   The app will not include or store gradebook, attendance, discipline, or counseling information.\n*   The app must avoid features that would create new moderation work for faculty in the first release.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions/decision_log.md",
+          "context/open_questions.md",
+          "goals/product_goals.md"
+        ],
+        "keywords": [
+          "constraints",
+          "scope",
+          "data sources",
+          "privacy",
+          "reliability"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/constraints.md",
+      "section_id": "context/constraints.md#data-integration",
+      "heading": "Data & Integration",
+      "content": "*   Student schedule data is sourced from a nightly Student Information System (SIS) CSV export.\n*   Announcement data is pulled from the front-office Google Sheet, and only rows explicitly marked \"approved\" by office staff will sync into the app.\n*   Lunch menu data is sourced from the cafeteria vendor feed or weekly PDF.\n*   Club and activity calendar data is sourced from the activities calendar maintained by student activities.\n*   Student authentication uses district Google accounts.\n*   Emergency alerts must originate from the district emergency notification system. Campus Companion will only display *approved* alerts and is not the official source of truth for emergencies. App copy must reflect that alerts are mirrored from the district system.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions/decision_log.md",
+          "context/open_questions.md",
+          "goals/product_goals.md"
+        ],
+        "keywords": [
+          "constraints",
+          "scope",
+          "data sources",
+          "privacy",
+          "reliability"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/constraints.md",
+      "section_id": "context/constraints.md#privacy-security",
+      "heading": "Privacy & Security",
+      "content": "*   The app must not store grades, attendance, discipline records, medical notes, or private counseling data.\n*   Only the minimum profile information required for the pilot will be stored: student name, school email, grade level, and schedule identifiers.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions/decision_log.md",
+          "context/open_questions.md",
+          "goals/product_goals.md"
+        ],
+        "keywords": [
+          "constraints",
+          "scope",
+          "data sources",
+          "privacy",
+          "reliability"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/constraints.md",
+      "section_id": "context/constraints.md#user-experience-reliability",
+      "heading": "User Experience & Reliability",
+      "content": "*   The app must remain usable and display a friendly message (e.g., \"Menu not available yet\") if the lunch menu data is missing or late. Missing lunch data must not block other app features.\n*   The schedule card must remain useful (e.g., by falling back to the schoolwide bell schedule) even if a student's personal schedule has not yet loaded.\n*   Student Google account activation is a launch dependency, and clear instructions must be provided to students (especially ninth graders) before the app's launch.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions/decision_log.md",
+          "context/open_questions.md",
+          "goals/product_goals.md"
+        ],
+        "keywords": [
+          "constraints",
+          "scope",
+          "data sources",
+          "privacy",
+          "reliability"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/constraints.md",
+      "section_id": "context/constraints.md#operational-process",
+      "heading": "Operational & Process",
+      "content": "*   Ms. Dana Alvarez (Assistant Principal) is the designated approval owner for schoolwide announcements during the spring pilot.\n*   A front office approval workflow is required for all announcements to appear in the app.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions/decision_log.md",
+          "context/open_questions.md",
+          "goals/product_goals.md"
+        ],
+        "keywords": [
+          "constraints",
+          "scope",
+          "data sources",
+          "privacy",
+          "reliability"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/constraints.md",
+      "section_id": "context/constraints.md#updates",
+      "heading": "Updates",
+      "content": "- 2026-04-25: Counseling must send activation instructions before the Campus Companion pilot. ([meeting](https://meetings.example.test/platform-sync))",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions/decision_log.md",
+          "context/open_questions.md",
+          "goals/product_goals.md"
+        ],
+        "keywords": [
+          "constraints",
+          "scope",
+          "data sources",
+          "privacy",
+          "reliability"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/open_questions.md",
+      "section_id": "context/open_questions.md#_intro",
+      "heading": "Intro",
+      "content": "# Open Questions",
+      "frontmatter": {
+        "id": "context.open_questions",
+        "type": "context",
+        "title": "Open Questions",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "decisions/decision_log.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "open questions",
+          "unknowns",
+          "future work"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "context/open_questions.md",
+      "section_id": "context/open_questions.md#product-integration-questions",
+      "heading": "Product & Integration Questions",
+      "content": "- Can bus route reminders be published through Campus Companion in the first release? (Transportation department needs to confirm if route change data can be integrated and published.)\n- What is the confirmed launch plan for students, especially ninth graders, who have not yet activated their district Google accounts? (Counseling department needs to confirm the strategy.)\n- After the pilot, should students be able to follow individual clubs to receive optional notifications? (Student activities needs to decide on this feature.)",
+      "frontmatter": {
+        "id": "context.open_questions",
+        "type": "context",
+        "title": "Open Questions",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "decisions/decision_log.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "open questions",
+          "unknowns",
+          "future work"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "decisions/decision_log.md",
+      "section_id": "decisions/decision_log.md#_intro",
+      "heading": "Intro",
+      "content": "# Decision Log\n\nThis file lists durable product and architecture decisions for the Campus Companion project.",
+      "frontmatter": {
+        "id": "decisions.decision_log",
+        "type": "decision_log",
+        "title": "Decision Log",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "decisions",
+          "rationale",
+          "product",
+          "architecture",
+          "scope"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "decisions/decision_log.md",
+      "section_id": "decisions/decision_log.md#active-decisions",
+      "heading": "Active Decisions",
+      "content": "| ID | Decision | Status | Link |\n| --- | --- | --- | --- |\n| DEC-001 | First Release Scope: Centered on schedule, announcements, lunch, and club calendar. | Accepted | |\n| DEC-002 | Schedule Fallback: App falls back to schoolwide bell schedule if personal schedule is unavailable. | Accepted | |\n| DEC-003 | Announcement Approval: All announcements require front-office approval before publication. | Accepted | |\n| DEC-004 | Limited Push Notifications: Only for urgent announcements, schedule changes, and emergency alerts. | Accepted | |\n| DEC-005 | Authentication: Use district Google accounts for student login. | Accepted | |\n| DEC-006 | Missing Lunch Data: Display \"Menu not available yet\" without blocking app use if data is missing. | Accepted | |\n| DEC-007 | No Direct Messaging: Direct student-to-teacher messaging is excluded from Release One. | Accepted | |\n| DEC-008 | Data Privacy: Do not store grades, attendance, discipline, medical, or counseling data. | Accepted | |\n| DEC-009 | Emergency Alerts: Mirror approved alerts from the district system; Campus Companion is not the source. | Accepted | |\n| DEC-010 | Minimum Profile Data: Store only name, school email, grade level, and schedule identifiers. | Accepted | |",
+      "frontmatter": {
+        "id": "decisions.decision_log",
+        "type": "decision_log",
+        "title": "Decision Log",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "decisions",
+          "rationale",
+          "product",
+          "architecture",
+          "scope"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "decisions/decision_log.md",
+      "section_id": "decisions/decision_log.md#decision-rules",
+      "heading": "Decision Rules",
+      "content": "- Do not delete old decisions.\n- If a decision changes, write a new ADR that supersedes the previous one.\n- Link decisions to impacted architecture files.\n- Keep decisions short enough that agents can scan them quickly.",
+      "frontmatter": {
+        "id": "decisions.decision_log",
+        "type": "decision_log",
+        "title": "Decision Log",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "decisions",
+          "rationale",
+          "product",
+          "architecture",
+          "scope"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "goals/product_goals.md",
+      "section_id": "goals/product_goals.md#_intro",
+      "heading": "Intro",
+      "content": "# Product Goals",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "goals/product_goals.md",
+      "section_id": "goals/product_goals.md#primary-goal",
+      "heading": "Primary Goal",
+      "content": "Help Northview High School students quickly access essential daily school information (schedule, announcements, lunch) from a single mobile app, reducing the need to check multiple sources.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "goals/product_goals.md",
+      "section_id": "goals/product_goals.md#user-facing-goals",
+      "heading": "User-Facing Goals",
+      "content": "- Students should be able to open the app and see today's bell schedule, current announcements, and lunch information without checking three different places.\n- Display personalized class schedules, with current periods highlighted, and fall back to the schoolwide bell schedule when personal data is unavailable.\n- Clearly label the type of bell schedule currently active (e.g., regular, advisory, late-start, assembly).\n- Show school announcements grouped by date, with urgent items pinned at the top.\n- Provide the lunch menu directly from the home screen.\n- Allow students to search the club and activity calendar.\n- Limit push notifications to urgent announcements, schedule changes, and emergency alerts, avoiding excessive alerts.\n- Present a friendly message when the lunch menu is not yet available, without blocking other app functionality.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "goals/product_goals.md",
+      "section_id": "goals/product_goals.md#launch-goals",
+      "heading": "Launch Goals",
+      "content": "- Successfully authenticate students using their district Google accounts.\n- Import student schedule data from nightly SIS CSV exports.\n- Sync school announcements from the front-office Google Sheet, publishing only rows marked \"approved\" by office staff.\n- Integrate the cafeteria vendor feed for lunch menus, displaying \"Menu not available yet\" if data is missing.\n- Include club and activity calendar items from the student activities calendar.\n- Ensure the home screen presents schedule first, announcements second, and lunch third.\n- Support a clear path for students, especially ninth graders, to activate district Google accounts for login.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "goals/product_goals.md",
+      "section_id": "goals/product_goals.md#non-goals-for-the-first-version",
+      "heading": "Non-Goals For The First Version",
+      "content": "- Direct student-to-teacher messaging.\n- Student comment threads on announcements.\n- Displaying or storing grades, attendance, discipline records, medical notes, or counseling information.\n- Sports game scores.\n- Homework display.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#_intro",
+      "heading": "Intro",
+      "content": "# Campus Companion Project Brain\n\nThis folder is a structured project brain for the Campus Companion mobile application. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.\n\nTreat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through [Brain Map](map.md).",
+      "frontmatter": {
+        "id": "campuscompanion.index",
+        "type": "index",
+        "title": "Campus Companion Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "goals.product_goals",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "student app context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#read-order-for-agents",
+      "heading": "Read Order For Agents",
+      "content": "1.  Read [Project Summary](summaries/project_summary.md) for the shortest useful context.\n2.  Read [Product Goals](goals/product_goals.md) and [Constraints](context/constraints.md) before changing scope.\n3.  Read [Decision Log](decisions/decision_log.md) before making design changes.\n4.  Read [Open Questions](context/open_questions.md) for current unknowns impacting the project.",
+      "frontmatter": {
+        "id": "campuscompanion.index",
+        "type": "index",
+        "title": "Campus Companion Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "goals.product_goals",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "student app context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#current-product-state",
+      "heading": "Current Product State",
+      "content": "Campus Companion is a mobile application for Northview High School students, designed to simplify access to daily school information. The pilot release focuses on providing students with their daily schedule, school announcements, and lunch information without needing to check multiple sources.\n\nKey features for the first release include:\n\n-   **Schedule**: Personalized class schedule, with a fallback to the schoolwide bell schedule if a personal schedule is unavailable. The app highlights the current period and shows the next.\n-   **Announcements**: School announcements pulled from a front-office Google Sheet, strictly limited to rows marked \"approved\" by office staff (Ms. Alvarez is the approval owner for the pilot).\n-   **Lunch**: Daily lunch menu from the cafeteria vendor feed. If the menu is not available, the app displays \"Menu not available yet\" without blocking other features.\n-   **Activities**: Club and activity calendar items available from the bottom navigation.\n-   **Notifications**: Push notifications are reserved only for urgent announcements, schedule changes, and emergency alerts. Other updates, like club meetings or lunch menus, remain in the app feed.\n\nAuthentication uses district Google accounts. Privacy is a core focus, with the app storing only minimal profile information (name, school email, grade level, schedule identifiers) and explicitly avoiding grades, attendance, discipline, medical, or counseling data. Direct student-to-teacher messaging is not approved for the first release. Campus Companion displays approved emergency alerts but is not the official source of truth for emergency notifications.",
+      "frontmatter": {
+        "id": "campuscompanion.index",
+        "type": "index",
+        "title": "Campus Companion Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "goals.product_goals",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "student app context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#important-links",
+      "heading": "Important Links",
+      "content": "-   [Brain Map](map.md)\n-   [Project Summary](summaries/project_summary.md)\n-   [Product Goals](goals/product_goals.md)\n-   [Decision Log](decisions/decision_log.md)\n-   [Constraints](context/constraints.md)\n-   [Open Questions](context/open_questions.md)",
+      "frontmatter": {
+        "id": "campuscompanion.index",
+        "type": "index",
+        "title": "Campus Companion Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "goals.product_goals",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "student app context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "map.md",
+      "section_id": "map.md#_intro",
+      "heading": "Intro",
+      "content": "# CampusCompanion Knowledge Map\n\nThis file is the visual navigation layer for the CampusCompanion brain. Humans can use it to understand the project shape. Agents can use it to decide which files to read next.\n\n```mermaid\nflowchart LR\n  Index[\"index.md\"] --> ProjectSummary[\"summaries/project_summary.md\"]\n  Index --> ProductGoals[\"goals/product_goals.md\"]\n  Index --> DecisionLog[\"decisions/decision_log.md\"]\n  Index --> Constraints[\"context/constraints.md\"]\n  Index --> OpenQuestions[\"context/open_questions.md\"]\n\n  ProjectSummary --> ProductGoals\n  ProductGoals --> Constraints\n  ProductGoals --> OpenQuestions\n  DecisionLog --> Constraints\n  DecisionLog --> OpenQuestions\n  Constraints --> OpenQuestions\n```",
+      "frontmatter": {
+        "id": "campuscompanion.map",
+        "type": "map",
+        "title": "CampusCompanion Knowledge Map",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "campuscompanion.index",
+          "summaries.project_summary",
+          "goals.product_goals",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions",
+          "campuscompanion.map"
+        ],
+        "keywords": [
+          "graph",
+          "map",
+          "backlinks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "map.md",
+      "section_id": "map.md#map-rules",
+      "heading": "Map Rules",
+      "content": "- Every important file should be reachable from `index.md` or this map.\n- New durable decisions should link from [Decision Log](decisions/decision_log.md).\n- New constraints should link from [Constraints](context/constraints.md).\n- New open questions should link from [Open Questions](context/open_questions.md).",
+      "frontmatter": {
+        "id": "campuscompanion.map",
+        "type": "map",
+        "title": "CampusCompanion Knowledge Map",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "campuscompanion.index",
+          "summaries.project_summary",
+          "goals.product_goals",
+          "decisions.decision_log",
+          "context.constraints",
+          "context.open_questions",
+          "campuscompanion.map"
+        ],
+        "keywords": [
+          "graph",
+          "map",
+          "backlinks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#_intro",
+      "heading": "Intro",
+      "content": "# Project Summary\n\nCampus Companion is a mobile application designed for Northview High School students. Its primary goal for the initial pilot is to simplify access to essential daily school information, allowing students to quickly find today's bell schedule, current announcements, and lunch details without consulting multiple sources.\n\nThe pilot focuses on providing practical, school-day information and avoiding features that would create new moderation work for faculty. It is being piloted at Northview High School, with a clear scope for its first release.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "decisions/decision_log.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context",
+          "CampusCompanion",
+          "mobile app",
+          "pilot",
+          "Northview High School"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#pilot-scope-current-state",
+      "heading": "Pilot Scope & Current State",
+      "content": "The Campus Companion pilot release focuses on the following features and capabilities:\n\n*   **Personalized Class Schedule:** Students can view their personal class schedule. If a personal schedule is unavailable, the app defaults to the schoolwide bell schedule, highlighting the current period and showing the next. Supports various schedule types (regular, advisory, late-start, assembly).\n*   **School Announcements:** Displays announcements pulled from the front-office Google Sheet, strictly limited to rows marked \"approved\" by office staff (Ms. Alvarez is the approval owner for the pilot). Urgent items are pinned.\n*   **Lunch Menu:** Shows the daily lunch menu from the cafeteria vendor feed. If the menu is not yet available, a \"Menu not available yet\" message is displayed without blocking other app functionality.\n*   **Club and Activity Calendar:** Provides access to club and activity events, available via bottom navigation.\n*   **Limited Push Notifications:** Notifications are reserved for urgent announcements, schedule changes, and emergency alerts only. General club meetings or lunch updates do not trigger notifications.\n*   **Home Screen Layout:** The main home screen prominently features today's schedule, announcements, and lunch information.\n*   **Accessibility:** Schedule cards support dynamic text size, the announcement list reads cleanly with VoiceOver, and urgent items are marked without relying solely on color.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "decisions/decision_log.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context",
+          "CampusCompanion",
+          "mobile app",
+          "pilot",
+          "Northview High School"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#key-pilot-dependencies-known-edge-cases",
+      "heading": "Key Pilot Dependencies & Known Edge Cases",
+      "content": "*   **Student Google Account Activation:** Authentication uses district Google accounts. Ninth graders who haven't accepted district account terms may face initial sign-in issues. Counseling needs to provide reminder instructions and a launch plan.\n*   **Late Lunch Menu PDFs:** The cafeteria vendor sometimes publishes weekly PDFs late. The app handles this gracefully by displaying \"Menu not available yet\" and allowing other features to function.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "decisions/decision_log.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context",
+          "CampusCompanion",
+          "mobile app",
+          "pilot",
+          "Northview High School"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#pilot-guiding-principles-constraints",
+      "heading": "Pilot Guiding Principles & Constraints",
+      "content": "Before implementing changes or expanding features, review these core principles and constraints for the Campus Companion pilot:\n\n*   **Release-One Scope:** Adhere strictly to the approved features: personalized/schoolwide schedule, office-approved announcements, lunch menu, club/activity calendar, and limited push notifications. Features like direct student-to-teacher messaging, student comment threads, gradebook, attendance, discipline, or counseling information are explicitly excluded from this release.\n*   **Data Privacy:** The app will only store minimal profile information (name, school email, grade level, schedule identifiers) and will NOT store grades, attendance, discipline records, medical notes, or private counseling data.\n*   **Emergency Alerts:** Campus Companion may display *approved* emergency alerts, but it is not the official source of truth for emergencies. The district emergency notification system remains the authoritative source, and app copy should reflect this.\n*   **Notification Strategy:** Prioritize user experience by limiting push notifications to urgent announcements, schedule changes, and emergency alerts. Avoid excessive notifications for routine updates.\n*   **Faculty Approval for Announcements:** All announcements must be marked \"approved\" by front office staff before appearing in the app.\n*   **No Direct Messaging:** Direct student-to-teacher messaging is not permitted in the first release.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "decisions/decision_log.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context",
+          "CampusCompanion",
+          "mobile app",
+          "pilot",
+          "Northview High School"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#open-questions",
+      "heading": "Open Questions",
+      "content": "*   **Bus Route Reminders:** Transportation has not yet confirmed if bus route reminders can be published to students through Campus Companion.\n*   **Optional Club Notifications:** Student activities needs to decide if students can opt-in to follow individual clubs for optional notifications after the pilot phase.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md",
+          "goals/product_goals.md",
+          "decisions/decision_log.md",
+          "context/constraints.md",
+          "context/open_questions.md",
+          "map.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context",
+          "CampusCompanion",
+          "mobile app",
+          "pilot",
+          "Northview High School"
+        ]
+      },
+      "source_kind": null
+    }
+  ]
+}

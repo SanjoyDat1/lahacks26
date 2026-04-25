@@ -1,0 +1,19 @@
+From: ops@example.org
+To: platform@example.org
+Subject: Demo day operations constraints
+Date: Fri, 24 Apr 2026 21:15:00 -0700
+
+Team,
+
+Copying the same rough notes here because a few people still search mail instead of Notion.
+
+Please keep app.lahacks.dev as the public domain during demo day. The callback path that has already been cleared is https://app.lahacks.dev/callback, and changing it during judging will create a lot of coordination work.
+
+Finance only needs hacker id, school, payment status, and reviewer initials for the reimbursement CSV. Extra internal notes are okay, but should not become mandatory fields.
+
+We still need to confirm who takes command if the registration kiosks back up. The staffing sheet does not answer that cleanly.
+
+The Devpost backup/export owner is also still unclear if the Airtable sync fails.
+
+Thanks,
+Ops

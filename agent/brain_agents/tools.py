@@ -4,12 +4,15 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import TYPE_CHECKING, List
 
 import yaml
 from langchain_core.tools import tool
 
-from .retrieval import RetrievalHit, Retriever
+from .retrieval import RetrievalHit
+from .services.retrieval_service import retrieval_service
+if TYPE_CHECKING:
+    from .retrieval import Retriever
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,21 +69,8 @@ def _parse_frontmatter_and_body(text: str) -> tuple[dict, str]:
     return fm, body
 
 
-# Lazy, process-wide cache of Retriever instances keyed by brain root path.
-# Building the index + loading BGE weights costs ~seconds; we only want to pay
-# that price once per (process, brain_root) pair. The Retriever itself is
-# safe to share across calls — query() is read-only and the BGE encoder is
-# stateless after corpus encoding.
-_RETRIEVER_CACHE: dict[str, Retriever] = {}
-
-
 def _get_retriever(brain_root: Path) -> Retriever:
-    key = str(brain_root.resolve())
-    r = _RETRIEVER_CACHE.get(key)
-    if r is None:
-        r = Retriever(brain_root=brain_root)
-        _RETRIEVER_CACHE[key] = r
-    return r
+    return retrieval_service.get(brain_root)
 
 
 def _format_hits(hits: list[RetrievalHit]) -> str:
@@ -178,6 +168,24 @@ def build_all_tools(ctx: BrainContext) -> list:
         return yaml.dump(fm, default_flow_style=False, sort_keys=True)
 
     @tool
+    def upsert_working_file(relative_path: str, new_content: str) -> str:
+        """
+        Create or replace a Markdown file in the working brain.
+
+        Use this when updating the knowledge base requires a new note or a full
+        rewrite of an existing note. Paths are relative to the working brain.
+        """
+        p = _safe_join(wk, relative_path)
+        if p.suffix.lower() != ".md":
+            return "Refuse: only .md files are allowed"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        existed = p.exists()
+        p.write_text(new_content, encoding="utf-8")
+        retrieval_service.invalidate(wk)
+        action = "Updated" if existed else "Created"
+        return f"{action} {relative_path} ({len(new_content)} chars)."
+
+    @tool
     def replace_working_file(relative_path: str, new_content: str) -> str:
         """
         Replace the full contents of an **existing** Markdown file in the working brain.
@@ -189,6 +197,7 @@ def build_all_tools(ctx: BrainContext) -> list:
         if p.suffix.lower() != ".md":
             return "Refuse: only .md files are allowed"
         p.write_text(new_content, encoding="utf-8")
+        retrieval_service.invalidate(wk)
         return f"Wrote {relative_path} ({len(new_content)} chars)."
 
     @tool
@@ -311,6 +320,7 @@ def build_all_tools(ctx: BrainContext) -> list:
         read_working_file,
         search_working_brain,
         get_working_frontmatter,
+        upsert_working_file,
         replace_working_file,
         semantic_search,
         get_brief,
@@ -339,6 +349,7 @@ _READER_TOOL_NAMES: frozenset[str] = frozenset(
 
 _WRITER_TOOL_NAMES: frozenset[str] = frozenset(
     {
+        "upsert_working_file",
         "replace_working_file",
         "propose_update",
         "record_audit",
@@ -352,5 +363,5 @@ def build_reader_toolkit(ctx: BrainContext) -> list:
 
 
 def build_writer_toolkit(ctx: BrainContext) -> list:
-    """Write-side toolkit: file replacement + reconciliation planning + audit."""
+    """Write-side toolkit: knowledge-base writes + reconciliation planning + audit."""
     return [t for t in build_all_tools(ctx) if t.name in _WRITER_TOOL_NAMES]

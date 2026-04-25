@@ -1,0 +1,27 @@
+Email: Student pilot feedback after first walkthrough
+From: student-advisory-board@northview.example.edu
+To: campus-companion-team@example.edu
+Date: 2026-03-13
+
+Hi Campus Companion team,
+
+We showed the prototype to the student advisory board during lunch. Overall, students understood the app quickly because it matched problems they already have: knowing which bell schedule is running, finding announcements that are not buried in email, and checking lunch without searching the cafeteria website.
+
+Most useful features according to students:
+- The current-period highlight on the schedule card
+- A clear label when the school is on an advisory, late-start, assembly, or regular schedule
+- Announcements grouped by date with urgent items pinned at the top
+- Lunch menu visible from the home screen
+- Club calendar searchable by club name
+
+Students asked for a few additions, but we know they may not be release-one items. The most common requests were bus route reminders, sports game scores, and a way to message teachers. Several students also asked whether the app could show homework, but nobody expected that in the pilot.
+
+One concern: students do not want too many push notifications. The advisory board preferred notifications only for urgent announcements, schedule changes, and emergency alerts. They specifically said club meetings should stay in the app unless a student chooses to follow a club later.
+
+Pilot readiness notes:
+- Please show a friendly message if the lunch menu is not available yet.
+- Please explain Google account activation before launch, especially for ninth graders.
+- Please keep the schedule card useful even when personal schedules have not loaded.
+
+Thanks,
+Northview Student Advisory Board

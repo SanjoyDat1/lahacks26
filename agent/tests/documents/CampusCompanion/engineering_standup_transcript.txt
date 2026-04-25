@@ -1,0 +1,30 @@
+Engineering Standup Transcript: Campus Companion Mobile App
+Date: 2026-03-11
+
+Context: Morning engineering sync for the first pilot release at Northview High School. Transcript is lightly cleaned for readability.
+
+Mina: The main goal for the pilot is still simple. Students should be able to open the app and see today's bell schedule, current announcements, and lunch information without checking three different places.
+
+Jordan: Schedule data is coming from the student information system export. For the pilot, we are importing a nightly CSV that includes period name, start time, end time, room, teacher, and whether the day is a regular, advisory, late-start, or assembly schedule.
+
+Priya: I finished the schedule card for iOS and Android. It highlights the current period and shows the next period beneath it. If the student has no personal schedule loaded yet, the app falls back to the schoolwide bell schedule.
+
+Mina: Good. That fallback should be documented as expected behavior, not an error state.
+
+Ethan: Announcements are pulled from the front-office Google Sheet for now. We are only syncing rows marked "approved" by an office staff member. Draft rows should never appear in the app.
+
+Jordan: Do we have the approval owner? I heard Ms. Alvarez from the office is reviewing announcements, but clubs keep emailing Mr. Chen.
+
+Mina: Ms. Alvarez is the approval owner for schoolwide announcements during pilot. Mr. Chen can collect club submissions, but the app should only publish after the office approval flag is set.
+
+Priya: Push notifications are limited to urgent announcements, schedule changes, and emergency alerts. We should not send a notification for every club meeting or lunch menu update.
+
+Ethan: Agreed. The notification categories are urgent announcement, schedule change, and emergency alert. Everything else stays in the feed.
+
+Mina: Any blocker for launch?
+
+Jordan: Student login is the only real blocker. We can authenticate with district Google accounts, but ninth graders who have not accepted the district account terms will fail the first sign-in. Counseling is going to send reminder instructions.
+
+Priya: Also, the lunch menu provider sometimes publishes weekly PDFs late. If the menu is missing, we show "Menu not available yet" and keep the rest of the home screen working.
+
+Mina: Capture both items: Google account activation is a launch dependency, and missing lunch PDFs should not block app use.

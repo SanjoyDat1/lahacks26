@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import Literal
+import json
+from collections.abc import AsyncGenerator
+from typing import Any, Literal
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langgraph.prebuilt import create_react_agent
 
 from .config import Settings, ensure_working_brain, load_settings
-from .llm import make_chat_model, print_gemini_thinking
+from .llm import make_chat_model, print_model_thinking
 from .tools import BrainContext, build_reader_toolkit, build_writer_toolkit
 
 
@@ -21,7 +23,7 @@ You have **read** tools only (list/search/read for reference and working). Do no
 
 WRITER_SYSTEM = """You are the **Writer** agent. You may only change the **working brain** (not the `brian/` example).
 
-You have a single tool: `replace_working_file`, which overwrites an **existing** file. Preserve valid YAML frontmatter when you edit. Link related notes when appropriate, following the patterns in the reference example you can infer from context.
+Use `replace_working_file` to overwrite an **existing** file, or `upsert_working_file` when a knowledge-base update needs to create a new Markdown note. Preserve valid YAML frontmatter when you edit. Link related notes when appropriate, following the patterns in the reference example you can infer from context.
 
 If the user request is ambiguous, ask a short clarifying question before writing. Otherwise, make the minimal edit that satisfies the request."""
 
@@ -48,7 +50,7 @@ def _last_ai_text(messages: list[BaseMessage]) -> str:
 def _print_agent_thinking(messages: list[BaseMessage], label: str) -> None:
     for index, message in enumerate(messages, 1):
         if isinstance(message, AIMessage):
-            print_gemini_thinking(message, f"{label} message {index}")
+            print_model_thinking(message, f"{label} message {index}")
 
 
 def _prepare_user_message(
@@ -61,8 +63,189 @@ def _prepare_user_message(
     return HumanMessage(
         f"(Task: UPDATE working brain — not the reference.)\n\n{user}\n\n"
         "Start by listing or searching the **working** brain, then read files you need. "
-        "The next step (Writer) can apply `replace_working_file` only."
+        "The next step (Writer) can apply `replace_working_file` or `upsert_working_file`."
     )
+
+
+def _extract_content_blocks(content: object) -> tuple[list[str], list[str]]:
+    """Return (text_chunks, thinking_chunks) from a message content block."""
+    texts: list[str] = []
+    thoughts: list[str] = []
+    if isinstance(content, str):
+        if content:
+            texts.append(content)
+    elif isinstance(content, list):
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type", "")
+            if btype == "text":
+                t = block.get("text", "")
+                if t:
+                    texts.append(t)
+            elif btype in ("thinking", "reasoning"):
+                t = block.get("thinking") or block.get("reasoning") or block.get("text", "")
+                if t:
+                    thoughts.append(str(t))
+    return texts, thoughts
+
+
+async def run_task_streaming(
+    user: str,
+    task: Literal["query", "update"],
+    settings: Settings | None = None,
+) -> AsyncGenerator[dict[str, Any], None]:
+    """Async generator yielding structured streaming events for the agent run.
+
+    Event shapes emitted:
+    - {"type": "agent_start",  "agent": "reader"|"writer"}
+    - {"type": "tool_call",    "agent": ..., "tool": ..., "input": {...}, "run_id": ...}
+    - {"type": "tool_result",  "agent": ..., "tool": ..., "output": ..., "run_id": ...}
+    - {"type": "token",        "agent": ..., "content": ...}
+    - {"type": "thinking",     "agent": ..., "content": ...}
+    - {"type": "agent_end",    "agent": ..., "text": ...}
+    - {"type": "done",         "result": ...}
+    - {"type": "error",        "message": ...}
+    """
+    s = settings or load_settings(validate=True)
+    ensure_working_brain(s.brian_reference_dir, s.brain_dir)
+    model = make_chat_model(s)
+    ctx = BrainContext(s.brian_reference_dir, s.brain_dir)
+
+    reader = create_react_agent(
+        model,
+        build_reader_toolkit(ctx),
+        prompt=SystemMessage(READER_SYSTEM),  # type: ignore[call-arg]
+    )
+    m0 = _prepare_user_message(user, task)
+
+    yield {"type": "agent_start", "agent": "reader"}
+
+    final_messages: list[BaseMessage] = []
+
+    async for event in reader.astream_events({"messages": [m0]}, version="v2"):
+        etype: str = event["event"]
+        ename: str = event.get("name", "")
+        edata: dict[str, Any] = event.get("data", {}) or {}
+
+        if etype == "on_tool_start":
+            inp = edata.get("input") or {}
+            if not isinstance(inp, dict):
+                inp = {"value": str(inp)}
+            yield {
+                "type": "tool_call",
+                "agent": "reader",
+                "tool": ename,
+                "input": inp,
+                "run_id": event.get("run_id", ""),
+            }
+
+        elif etype == "on_tool_end":
+            raw_out = edata.get("output")
+            if raw_out is None:
+                out_text = ""
+            elif hasattr(raw_out, "content"):
+                out_text = str(raw_out.content)
+            else:
+                out_text = str(raw_out)
+            yield {
+                "type": "tool_result",
+                "agent": "reader",
+                "tool": ename,
+                "output": out_text[:3000],
+                "run_id": event.get("run_id", ""),
+            }
+
+        elif etype == "on_chat_model_stream":
+            chunk = edata.get("chunk")
+            if chunk:
+                texts, thoughts = _extract_content_blocks(chunk.content)
+                for t in texts:
+                    yield {"type": "token", "agent": "reader", "content": t}
+                for t in thoughts:
+                    yield {"type": "thinking", "agent": "reader", "content": t}
+
+        elif etype == "on_chain_end" and ename == "LangGraph":
+            out = edata.get("output") or {}
+            final_messages = list(out.get("messages", []))
+
+    reader_text = _last_ai_text(final_messages) if final_messages else ""
+    yield {"type": "agent_end", "agent": "reader", "text": reader_text}
+
+    if task == "query":
+        yield {"type": "done", "result": reader_text}
+        return
+
+    # ── Writer phase ──────────────────────────────────────────────────────────
+    yield {"type": "agent_start", "agent": "writer"}
+
+    writer = create_react_agent(
+        model,
+        build_writer_toolkit(ctx),
+        prompt=SystemMessage(WRITER_SYSTEM),  # type: ignore[call-arg]
+    )
+
+    writer_messages: list[BaseMessage] = [
+        *final_messages,
+        HumanMessage(
+            "Apply the user's request by calling `replace_working_file` for existing "
+            "working-brain notes or `upsert_working_file` when a new Markdown note is needed. "
+            "If nothing should change, say so. "
+            f"Original user request: {user}"
+        ),
+    ]
+
+    final_writer_messages: list[BaseMessage] = []
+
+    async for event in writer.astream_events({"messages": writer_messages}, version="v2"):
+        etype = event["event"]
+        ename = event.get("name", "")
+        edata = event.get("data", {}) or {}
+
+        if etype == "on_tool_start":
+            inp = edata.get("input") or {}
+            if not isinstance(inp, dict):
+                inp = {"value": str(inp)}
+            yield {
+                "type": "tool_call",
+                "agent": "writer",
+                "tool": ename,
+                "input": inp,
+                "run_id": event.get("run_id", ""),
+            }
+
+        elif etype == "on_tool_end":
+            raw_out = edata.get("output")
+            if raw_out is None:
+                out_text = ""
+            elif hasattr(raw_out, "content"):
+                out_text = str(raw_out.content)
+            else:
+                out_text = str(raw_out)
+            yield {
+                "type": "tool_result",
+                "agent": "writer",
+                "tool": ename,
+                "output": out_text[:3000],
+                "run_id": event.get("run_id", ""),
+            }
+
+        elif etype == "on_chat_model_stream":
+            chunk = edata.get("chunk")
+            if chunk:
+                texts, thoughts = _extract_content_blocks(chunk.content)
+                for t in texts:
+                    yield {"type": "token", "agent": "writer", "content": t}
+                for t in thoughts:
+                    yield {"type": "thinking", "agent": "writer", "content": t}
+
+        elif etype == "on_chain_end" and ename == "LangGraph":
+            out = edata.get("output") or {}
+            final_writer_messages = list(out.get("messages", []))
+
+    writer_text = _last_ai_text(final_writer_messages) if final_writer_messages else ""
+    yield {"type": "agent_end", "agent": "writer", "text": writer_text}
+    yield {"type": "done", "result": writer_text}
 
 
 def run_task(
@@ -98,8 +281,9 @@ def run_task(
             "messages": [
                 *messages,
                 HumanMessage(
-                    "Apply the user's request by calling `replace_working_file` on the "
-                    "right existing path(s) under the working brain. If nothing should change, say so. "
+                    "Apply the user's request by calling `replace_working_file` for existing "
+                    "working-brain notes or `upsert_working_file` when a new Markdown note is needed. "
+                    "If nothing should change, say so. "
                     f"Original user request: {user}"
                 ),
             ]
