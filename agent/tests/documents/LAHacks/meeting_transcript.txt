@@ -1,0 +1,26 @@
+Meeting Transcript: LA Hacks Platform Sync
+Date: 2026-04-24
+
+Raw transcript exported from the video call. Speaker labels are approximate.
+
+Alex: Okay, we have thirty minutes and three different lists. The registration people keep asking when the data stops moving. I told them Tuesday late afternoon, but I want to write it down somewhere real because otherwise someone will import a new CSV at midnight.
+
+Maya: Five Pacific on Tuesday is the cutoff I have been using. After that, fixes are manual exceptions. It is not ideal, but it keeps badge printing from turning into chaos.
+
+Taylor: On the brain thing, the retrieval demo looked fine when the machine had models cached, but we need a boring fallback. If the fancy embedding path fails, the local demo still has to answer something useful from keyword-ish search. Nobody wants the judging laptop to spend fifteen minutes downloading weights.
+
+Maya: I thought the plan was BGE first and then BM25 if it cannot load?
+
+Taylor: Yes, that is what I meant. BGE when available, BM25 fallback when not. The important part is that the demo should not require network or a GPU.
+
+Priya: For Slack ingestion, I care less about every emoji reaction and more about being able to explain where a fact came from. Channel, sender, timestamp, and the thread link are the metadata I would want preserved. If we only save message text, the brain will be hard to audit later.
+
+Omar: Meetings are worse. I tried direct calendar scraping last night because it sounded easy, and it fell over on private events plus duplicate recurring meetings. I reverted that branch. I would rather upload transcript text manually for the demo than pretend calendar sync is solved.
+
+Alex: Mentor matching is still fuzzy. The event platform has the structured preferences, Airtable has the latest manual edits, and I do not know which one should win. Please do not encode that as settled.
+
+Maya: So open question there: mentor matching source of truth is undecided. We can phrase it that way.
+
+Taylor: Another non-decision: the reimbursement CSV format is coming from ops, not platform. We can consume it once they send it.
+
+Alex: Last thing, if the registration kiosk line gets ugly, who calls the incident? I heard "ops lead" and "front desk captain" from different people.

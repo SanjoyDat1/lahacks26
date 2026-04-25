@@ -1,0 +1,29 @@
+Email: Notes from ops before the demo walk-through
+From: ops@example.org
+Date: 2026-04-24
+
+Hi platform team,
+
+Dropping a few notes here before they get lost in the hallway conversations.
+
+First, for the public callback URLs, please keep using app.lahacks.dev during demo day. The shorter staging URL was convenient in testing, but it is not what we sent to the university IT folks. The one callback path we already cleared is https://app.lahacks.dev/callback, and I would prefer not to ask for another approval while judging is in progress.
+
+Second, reimbursement review is going through finance again. I know the product screen says "export all fields", but finance only asked for hacker id, school, payment status, and reviewer initials. If the export includes extra notes, that is probably okay for internal review, but please do not make those extra notes required.
+
+Third, I am still not sure who is the single person on point if the registration kiosks start backing up. We have a staffing grid, but not an incident commander name. It may be the front desk captain, or it may be whoever is wearing the ops radio. Please capture that as unresolved until we confirm it in tomorrow's walk-through.
+
+Finally, the Devpost backup is still a little hand-wavy. Last year the Airtable sync failed late and someone manually exported submissions. I do not know who owns that this time.
+
+Thanks,
+Ops
+Email: Demo day operations constraints
+From: ops@example.org
+Date: 2026-04-24
+
+Decision: use the app.lahacks.dev domain for all public callbacks during demo day.
+
+The OAuth callback domain must remain https://app.lahacks.dev/callback until judging is complete.
+
+Please make sure the reimbursement CSV export includes hacker id, school, payment status, and reviewer initials.
+
+Open question: do we need a separate incident commander for registration kiosks?
