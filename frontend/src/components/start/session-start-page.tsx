@@ -14,6 +14,7 @@ import {
   FileText,
   Folder,
   FolderOpen,
+  GitBranch,
   Loader2,
   Network,
   Send,
@@ -24,7 +25,16 @@ import {
   X,
 } from "lucide-react";
 
+import { githubReposForApi, type GithubRepoFormRow } from "@/lib/brain/github-ingest";
 import { cn } from "@/lib/utils";
+
+function newGithubRepoRow(): GithubRepoFormRow {
+  return {
+    id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `gh-${Date.now()}`,
+    url: "",
+    ref: "",
+  };
+}
 
 type UploadDoc = {
   id: string;
@@ -159,7 +169,9 @@ const INITIAL_EDGES: GraphEdge[] = [
 export function SessionStartPage() {
   const router = useRouter();
   const [docs, setDocs] = useState<UploadDoc[]>([]);
-  const prompt = "Build a transparent AI brain for this project from the uploaded documents.";
+  const [githubRepos, setGithubRepos] = useState<GithubRepoFormRow[]>(() => [newGithubRepoRow()]);
+  const prompt =
+    "Build a transparent AI brain for this project from the uploaded documents and any linked GitHub repository context.";
   const [isDragging, setIsDragging] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isDone, setIsDone] = useState(false);
@@ -180,6 +192,9 @@ export function SessionStartPage() {
   const thinkingEndRef = useRef<HTMLDivElement>(null);
 
   const totalChars = useMemo(() => docs.reduce((sum, doc) => sum + doc.chars, 0), [docs]);
+  const githubApiList = useMemo(() => githubReposForApi(githubRepos), [githubRepos]);
+  const hasBootstrapSource = docs.length > 0 || githubApiList.length > 0;
+  const sourceCount = docs.length + githubApiList.length;
   const buildMode = isRunning || isDone || createdFiles.length > 0;
   const completedStages = useMemo(() => {
     if (isDone) return STAGES.length;
@@ -233,6 +248,7 @@ export function SessionStartPage() {
       "Drop project docs here and I will turn them into a structured brain that agents can inspect.",
     ]);
     setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
+    setGithubRepos([newGithubRepoRow()]);
   }, []);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
@@ -377,7 +393,7 @@ export function SessionStartPage() {
   }, []);
 
   const runBootstrap = useCallback(() => {
-    if (!docs.length || isRunning || agentOnline === false) return;
+    if (!hasBootstrapSource || isRunning || agentOnline === false) return;
 
     setIsRunning(true);
     setIsDone(false);
@@ -391,6 +407,11 @@ export function SessionStartPage() {
     setResultText("");
     setThinking([
       "Creating a new session. I will stream every important step instead of hiding the setup behind a spinner.",
+      ...(githubApiList.length
+        ? [
+            `Including ${githubApiList.length} public GitHub repo${githubApiList.length === 1 ? "" : "s"} (clone + scan may take a bit).`,
+          ]
+        : []),
     ]);
 
     const ws = new WebSocket(resolveBootstrapWsUrl());
@@ -406,6 +427,8 @@ export function SessionStartPage() {
           mime_type,
           size,
         })),
+        github_repos: githubApiList,
+        clone_timeout_s: 300,
         overwrite: true,
         max_files: 24,
       }));
@@ -429,7 +452,7 @@ export function SessionStartPage() {
     ws.onclose = () => {
       setIsRunning(false);
     };
-  }, [agentOnline, docs, handleBootstrapEvent, isRunning, prompt]);
+  }, [agentOnline, docs, githubApiList, handleBootstrapEvent, hasBootstrapSource, isRunning, prompt]);
 
   return (
     <main className="relative min-h-[calc(100vh-57px)] overflow-hidden px-6 py-8">
@@ -461,7 +484,7 @@ export function SessionStartPage() {
               Drop files. Watch memory form.
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-500">
-              Turn messy project context into a navigable, agent-readable brain with a live Obsidian-style build trace.
+              Upload files, paste a public GitHub repo URL, or both — then watch context become a navigable, agent-readable brain with a live build trace.
             </p>
           </div>
 
@@ -480,14 +503,82 @@ export function SessionStartPage() {
             variant="hero"
           />
 
+          <div className="mt-5 w-full max-w-3xl rounded-[2rem] border border-slate-200/80 bg-white/70 p-5 shadow-sm backdrop-blur-xl">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
+                <GitBranch size={16} />
+              </span>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">GitHub repository</p>
+                <p className="text-xs text-slate-500">Public HTTPS links only — cloned shallow, scanned like a PDF bundle.</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {githubRepos.map((row, index) => (
+                <div key={row.id} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <label className="block min-w-0 flex-1">
+                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                      Repo URL {githubRepos.length > 1 ? `#${index + 1}` : ""}
+                    </span>
+                    <input
+                      type="url"
+                      placeholder="https://github.com/owner/repo"
+                      value={row.url}
+                      disabled={isRunning}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, url: v } : r)));
+                      }}
+                      className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none ring-violet-500/0 transition focus:ring-2 focus:ring-violet-500/30"
+                    />
+                  </label>
+                  <label className="block w-full sm:w-36">
+                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch (opt.)</span>
+                    <input
+                      type="text"
+                      placeholder="main"
+                      value={row.ref}
+                      disabled={isRunning}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, ref: v } : r)));
+                      }}
+                      className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-violet-500/30"
+                    />
+                  </label>
+                  {githubRepos.length > 1 && (
+                    <button
+                      type="button"
+                      disabled={isRunning}
+                      onClick={() => setGithubRepos((prev) => prev.filter((r) => r.id !== row.id))}
+                      className="rounded-xl border border-slate-200/80 px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {githubRepos.length < 4 && (
+              <button
+                type="button"
+                disabled={isRunning}
+                onClick={() => setGithubRepos((prev) => [...prev, newGithubRepoRow()])}
+                className="mt-3 text-xs font-semibold text-violet-600 hover:text-violet-800 disabled:opacity-50"
+              >
+                + Add another repository
+              </button>
+            )}
+          </div>
+
           <div className="mt-6 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <AgentStatus online={agentOnline} compact />
             <button
               onClick={runBootstrap}
-              disabled={!docs.length || isRunning || agentOnline === false}
+              disabled={!hasBootstrapSource || isRunning || agentOnline === false}
               className={cn(
                 "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all",
-                docs.length && !isRunning && agentOnline !== false
+                hasBootstrapSource && !isRunning && agentOnline !== false
                   ? "bg-violet-600 text-white shadow-lg shadow-violet-300/40 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-violet-400/50"
                   : "cursor-not-allowed bg-white/70 text-slate-400 ring-1 ring-slate-200/70",
               )}
@@ -515,7 +606,7 @@ export function SessionStartPage() {
                 </div>
               </div>
               <div className="grid grid-cols-3 gap-2">
-                <Metric label="Files in" value={docs.length.toString()} />
+                <Metric label="Sources in" value={sourceCount.toString()} />
                 <Metric label="Chars" value={formatCompact(totalChars)} />
                 <Metric label="Brain files" value={createdFiles.length.toString()} />
               </div>
@@ -618,7 +709,7 @@ function DocumentDropzone({
           Drop files here
         </p>
         <p className={cn("relative mt-2 max-w-md leading-6 text-slate-500", isHero ? "text-sm" : "text-xs")}>
-          Add docs, notes, transcripts, specs, JSON, code, or Markdown. The agent will convert them into a structured brain.
+          Add docs, notes, specs, code, Markdown — or use the GitHub section below. The agent turns it all into a structured brain.
         </p>
         <p className="relative mt-5 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
           .pdf .docx .pptx .xlsx .md .txt .json .yaml .csv .ts .tsx .py

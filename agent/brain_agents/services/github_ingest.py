@@ -12,7 +12,7 @@ from typing import Any
 
 from ..config import Settings, load_settings
 from . import agent_runner
-from ..builder import TEXT_EXTENSIONS
+from ..builder import TEXT_EXTENSIONS, SourceDocument
 
 # Directory names to skip when walking a cloned tree (lowercase).
 IGNORED_DIR_NAMES = {
@@ -511,6 +511,33 @@ def build_public_github_repo_context(
     }
 
 
+def github_repo_as_source_document(
+    repo_url: str,
+    *,
+    ref: str | None = None,
+    include_globs: list[str] | None = None,
+    exclude_globs: list[str] | None = None,
+    max_files: int = 200,
+    max_chars: int = 120_000,
+    clone_timeout_s: int = 300,
+) -> SourceDocument:
+    """Clone a public repo and return a single ``SourceDocument`` for ingestion graphs."""
+    ctx = build_public_github_repo_context(
+        repo_url,
+        ref=ref,
+        include_globs=include_globs,
+        exclude_globs=exclude_globs,
+        max_files=max_files,
+        max_chars=max_chars,
+        clone_timeout_s=clone_timeout_s,
+    )
+    owner = str(ctx["owner"])
+    name = str(ctx["repo"])
+    label = f"github-{owner}-{name}.md"
+    url = str(ctx.get("normalized_url") or "")
+    return SourceDocument(name=label, text=str(ctx["context"]), source_path=url or None)
+
+
 def ingest_public_github_repo(
     repo_url: str,
     *,
@@ -596,5 +623,6 @@ __all__ = [
     "select_ranked_text_files_for_ingest",
     "build_repo_ingest_prompt",
     "build_public_github_repo_context",
+    "github_repo_as_source_document",
     "ingest_public_github_repo",
 ]

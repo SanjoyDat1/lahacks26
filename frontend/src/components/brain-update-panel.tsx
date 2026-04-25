@@ -8,6 +8,7 @@ import {
   ChevronRight,
   FilePlus2,
   FileText,
+  GitBranch,
   Loader2,
   PenLine,
   Plus,
@@ -20,7 +21,20 @@ import {
   Zap,
 } from "lucide-react";
 
+import {
+  githubIngestFilename,
+  githubReposForApi,
+  type GithubRepoFormRow,
+} from "@/lib/brain/github-ingest";
 import { cn } from "@/lib/utils";
+
+function newGithubRepoRow(): GithubRepoFormRow {
+  return {
+    id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `gh-${Date.now()}`,
+    url: "",
+    ref: "",
+  };
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -88,6 +102,7 @@ const STAGE_LABELS: Record<Stage, string> = {
 
 export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
   const [docs, setDocs] = useState<UploadDoc[]>([]);
+  const [githubRepos, setGithubRepos] = useState<GithubRepoFormRow[]>(() => [newGithubRepoRow()]);
   const [isDragging, setIsDragging] = useState(false);
   const [phase, setPhase] = useState<"idle" | "running" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -97,12 +112,17 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
   const [thinking, setThinking] = useState<string[]>([]);
   const [summary, setSummary] = useState<{ opsApplied: number; files: string[]; rationale: string } | null>(null);
   const [thinkingOpen, setThinkingOpen] = useState(false);
+  /** Ingest filename (e.g. `github-owner-repo.md`) → scan status for GitHub-sourced docs */
+  const [githubIngestStatus, setGithubIngestStatus] = useState<Record<string, UploadDoc["status"]>>({});
 
   const inputRef = useRef<HTMLInputElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
   const opsEndRef = useRef<HTMLDivElement>(null);
   const mountedOpsRef = useRef<Set<string>>(new Set());
+
+  const githubApiList = githubReposForApi(githubRepos);
+  const hasUpdateSource = docs.length > 0 || githubApiList.length > 0;
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -173,6 +193,15 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
             : d,
         ),
       );
+      setGithubIngestStatus((prev) => {
+        if (event.name in prev) {
+          return {
+            ...prev,
+            [event.name]: event.status === "distilled" ? "distilled" : "scanned",
+          };
+        }
+        return prev;
+      });
       return;
     }
 
@@ -220,7 +249,7 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
   }, [onEvent, onDone]);
 
   function runUpdate() {
-    if (!docs.length || phase === "running") return;
+    if (!hasUpdateSource || phase === "running") return;
     setPhase("running");
     setError(null);
     setOps([]);
@@ -230,6 +259,12 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
     setCompletedStages(new Set());
     mountedOpsRef.current = new Set();
     setDocs((prev) => prev.map((d) => ({ ...d, status: "pending" })));
+    const ghMap: Record<string, UploadDoc["status"]> = {};
+    for (const r of githubRepos) {
+      const u = r.url.trim();
+      if (u) ghMap[githubIngestFilename(u)] = "pending";
+    }
+    setGithubIngestStatus(ghMap);
 
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const wsUrl =
@@ -244,6 +279,8 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
         documents: docs.map(({ name, text, content_base64, mime_type, size }) => ({
           name, text, content_base64, mime_type, size,
         })),
+        github_repos: githubApiList,
+        clone_timeout_s: 300,
         update_mode: "llm",
       }));
     };
@@ -293,7 +330,11 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
             <div>
               <p className="text-xs font-semibold text-slate-800">Update Brain</p>
               <p className="text-[10px] text-slate-400">
-                {phase === "running" ? "Processing new context…" : phase === "done" ? "Brain updated" : "Add new context from documents"}
+                {phase === "running"
+                  ? "Processing new context…"
+                  : phase === "done"
+                    ? "Brain updated"
+                    : "Add files and/or a public GitHub repo"}
               </p>
             </div>
           </div>
@@ -354,6 +395,69 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
                 accept={Array.from(SUPPORTED_EXTENSIONS).join(",")}
                 onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.currentTarget.value = ""; }}
               />
+
+              <div className="rounded-2xl border border-slate-200/70 bg-slate-50/50 p-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-900 text-white">
+                    <GitBranch size={12} />
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-semibold text-slate-700">GitHub repository</p>
+                    <p className="text-[9px] text-slate-400">Public HTTPS URL — optional alongside files</p>
+                  </div>
+                </div>
+                {githubRepos.map((row, index) => (
+                  <div key={row.id} className="flex flex-col gap-1.5 sm:flex-row sm:items-end">
+                    <label className="block min-w-0 flex-1">
+                      <span className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                        URL {githubRepos.length > 1 ? `#${index + 1}` : ""}
+                      </span>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/owner/repo"
+                        value={row.url}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, url: v } : r)));
+                        }}
+                        className="w-full rounded-lg border border-slate-200/80 bg-white px-2.5 py-2 text-[11px] text-slate-800 outline-none focus:ring-2 focus:ring-violet-500/25"
+                      />
+                    </label>
+                    <label className="block w-full sm:w-28">
+                      <span className="mb-0.5 block text-[9px] font-bold uppercase tracking-wider text-slate-400">Branch</span>
+                      <input
+                        type="text"
+                        placeholder="main"
+                        value={row.ref}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, ref: v } : r)));
+                        }}
+                        className="w-full rounded-lg border border-slate-200/80 bg-white px-2.5 py-2 text-[11px] outline-none focus:ring-2 focus:ring-violet-500/25"
+                      />
+                    </label>
+                    {githubRepos.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => setGithubRepos((prev) => prev.filter((r) => r.id !== row.id))}
+                        className="rounded-lg border border-slate-200/80 px-2 py-1.5 text-[10px] text-slate-500 hover:bg-white"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+                {githubRepos.length < 4 && (
+                  <button
+                    type="button"
+                    onClick={() => setGithubRepos((prev) => [...prev, newGithubRepoRow()])}
+                    className="text-[10px] font-semibold text-violet-600 hover:text-violet-800"
+                  >
+                    + Another repo
+                  </button>
+                )}
+              </div>
+
               <div
                 onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
                 onDragLeave={() => setIsDragging(false)}
@@ -378,8 +482,28 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
                   <p className="text-[10px] text-slate-400">.pdf .docx .md .txt .json and more</p>
                 </button>
 
-                {docs.length > 0 && (
+                {(docs.length > 0 || githubApiList.length > 0) && (
                   <div className="px-3 pb-3 space-y-1.5">
+                    {githubRepos
+                      .filter((r) => r.url.trim())
+                      .map((r) => (
+                        <div key={r.id} className="flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 border border-slate-100/60">
+                          <GitBranch size={11} className="flex-shrink-0 text-slate-600" />
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-slate-600 font-mono">
+                            {githubIngestFilename(r.url)}
+                          </span>
+                          <span className="text-[9px] text-slate-400">GitHub</span>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setGithubRepos((prev) => prev.filter((x) => x.id !== r.id));
+                            }}
+                            className="text-slate-300 hover:text-slate-500 transition"
+                          >
+                            <X size={11} />
+                          </button>
+                        </div>
+                      ))}
                     {docs.map((doc) => (
                       <div key={doc.id} className="flex items-center gap-2 rounded-xl bg-white/80 px-3 py-2 border border-slate-100/60">
                         <FileText size={11} className="flex-shrink-0 text-slate-400" />
@@ -400,9 +524,18 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
           )}
 
           {/* ── Document status cards (running) ──────────────────────────── */}
-          {phase !== "idle" && docs.length > 0 && (
+          {phase !== "idle" && (docs.length > 0 || githubApiList.length > 0) && (
             <div className="space-y-1.5">
-              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Documents</p>
+              <p className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Sources</p>
+              {githubRepos
+                .filter((r) => r.url.trim())
+                .map((r) => (
+                  <div key={r.id} className="flex items-center gap-2 rounded-xl border border-slate-200/60 bg-white/70 px-3 py-2">
+                    <GitBranch size={11} className="flex-shrink-0 text-slate-500" />
+                    <span className="min-w-0 flex-1 truncate text-[11px] text-slate-600 font-mono">{githubIngestFilename(r.url)}</span>
+                    <DocStatusBadge status={githubIngestStatus[githubIngestFilename(r.url)] ?? "pending"} />
+                  </div>
+                ))}
               {docs.map((doc) => (
                 <div key={doc.id} className="flex items-center gap-2 rounded-xl border border-slate-200/60 bg-white/70 px-3 py-2">
                   <FileText size={11} className="flex-shrink-0 text-slate-400" />
@@ -548,7 +681,16 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
                 <p className="text-[10px] leading-4 text-emerald-700/80 italic">{summary.rationale.slice(0, 200)}</p>
               )}
               <button
-                onClick={() => { setPhase("idle"); setOps([]); setThinking([]); setSummary(null); setDocs([]); setCompletedStages(new Set()); }}
+                onClick={() => {
+                  setPhase("idle");
+                  setOps([]);
+                  setThinking([]);
+                  setSummary(null);
+                  setDocs([]);
+                  setGithubRepos([newGithubRepoRow()]);
+                  setGithubIngestStatus({});
+                  setCompletedStages(new Set());
+                }}
                 className="mt-3 flex w-full items-center justify-center gap-1.5 rounded-xl border border-emerald-200/60 bg-white/70 px-3 py-2 text-[11px] font-medium text-emerald-700 transition hover:bg-white"
               >
                 <Plus size={11} /> Add more context
@@ -574,14 +716,14 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
         </div>
 
         {/* ── Footer / Send button ───────────────────────────────────────── */}
-        {phase === "idle" && docs.length > 0 && (
+        {phase === "idle" && hasUpdateSource && (
           <div className="border-t border-slate-200/60 p-4">
             <button
               onClick={runUpdate}
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-violet-600 px-4 py-2.5 text-xs font-semibold text-white shadow-md shadow-violet-200/60 transition hover:bg-violet-700 active:scale-[0.98]"
             >
               <Send size={12} />
-              Update brain with {docs.length} doc{docs.length !== 1 ? "s" : ""}
+              Update brain with {docs.length + githubApiList.length} source{docs.length + githubApiList.length !== 1 ? "s" : ""}
             </button>
           </div>
         )}

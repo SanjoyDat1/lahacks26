@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
+from typing_extensions import Self
 
 
 UpdateMode = Literal["llm", "deterministic"]
@@ -50,22 +51,6 @@ class BootstrapDocument(BaseModel):
         raise ValueError("Each document must include text or content_base64")
 
 
-class BootstrapStreamRequest(BaseModel):
-    prompt: str = "Build my AI brain from these documents."
-    documents: list[BootstrapDocument] = Field(default_factory=list)
-    overwrite: bool = True
-    max_files: int = Field(default=24, ge=1, le=50)
-
-
-class UpdateStreamRequest(BaseModel):
-    documents: list[BootstrapDocument] = Field(default_factory=list)
-    update_mode: UpdateMode = "llm"
-
-
-class BootstrapResponse(BaseModel):
-    written_files: list[str]
-
-
 class InitializeGitHubRepoSource(BaseModel):
     repo_url: str = Field(min_length=1, description="https://github.com/owner/repo")
     ref: str | None = Field(
@@ -76,6 +61,44 @@ class InitializeGitHubRepoSource(BaseModel):
     exclude_globs: list[str] = Field(default_factory=list)
     max_files: int = Field(default=200, ge=1, le=2_000)
     max_chars: int = Field(default=120_000, ge=1_000, le=500_000)
+
+
+class BootstrapStreamRequest(BaseModel):
+    prompt: str = "Build my AI brain from these documents."
+    documents: list[BootstrapDocument] = Field(default_factory=list)
+    github_repos: list[InitializeGitHubRepoSource] = Field(
+        default_factory=list,
+        description="Public GitHub repos to clone and summarize as bootstrap context.",
+    )
+    clone_timeout_s: int = Field(default=300, ge=30, le=3_600)
+    overwrite: bool = True
+    max_files: int = Field(default=24, ge=1, le=50)
+
+    @model_validator(mode="after")
+    def at_least_one_source(self) -> Self:
+        if not self.documents and not self.github_repos:
+            raise ValueError("Provide at least one uploaded document or a GitHub repository URL.")
+        return self
+
+
+class UpdateStreamRequest(BaseModel):
+    documents: list[BootstrapDocument] = Field(default_factory=list)
+    github_repos: list[InitializeGitHubRepoSource] = Field(
+        default_factory=list,
+        description="Public GitHub repos to add as update context.",
+    )
+    clone_timeout_s: int = Field(default=300, ge=30, le=3_600)
+    update_mode: UpdateMode = "llm"
+
+    @model_validator(mode="after")
+    def at_least_one_source(self) -> Self:
+        if not self.documents and not self.github_repos:
+            raise ValueError("Provide at least one document or a GitHub repository URL.")
+        return self
+
+
+class BootstrapResponse(BaseModel):
+    written_files: list[str]
 
 
 class InitializeRequest(BaseModel):
