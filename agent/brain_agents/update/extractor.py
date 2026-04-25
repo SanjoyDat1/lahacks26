@@ -213,7 +213,15 @@ def _build_chat_model() -> Any | None:
         return None
     try:
         settings = load_settings(validate=False)
-        if not (settings.openrouter_api_key or "").strip():
+        # Try common key fields the project may expose. Whichever one is
+        # populated wins; if none, we treat the LLM as unavailable.
+        api_key = (
+            getattr(settings, "gemini_api_key", "")
+            or getattr(settings, "google_api_key", "")
+            or getattr(settings, "openrouter_api_key", "")
+            or ""
+        )
+        if not str(api_key).strip():
             return None
         return make_chat_model(settings)
     except Exception as exc:
