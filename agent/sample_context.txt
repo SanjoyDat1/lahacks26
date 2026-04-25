@@ -1,0 +1,58 @@
+Bootstrap Prompt: Hackathon Team Memory Brain
+
+Create the first working project brain for a small hackathon team building an AI-assisted team memory tool. The generated brain should be concise enough for agents to read quickly, but detailed enough that a new teammate can understand the product, the current architecture, the important constraints, and the open questions without digging through chat history.
+
+Project:
+Hackathon Team Memory
+
+Purpose:
+Build a lightweight project brain that preserves durable engineering context for a fast-moving team. The brain should help coding agents and human teammates understand what the project is, why it exists, what has already been decided, what is still uncertain, and which files should be read before making changes.
+
+Core Product Goals:
+- Preserve useful project knowledge without requiring the team to manually maintain long docs.
+- Distill only durable context: goals, constraints, architecture, decisions, unresolved questions, and implementation notes that will matter later.
+- Avoid storing every chat message, transient idea, or low-signal note.
+- Make `index.md` the required starting point for both humans and agents.
+- Ensure every generated brain file is linked from `index.md` directly or through a clearly linked navigation file.
+- Support a local demo workflow that works without external infrastructure.
+
+Current Architecture:
+- The project has a Python CLI that runs three flows: bootstrap, query, and update.
+- Bootstrap creates the initial working `brain/` folder from a user prompt and optional source files.
+- Query uses a reader agent to answer questions from the working brain, falling back to the reference `brian/` example only for structure guidance.
+- Update uses a writer agent to modify existing working brain files while preserving valid YAML frontmatter.
+- The reference `brian/` folder is read-only and acts as a schema, style guide, and example knowledge map.
+- The working `brain/` folder is created lazily from source context and should contain only the files selected for the current project.
+- Gemini is the LLM provider for selection, generation, query, and update flows.
+- Gemini thinking summaries should be printed when the provider returns them so developers can debug why a file was selected or generated.
+
+Bootstrap Requirements:
+- Always create `index.md`; it is the critical navigation entry point.
+- `index.md` must link to every other generated file, using relative Markdown links.
+- Select the smallest useful set of files for the provided source context.
+- Do not mirror every reference template during initialization.
+- Create folders only when a selected file needs that parent path.
+- Prefer `summaries/project_summary.md` when the provided context is thin.
+- Add `context/open_questions.md` when the source raises unresolved design or product questions.
+- Add architecture files only when there is enough source detail to justify them.
+- Add decision files only when the source includes durable choices or tradeoffs.
+- Do not invent integrations, data models, or product behavior unsupported by this prompt or source files.
+
+Important Constraints:
+- The working brain should be useful after a single bootstrap command.
+- Every file should include YAML frontmatter compatible with the reference templates.
+- Keep summaries direct and factual; separate confirmed facts from open questions.
+- Link related notes, but do not link to files that were not generated.
+- Keep generated content hackathon-friendly: practical, compact, and easy to update.
+
+Suggested Initial Files:
+- `index.md`: required entry point and navigation hub.
+- `summaries/project_summary.md`: concise product and architecture summary.
+- `context/open_questions.md`: unresolved questions about source types, selection rules, and UX.
+
+Known Open Questions:
+- Which source types should be supported first after plain text files: GitHub issues, Slack exports, meeting notes, or codebase scans?
+- Should bootstrap expose its file-selection rationale in the CLI output?
+- Should writer updates be allowed to create new files, or only edit files selected during bootstrap?
+- How should the project prevent orphan brain files as the working brain grows?
+- What minimum local demo should be shown for a hackathon judging flow?
