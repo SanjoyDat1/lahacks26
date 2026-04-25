@@ -1,45 +1,73 @@
 ---
-id: hackathon.index
+id: iris.index
 type: index
-title: Hackathon Team Memory Project Brain
+title: Iris Landing Page Project Brain
 status: active
 importance: critical
 updated: 2026-04-25
 links:
   - summaries.project_summary
+  - architecture.system_overview
+  - architecture.data_model
+  - architecture.runtime_flow
+  - architecture.ingestion_pipeline
+  - architecture.distillation_pipeline
+  - architecture.brain_storage
+  - decisions.decision_log
+  - goals.product_goals
+  - context.constraints
   - context.open_questions
+  - agents.coding_agent_prompt
+  - agents.distiller_agent_prompt
+  - integrations.github
+  - integrations.slack
+  - integrations.meetings
 keywords:
   - source of truth
   - project memory
   - coding agent context
-  - hackathon
-  - team memory
 ---
 
-# Hackathon Team Memory Project Brain
+# Iris Landing Page Project Brain
 
-This folder is a structured project brain for the AI-assisted team memory tool. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.
+This folder is an example of a structured project brain for the Iris Landing Page application. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.
 
-Treat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through a clearly linked navigation file.
+Treat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through [Brain Map](map.md).
 
 ## Read Order For Agents
 
 1. Read [Project Summary](summaries/project_summary.md) for the shortest useful context.
-2. Read [Open Questions](context/open_questions.md) to understand unresolved design or product questions.
+2. Read [System Overview](architecture/system_overview.md) to understand the product.
+3. Read [Product Goals](goals/product_goals.md) and [Constraints](context/constraints.md) before changing scope.
+4. Read [Runtime Flow](architecture/runtime_flow.md) before changing ingestion, distillation, brain storage, or UI behavior.
+5. Read [Decision Log](decisions/decision_log.md) before making design changes.
+6. Read [Coding Agent Prompt](agents/coding_agent_prompt.md) before implementing code.
 
 ## Current Product State
 
-The Hackathon Team Memory project is building an AI-assisted team memory tool. It features a Python CLI that orchestrates three main flows:
+Iris Landing Page is a Next.js application that allows users to join a waitlist for a content creation platform. The application features a waitlist form and a dynamic visual component called PointField.
 
--   **Bootstrap:** Creates the initial working `brain/` folder from a user prompt and optional source files.
--   **Query:** Uses a reader agent to answer questions from the working brain, falling back to the reference `brian/` example only for structure guidance.
--   **Update:** Uses a writer agent to modify existing working brain files while preserving valid YAML frontmatter.
-
-The project utilizes OpenAI as its LLM provider for selection, generation, query, and update flows. OpenAI reasoning summaries should be printed when available to aid developer debugging. The reference `brian/` folder is read-only and acts as a schema, style guide, and example knowledge map, while the working `brain/` folder is created lazily from source context.
-
-Core product goals include preserving useful project knowledge, distilling only durable context (goals, constraints, architecture, decisions, unresolved questions, implementation notes), avoiding low-signal notes, making `index.md` the required starting point, ensuring all generated files are linked, and supporting a local demo workflow without external infrastructure.
+The app works in development mode, which can be started using commands like `npm run dev`, `yarn dev`, `pnpm dev`, or `bun dev`, and is accessible at [http://localhost:3000](http://localhost:3000).
 
 ## Important Links
 
--   [Project Summary](summaries/project_summary.md)
--   [Open Questions](context/open_questions.md)
+- [Brain Map](map.md)
+- [Project Summary](summaries/project_summary.md)
+- [Architecture Summary](summaries/architecture_summary.md)
+- [System Overview](architecture/system_overview.md)
+- [Data Model](architecture/data_model.md)
+- [Runtime Flow](architecture/runtime_flow.md)
+- [Ingestion Pipeline](architecture/ingestion_pipeline.md)
+- [Distillation Pipeline](architecture/distillation_pipeline.md)
+- [Brain Storage](architecture/brain_storage.md)
+- [Product Goals](goals/product_goals.md)
+- [Decision Log](decisions/decision_log.md)
+- [Git-Backed Brain ADR](decisions/ADR-0001-git-backed-brain.md)
+- [Local Demo Fallbacks ADR](decisions/ADR-0002-local-demo-fallbacks.md)
+- [Constraints](context/constraints.md)
+- [Open Questions](context/open_questions.md)
+- [Coding Agent Prompt](agents/coding_agent_prompt.md)
+- [Distiller Agent Prompt](agents/distiller_agent_prompt.md)
+- [GitHub Integration](integrations/github.md)
+- [Slack Integration](integrations/slack.md)
+- [Meetings Integration](integrations/meetings.md)

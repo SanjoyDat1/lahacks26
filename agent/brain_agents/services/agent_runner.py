@@ -32,7 +32,10 @@ def bootstrap(
         max_files=max_files,
         overwrite=overwrite,
     )
-    return {"written_files": list(out.get("written_files", []))}
+    return {
+        "written_files": list(out.get("written_files", [])),
+        "result_text": str(out.get("result_text", "")),
+    }
 
 
 def update(

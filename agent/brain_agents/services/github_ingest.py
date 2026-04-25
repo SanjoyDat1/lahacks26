@@ -257,6 +257,145 @@ def _read_file_capped(path: Path, per_file: int) -> str:
     return t
 
 
+# Lockfiles and minified bundles: strong deprioritization for indexing signal.
+_LOCKFILE_NAMES = frozenset(
+    {
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "poetry.lock",
+        "pipfile.lock",
+        "bun.lockb",
+        "bun.lock",
+        "uv.lock",
+    }
+)
+
+# Test / generated noise (path substrings, lowercased).
+_NOISE_PATH_MARKERS = frozenset(
+    (
+        "/cypress/",
+        "/e2e/",
+        "/playwright/",
+        "/fixtures/",
+        "/mocks/",
+        "/snapshots/",
+        "/__snapshots__/",
+        "/migrations/",
+    )
+)
+
+# Path segments that suggest FastAPI, Next.js, or shared app layout.
+_SEGMENT_WEIGHTS: dict[str, int] = {
+    "app": 36,
+    "pages": 44,
+    "components": 40,
+    "lib": 34,
+    "hooks": 32,
+    "api": 42,
+    "routes": 46,
+    "routers": 46,
+    "server": 30,
+    "services": 44,
+    "src": 8,
+}
+
+
+def score_repo_path(relative: str) -> int:
+    """
+    Heuristic importance score for repository files (lightweight FastAPI, Next.js, or similar).
+
+    Higher is more likely to contain architecture and product signal. Not ML-based;
+    used only to order excerpts within ``max_files`` and ``max_chars`` budgets.
+    """
+    r = (relative or "").replace("\\", "/").strip()
+    if not r:
+        return 0
+    r_lower = r.lower()
+    segs = [p.lower() for p in r.split("/") if p]
+    base = segs[-1] if segs else ""
+    score = 0
+
+    if base in _LOCKFILE_NAMES:
+        score -= 85
+    if base.endswith((".min.js", ".min.mjs", ".min.css", ".min.ts", ".min.tsx")):
+        score -= 50
+
+    if "__tests__" in segs:
+        score -= 75
+    if any(m in r_lower for m in _NOISE_PATH_MARKERS):
+        score -= 45
+    if base.startswith("test_") and base.endswith(".py"):
+        score -= 65
+    if base.endswith(("_test.py", "_test.ts", "_test.tsx", "_test.js", "_test.jsx")):
+        score -= 65
+    if ".test." in base or ".spec." in base:
+        score -= 60
+    if len(segs) >= 2 and segs[0] in ("tests", "test") and base.endswith(
+        (".py", ".ts", ".tsx", ".js", ".jsx")
+    ):
+        score -= 40
+
+    if base in ("readme.md", "readme.rst", "readme.txt", "contributing.md", "license", "license.md"):
+        score += 110
+    if base == "package.json":
+        score += 95
+    if base in ("pyproject.toml", "requirements.txt", "requirements-dev.txt", "pipfile"):
+        score += 92
+    if base in ("setup.py", "setup.cfg", "tox.ini"):
+        score += 35
+    if base == "dockerfile" or base.startswith("dockerfile."):
+        score += 75
+    if "docker-compose" in base or base in (".env.example", "env.example"):
+        score += 60
+    if base in ("vercel.json", "tsconfig.json", "jsconfig.json"):
+        score += 45
+    if base.startswith("next.config"):
+        score += 88
+    if "tailwind.config" in base or base.startswith("postcss.config"):
+        score += 55
+    if base in ("middleware.ts", "middleware.js"):
+        score += 50
+
+    if base in ("main.py", "app.py", "asgi.py", "wsgi.py"):
+        score += 70
+    if base in ("schemas.py", "models.py", "database.py", "dependencies.py", "config.py", "settings.py"):
+        score += 48
+
+    seen_seg: set[str] = set()
+    for s in segs:
+        if s in _SEGMENT_WEIGHTS and s not in seen_seg:
+            seen_seg.add(s)
+            score += _SEGMENT_WEIGHTS[s]
+
+    return score
+
+
+def select_ranked_text_files_for_ingest(
+    files: list[Path],
+    repo_root: Path,
+    max_files: int,
+) -> list[Path]:
+    """
+    Order candidate paths by :func:`score_repo_path`, then stable tie-breakers.
+
+    Tie-break: higher path length first does not apply; we prefer higher score, then
+    shorter relative path, then lexicographic path for reproducibility.
+    """
+    n = max(0, int(max_files))
+    if n == 0 or not files:
+        return []
+
+    def sort_key(p: Path) -> tuple[int, int, str]:
+        rel = _repo_relative_path(repo_root, p)
+        s = score_repo_path(rel)
+        # Prefer shorter paths on equal score (often entrypoints / top-level).
+        return (-s, len(rel), rel.lower())
+
+    ranked = sorted(files, key=sort_key)
+    return ranked[:n]
+
+
 def build_repo_ingest_prompt(
     parsed: ParsedPublicRepo,
     repo_root: Path,
@@ -277,16 +416,29 @@ def build_repo_ingest_prompt(
         exclude_globs=exclude_globs,
     )
     scanned = len(all_text)
-    selected = all_text[: max(0, int(max_files))]
+    selected = select_ranked_text_files_for_ingest(
+        all_text, repo_root, max(0, int(max_files))
+    )
     included = len(selected)
 
     lines: list[str] = [
         f"## GitHub repository (public): {parsed.owner}/{parsed.name}",
         f"Repository URL: {parsed.html_url}",
         "",
-        "Ingest the following into the project brain as durable context: high-level purpose,",
-        "architecture, important modules, public APIs, configuration, dependencies, and notable decisions",
-        "that can be inferred. Prefer facts supported by the excerpts below. List open questions where unclear.",
+        "You are ingesting a cloned codebase (commonly a lightweight FastAPI backend, a Next.js frontend, or both in a monorepo).",
+        "Distill the file excerpts below into durable project-brain content. Prefer facts supported by the files; note uncertainty explicitly.",
+        "",
+        "Extract and structure where inferable:",
+        "- Project purpose and user-facing capabilities.",
+        "- Runtime, frameworks, and major libraries (e.g. FastAPI, Uvicorn, Starlette, Next.js, React) from code or manifests.",
+        "- Entry points: application bootstrap, API routes, server components vs client, and public HTTP surface.",
+        "- Important areas: `services/`, `api/` / `routers/`, `schemas` / `models`, data access, and Next.js `app/` or `pages/`, `components/`, `lib/`, and shared hooks.",
+        "- Configuration, environment, and dependencies (from README, `package.json`, `pyproject.toml`, `requirements.txt`, or similar).",
+        "- Data flow and how major parts connect; client versus server boundaries in full-stack code.",
+        "- Setup, build, or run notes if present in documentation or package metadata.",
+        "- Open questions where the code is ambiguous, incomplete, or not shown in these excerpts.",
+        "",
+        "The following excerpts are ranked for relevance (not alphabetical). Use them; do not invent file paths that are not listed.",
         "",
     ]
 
@@ -327,11 +479,13 @@ def ingest_public_github_repo(
     clone_timeout_s: int = 300,
     update_mode: str | None = None,
     apply: bool = True,
+    overwrite: bool = False,
+    brain_max_files: int = 8,
     additional_instructions: str = "",
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     """
-    Clone a public GitHub repository, build an update prompt, and run the normal brain update.
+    Clone a public GitHub repository, build an ingest prompt, and initialize the working brain.
     """
     include_globs = list(include_globs or [])
     exclude_globs = list(exclude_globs or [])
@@ -339,6 +493,9 @@ def ingest_public_github_repo(
     parsed = parse_public_github_url(repo_url)
 
     s = settings or load_settings(validate=True)
+    # Keep GitHub initialization free of dense retrieval side effects if later
+    # graph steps are reused; initialize itself does not need retrieval.
+    s = s.model_copy(update={"retrieval_dense_enabled": False})
 
     with tempfile.TemporaryDirectory(prefix="gh-ingest-") as tmp:
         work = Path(tmp) / "repo"
@@ -356,23 +513,22 @@ def ingest_public_github_repo(
     extra = (additional_instructions or "").strip()
     prompt = body if not extra else f"{body}\n\n## Additional instructions\n{extra}\n"
 
-    source: dict[str, Any] = {
-        "kind": "github_repo",
-        "repo_url": parsed.html_url,
-        "clone_url": parsed.clone_url,
-        "ref": (ref or "").strip() or None,
-        "commit": commit,
-    }
+    if apply:
+        out = agent_runner.bootstrap(
+            prompt,
+            [prompt],
+            overwrite=overwrite,
+            max_files=brain_max_files,
+            settings=s,
+        )
+        written_files = list(out.get("written_files", []))
+        result_text = str(out.get("result_text", ""))
+        applied: bool | None = True
+    else:
+        written_files = []
+        result_text = "GitHub repository analyzed; initialization skipped because apply=false."
+        applied = None
 
-    out = agent_runner.update(
-        prompt,
-        update_mode=update_mode,  # type: ignore[arg-type]
-        apply=apply,
-        source=source,
-        settings=s,
-    )
-    plan = out.get("plan")
-    plan_dict = plan.to_dict() if hasattr(plan, "to_dict") else (plan if isinstance(plan, dict) else None)  # type: ignore[union-attr]
     return {
         "ok": True,
         "owner": parsed.owner,
@@ -383,12 +539,13 @@ def ingest_public_github_repo(
         "files_scanned": scanned,
         "files_included": included,
         "content_truncated": content_trunc,
-        "mode": out.get("mode", "llm"),
-        "result_text": str(out.get("result_text", "")),
-        "applied": out.get("applied"),
-        "applied_ops": out.get("applied_ops"),
-        "files_touched": out.get("files_touched"),
-        "plan": plan_dict,
+        "mode": "initialize",
+        "result_text": result_text,
+        "applied": applied,
+        "applied_ops": len(written_files) if applied else None,
+        "files_touched": written_files if applied else None,
+        "written_files": written_files,
+        "plan": None,
         "error": None,
     }
 
@@ -397,6 +554,8 @@ __all__ = [
     "ParsedPublicRepo",
     "parse_public_github_url",
     "iter_text_files_for_ingest",
+    "score_repo_path",
+    "select_ranked_text_files_for_ingest",
     "build_repo_ingest_prompt",
     "ingest_public_github_repo",
 ]

@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 
 UpdateMode = Literal["llm", "deterministic"]
+GitHubIngestMode = Literal["initialize", "llm", "deterministic"]
 
 
 class HealthResponse(BaseModel):
@@ -56,7 +57,7 @@ class UpdateResponse(BaseModel):
 
 
 class GitHubRepoIngestRequest(BaseModel):
-    """Ingest a public GitHub repository into the working brain via the update flow."""
+    """Initialize a working brain from a public GitHub repository."""
 
     repo_url: str = Field(min_length=1, description="https://github.com/owner/repo")
     ref: str | None = Field(
@@ -91,10 +92,17 @@ class GitHubRepoIngestRequest(BaseModel):
     )
     update_mode: UpdateMode | None = None
     apply: bool = True
+    overwrite: bool = False
+    brain_max_files: int = Field(
+        default=8,
+        ge=1,
+        le=50,
+        description="Maximum number of brain Markdown files to create during initialization.",
+    )
     # Optional extra user instructions merged into the update prompt
     additional_instructions: str = Field(
         default="",
-        description="Optional text appended to the synthesized repository summary for the update.",
+        description="Optional text appended to the synthesized repository summary for initialization.",
     )
 
 
@@ -110,11 +118,12 @@ class GitHubRepoIngestResponse(BaseModel):
     files_scanned: int
     files_included: int
     content_truncated: bool
-    mode: UpdateMode
+    mode: GitHubIngestMode
     result_text: str = ""
     applied: bool | None = None
     applied_ops: int | None = None
     files_touched: list[str] | None = None
+    written_files: list[str] | None = None
     plan: dict[str, Any] | None = None
     error: str | None = None
 

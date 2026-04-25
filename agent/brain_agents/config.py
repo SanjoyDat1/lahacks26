@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     brian_reference_dir: Path = Field(default=_DEFAULT_REFERENCE, validation_alias="BRIAN_REFERENCE_DIR")
     brain_dir: Path = Field(default=_DEFAULT_WORKING, validation_alias="BRAIN_DIR")
     update_mode: str = Field(default="llm", validation_alias="UPDATE_MODE")
+    retrieval_enabled: bool = Field(default=True, validation_alias="RETRIEVAL_ENABLED")
+    retrieval_dense_enabled: bool = Field(default=True, validation_alias="RETRIEVAL_DENSE_ENABLED")
 
     @field_validator("brian_reference_dir", mode="before")
     @classmethod

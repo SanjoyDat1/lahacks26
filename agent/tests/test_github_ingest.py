@@ -18,6 +18,8 @@ from brain_agents.services.github_ingest import (  # noqa: E402
     ingest_public_github_repo,
     iter_text_files_for_ingest,
     parse_public_github_url,
+    score_repo_path,
+    select_ranked_text_files_for_ingest,
 )
 
 
@@ -87,6 +89,49 @@ class IterTextFilesTest(unittest.TestCase):
             self.assertNotIn("src/skip.txt", rels_ex)
 
 
+class ScoreRepoPathTest(unittest.TestCase):
+    def test_readme_outranks_lockfile(self) -> None:
+        self.assertGreater(
+            score_repo_path("README.md"),
+            score_repo_path("yarn.lock"),
+        )
+
+    def test_package_json_outranks_lockfile(self) -> None:
+        self.assertGreater(
+            score_repo_path("package.json"),
+            score_repo_path("package-lock.json"),
+        )
+
+    def test_fastapi_route_beats_bare_module(self) -> None:
+        self.assertGreater(
+            score_repo_path("src/routers/users.py"),
+            score_repo_path("src/utils/helpers.py"),
+        )
+
+    def test_next_app_page_beats_loose_file(self) -> None:
+        self.assertGreater(
+            score_repo_path("app/page.tsx"),
+            score_repo_path("notes.txt"),
+        )
+
+    def test_test_file_deprioritized(self) -> None:
+        self.assertGreater(
+            score_repo_path("src/api/handler.py"),
+            score_repo_path("tests/test_handler.py"),
+        )
+
+    def test_select_ranked_prefers_highest_scores(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            f_z = root / "zzz_low.txt"
+            f_r = root / "README.md"
+            f_z.write_text("z", encoding="utf-8")
+            f_r.write_text("# r", encoding="utf-8")
+            out = select_ranked_text_files_for_ingest([f_z, f_r], root, max_files=1)
+            self.assertEqual(len(out), 1)
+            self.assertEqual(out[0].name, "README.md")
+
+
 class BuildRepoIngestPromptTest(unittest.TestCase):
     def test_truncates_to_max_chars(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -104,6 +149,26 @@ class BuildRepoIngestPromptTest(unittest.TestCase):
             self.assertLessEqual(len(body), 5_500)
             self.assertTrue(trunc or len(body) <= 5_000 + 200)
 
+    def test_uses_ranking_not_alphabetical_order(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "aaa_noise.txt").write_text("aaa", encoding="utf-8")
+            (root / "README.md").write_text("# hi", encoding="utf-8")
+            (root / "package.json").write_text("{}", encoding="utf-8")
+            p = parse_public_github_url("https://github.com/o/r")
+            body, scanned, included, _, _ = build_repo_ingest_prompt(
+                p,
+                root,
+                include_globs=[],
+                exclude_globs=[],
+                max_files=1,
+                max_chars=50_000,
+            )
+            self.assertEqual(scanned, 3)
+            self.assertEqual(included, 1)
+            self.assertIn("README.md", body)
+            self.assertNotIn("aaa_noise", body)
+
 
 class IngestPublicGithubRepoTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -114,17 +179,13 @@ class IngestPublicGithubRepoTest(unittest.TestCase):
         )
 
     @mock.patch("brain_agents.services.github_ingest._clone_shallow")
-    @mock.patch("brain_agents.services.github_ingest.agent_runner.update")
-    def test_delegates_to_agent_update_with_source(
-        self, mock_update: mock.MagicMock, mock_clone: mock.MagicMock
+    @mock.patch("brain_agents.services.github_ingest.agent_runner.bootstrap")
+    def test_delegates_to_agent_initialize(
+        self, mock_bootstrap: mock.MagicMock, mock_clone: mock.MagicMock
     ) -> None:
-        mock_update.return_value = {
-            "mode": "deterministic",
-            "result_text": "ok",
-            "applied": False,
-            "applied_ops": 0,
-            "files_touched": [],
-            "plan": None,
+        mock_bootstrap.return_value = {
+            "written_files": ["index.md"],
+            "result_text": "Initialized working brain.",
         }
 
         def fake_clone(
@@ -144,8 +205,13 @@ class IngestPublicGithubRepoTest(unittest.TestCase):
         self.assertTrue(out["ok"])
         self.assertEqual(out["owner"], "some")
         self.assertEqual(out["repo"], "thing")
-        self.assertIn("github_repo", (mock_update.call_args.kwargs.get("source") or {}).get("kind", ""))
-        prompt = mock_update.call_args[0][0]
+        self.assertEqual(out["mode"], "initialize")
+        self.assertEqual(out["written_files"], ["index.md"])
+        self.assertEqual(out["files_touched"], ["index.md"])
+        passed_settings = mock_bootstrap.call_args.kwargs.get("settings")
+        self.assertFalse(passed_settings.retrieval_dense_enabled)
+        self.assertEqual(mock_bootstrap.call_args.kwargs.get("max_files"), 8)
+        prompt = mock_bootstrap.call_args[0][0]
         self.assertIn("## GitHub repository (public): some/thing", prompt)
         self.assertIn("hi.py", prompt)
 
@@ -172,17 +238,19 @@ class GithubRouteTest(unittest.TestCase):
             "files_scanned": 1,
             "files_included": 1,
             "content_truncated": False,
-            "mode": "llm",
+            "mode": "initialize",
             "result_text": "done",
             "applied": True,
             "applied_ops": 1,
             "files_touched": ["x.md"],
+            "written_files": ["x.md"],
             "plan": None,
             "error": None,
         }
         r = github_ingest(GitHubRepoIngestRequest(repo_url="https://github.com/a/b"))
         self.assertEqual(r.owner, "a")
         self.assertEqual(r.result_text, "done")
+        self.assertEqual(r.written_files, ["x.md"])
 
 
 if __name__ == "__main__":

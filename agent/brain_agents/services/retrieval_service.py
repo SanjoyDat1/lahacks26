@@ -15,29 +15,66 @@ class RetrievalService:
         self._lock = RLock()
         self._cache: dict[str, Retriever] = {}
 
-    def _key(self, brain_root: Path) -> str:
-        return str(Path(brain_root).resolve())
+    def _key(
+        self,
+        brain_root: Path,
+        *,
+        prefer_dense: bool = True,
+        prefer_cross_encoder: bool = True,
+    ) -> str:
+        root = Path(brain_root).resolve()
+        return f"{root}|dense={prefer_dense}|cross={prefer_cross_encoder}"
 
-    def get(self, brain_root: Path) -> Retriever:
-        key = self._key(brain_root)
+    def get(
+        self,
+        brain_root: Path,
+        *,
+        prefer_dense: bool = True,
+        prefer_cross_encoder: bool = True,
+    ) -> Retriever:
+        key = self._key(
+            brain_root,
+            prefer_dense=prefer_dense,
+            prefer_cross_encoder=prefer_cross_encoder,
+        )
         with self._lock:
             r = self._cache.get(key)
             if r is None:
-                r = Retriever(brain_root=Path(brain_root))
+                r = Retriever(
+                    brain_root=Path(brain_root),
+                    prefer_dense=prefer_dense,
+                    prefer_cross_encoder=prefer_cross_encoder,
+                )
                 self._cache[key] = r
             return r
 
-    def reload(self, brain_root: Path) -> Retriever:
-        key = self._key(brain_root)
+    def reload(
+        self,
+        brain_root: Path,
+        *,
+        prefer_dense: bool = True,
+        prefer_cross_encoder: bool = True,
+    ) -> Retriever:
+        key = self._key(
+            brain_root,
+            prefer_dense=prefer_dense,
+            prefer_cross_encoder=prefer_cross_encoder,
+        )
         with self._lock:
-            r = Retriever(brain_root=Path(brain_root))
+            r = Retriever(
+                brain_root=Path(brain_root),
+                prefer_dense=prefer_dense,
+                prefer_cross_encoder=prefer_cross_encoder,
+            )
             self._cache[key] = r
             return r
 
     def invalidate(self, brain_root: Path) -> None:
-        key = self._key(brain_root)
+        root = str(Path(brain_root).resolve())
         with self._lock:
-            self._cache.pop(key, None)
+            for key in list(self._cache):
+                if key == root or key.startswith(f"{root}|"):
+                    self._cache.pop(key, None)
 
     @staticmethod
     def hit_to_dict(hit: RetrievalHit) -> dict[str, Any]:

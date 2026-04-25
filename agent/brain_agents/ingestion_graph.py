@@ -34,6 +34,14 @@ def _log_graph(message: str) -> None:
     print(f"[brain-agent] graph: {message}", file=sys.stderr, flush=True)
 
 
+def _retrieval_backend_kwargs(settings: Settings) -> dict[str, bool]:
+    prefer_dense = bool(getattr(settings, "retrieval_dense_enabled", True))
+    return {
+        "prefer_dense": prefer_dense,
+        "prefer_cross_encoder": prefer_dense,
+    }
+
+
 def _after_distill_router(state: IngestionState) -> Literal["init", "update"]:
     mode = state.get("flow_mode", "update")
     _log_graph(f"routing after distill flow_mode={mode}")
@@ -180,6 +188,12 @@ def _retrieve_node(state: IngestionState) -> dict[str, Any]:
         return {}
     _log_graph("retrieve START")
     s = state["settings"]
+    if not bool(getattr(s, "retrieval_enabled", True)):
+        _log_graph("retrieve END disabled by RETRIEVAL_ENABLED=false")
+        return {
+            "retrieval_hits": [],
+            "candidate_files": [],
+        }
     q = (state.get("cleaned_context") or state.get("update_prompt", "")).strip()
     if not q:
         _log_graph("retrieve END empty query")
@@ -189,7 +203,7 @@ def _retrieve_node(state: IngestionState) -> dict[str, Any]:
         }
     root = s.brain_dir if s.brain_dir.is_dir() else s.brian_reference_dir
     try:
-        retriever = retrieval_service.get(root)
+        retriever = retrieval_service.get(root, **_retrieval_backend_kwargs(s))
         hits = retriever.query(q, top_k=6, token_budget=1500)
     except (FileNotFoundError, OSError, ValueError) as exc:  # noqa: BLE001
         _log_graph(f"retrieve END failed error={exc}")
@@ -223,7 +237,7 @@ def _reconcile_node(state: IngestionState) -> dict[str, Any]:
     incoming = (state.get("cleaned_context") or state.get("update_prompt", "")).strip()
     use_llm: bool | str = "auto" if str(state.get("update_mode", "llm") or "llm") == "llm" else False
     try:
-        retriever = retrieval_service.get(root)
+        retriever = retrieval_service.get(root, **_retrieval_backend_kwargs(s))
     except (FileNotFoundError, OSError) as exc:  # noqa: BLE001
         _log_graph(f"reconcile FAILED error={exc}")
         return {
@@ -281,7 +295,7 @@ def _verify_node(state: IngestionState) -> dict[str, Any]:
         return {"verify_line": "cache invalidated; brain ready for retrieval."}
     root = s.brain_dir if s.brain_dir.is_dir() else s.brian_reference_dir
     try:
-        retriever = retrieval_service.get(root)
+        retriever = retrieval_service.get(root, **_retrieval_backend_kwargs(s))
         hits = retriever.query(q[:2000], top_k=1, token_budget=400)
         if hits:
             h = hits[0]

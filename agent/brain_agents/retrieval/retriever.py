@@ -60,12 +60,12 @@ _BUDGET_OVERSHOOT = 0.20
 _AUTHORITY_WEIGHT = 0.15
 
 
-def _make_encoder() -> Encoder:
-    return make_encoder(prefer_dense=True)
+def _make_encoder(*, prefer_dense: bool = True) -> Encoder:
+    return make_encoder(prefer_dense=prefer_dense)
 
 
-def _make_reranker() -> Reranker:
-    return make_reranker(prefer_cross_encoder=True)
+def _make_reranker(*, prefer_cross_encoder: bool = True) -> Reranker:
+    return make_reranker(prefer_cross_encoder=prefer_cross_encoder)
 
 
 class _TokenCounter:
@@ -110,6 +110,8 @@ class Retriever:
         *,
         encoder: Encoder | None = None,
         reranker: Reranker | None = None,
+        prefer_dense: bool = True,
+        prefer_cross_encoder: bool = True,
     ) -> None:
         self.brain_root = Path(brain_root).resolve()
         if not self.brain_root.is_dir():
@@ -123,8 +125,10 @@ class Retriever:
             self._tokens.count(s.text_for_embedding) for s in self._sections
         ]
 
-        self.encoder: Encoder = encoder or _make_encoder()
-        self.reranker: Reranker = reranker or _make_reranker()
+        self.encoder: Encoder = encoder or _make_encoder(prefer_dense=prefer_dense)
+        self.reranker: Reranker = reranker or _make_reranker(
+            prefer_cross_encoder=prefer_cross_encoder
+        )
 
         # Persist dense embeddings next to the section index so warm starts
         # don't re-run the BGE encoder on unchanged corpora. Only the dense

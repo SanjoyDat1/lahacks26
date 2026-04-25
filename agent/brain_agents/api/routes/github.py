@@ -24,6 +24,8 @@ def github_ingest(req: GitHubRepoIngestRequest) -> GitHubRepoIngestResponse:
             clone_timeout_s=req.clone_timeout_s,
             update_mode=req.update_mode,
             apply=req.apply,
+            overwrite=req.overwrite,
+            brain_max_files=req.brain_max_files,
             additional_instructions=req.additional_instructions,
         )
     except ValueError as exc:
@@ -39,6 +41,8 @@ def github_ingest(req: GitHubRepoIngestRequest) -> GitHubRepoIngestResponse:
             status_code=502,
             detail=f"Git failed: {err[:2000]}",
         ) from exc
+    except FileExistsError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except OSError as exc:
         raise HTTPException(
             status_code=500,
@@ -60,6 +64,7 @@ def github_ingest(req: GitHubRepoIngestRequest) -> GitHubRepoIngestResponse:
         applied=out.get("applied"),
         applied_ops=out.get("applied_ops"),
         files_touched=out.get("files_touched"),
+        written_files=out.get("written_files"),
         plan=out.get("plan"),
         error=out.get("error"),
     )
