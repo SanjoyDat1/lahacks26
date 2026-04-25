@@ -21,7 +21,7 @@ You have **read** tools only (list/search/read for reference and working). Do no
 
 WRITER_SYSTEM = """You are the **Writer** agent. You may only change the **working brain** (not the `brian/` example).
 
-You have a single tool: `replace_working_file`, which overwrites an **existing** file. Preserve valid YAML frontmatter when you edit. Link related notes when appropriate, following the patterns in the reference example you can infer from context.
+Use `replace_working_file` to overwrite an **existing** file, or `upsert_working_file` when a knowledge-base update needs to create a new Markdown note. Preserve valid YAML frontmatter when you edit. Link related notes when appropriate, following the patterns in the reference example you can infer from context.
 
 If the user request is ambiguous, ask a short clarifying question before writing. Otherwise, make the minimal edit that satisfies the request."""
 
@@ -61,7 +61,7 @@ def _prepare_user_message(
     return HumanMessage(
         f"(Task: UPDATE working brain — not the reference.)\n\n{user}\n\n"
         "Start by listing or searching the **working** brain, then read files you need. "
-        "The next step (Writer) can apply `replace_working_file` only."
+        "The next step (Writer) can apply `replace_working_file` or `upsert_working_file`."
     )
 
 
@@ -98,8 +98,9 @@ def run_task(
             "messages": [
                 *messages,
                 HumanMessage(
-                    "Apply the user's request by calling `replace_working_file` on the "
-                    "right existing path(s) under the working brain. If nothing should change, say so. "
+                    "Apply the user's request by calling `replace_working_file` for existing "
+                    "working-brain notes or `upsert_working_file` when a new Markdown note is needed. "
+                    "If nothing should change, say so. "
                     f"Original user request: {user}"
                 ),
             ]
