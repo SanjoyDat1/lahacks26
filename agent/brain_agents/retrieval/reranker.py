@@ -128,16 +128,20 @@ class BGEReranker:
             (query, c.text_for_embedding[: self._RERANK_MAX_CHARS])
             for c in candidates
         ]
+        # sentence-transformers >=5 already applies the model's
+        # ``default_activation_function`` (sigmoid for single-label
+        # cross-encoders like bge-reranker-base), so ``predict()`` returns
+        # values already in [0, 1] -- e.g. ~0.96 for a relevant pair and
+        # ~4e-5 for an irrelevant one. Passing ``activation_fn=None`` is a
+        # no-op for this model. We must NOT sigmoid the output again or we
+        # collapse the whole distribution into a tiny band around 0.5.
         raw = self._model.predict(
-            pairs, show_progress_bar=False, batch_size=16
+            pairs,
+            show_progress_bar=False,
+            batch_size=16,
+            activation_fn=None,
         )
-        # CrossEncoder logits are unbounded; squash with sigmoid for stability.
-        import math
-
-        def sig(x: float) -> float:
-            return 1.0 / (1.0 + math.exp(-x))
-
-        scored = [(c, float(sig(float(s)))) for c, s in zip(candidates, raw)]
+        scored = [(c, float(s)) for c, s in zip(candidates, raw)]
         scored.sort(key=lambda x: x[1], reverse=True)
         return scored
 
