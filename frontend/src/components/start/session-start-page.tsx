@@ -141,8 +141,8 @@ const TEXT_UPLOAD_EXTENSIONS = new Set([
 ]);
 
 const STAGES: { id: StageId; label: string; desc: string }[] = [
-  { id: "upload", label: "Upload", desc: "Collect source context" },
-  { id: "normalize", label: "Scan", desc: "Normalize documents" },
+  { id: "upload", label: "Connect", desc: "Repo URL + optional files" },
+  { id: "normalize", label: "Scan", desc: "Read codebase context" },
   { id: "distill", label: "Distill", desc: "Extract durable facts" },
   { id: "write", label: "Write", desc: "Create brain files" },
   { id: "index", label: "Index", desc: "Warm retrieval" },
@@ -150,7 +150,7 @@ const STAGES: { id: StageId; label: string; desc: string }[] = [
 ];
 
 const INITIAL_NODES: GraphNode[] = [
-  { id: "documents", label: "Documents", status: "idle" },
+  { id: "documents", label: "Codebase & sources", status: "idle" },
   { id: "normalize", label: "Normalize", status: "idle" },
   { id: "distill", label: "Distill", status: "idle" },
   { id: "brain_files", label: "Brain Files", status: "idle" },
@@ -171,20 +171,20 @@ export function SessionStartPage() {
   const [docs, setDocs] = useState<UploadDoc[]>([]);
   const [githubRepos, setGithubRepos] = useState<GithubRepoFormRow[]>(() => [newGithubRepoRow()]);
   const prompt =
-    "Build a transparent AI brain for this project from the uploaded documents and any linked GitHub repository context.";
+    "Build a transparent AI brain for this codebase from the linked GitHub repository (and any optional uploaded documents). Focus on architecture, entry points, dependencies, and how the system fits together.";
   const [isDragging, setIsDragging] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [stage, setStage] = useState<StageId>("upload");
-  const [stageLabel, setStageLabel] = useState("Waiting for documents");
+  const [stageLabel, setStageLabel] = useState("Add a GitHub repo URL to start");
   const [, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
   const [, setEdges] = useState<GraphEdge[]>(INITIAL_EDGES);
   const [tree, setTree] = useState<BrainTreeNode[]>([]);
   const [createdFiles, setCreatedFiles] = useState<CreatedFile[]>([]);
   const [thinking, setThinking] = useState<string[]>([
-    "Drop project docs here and I will turn them into a structured brain that agents can inspect.",
+    "Paste a public GitHub repo URL to bootstrap a brain from the codebase. Extra PDFs or notes are optional.",
   ]);
   const [resultText, setResultText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -238,14 +238,14 @@ export function SessionStartPage() {
     setIsDone(false);
     setError(null);
     setStage("upload");
-    setStageLabel("Waiting for documents");
+    setStageLabel("Add a GitHub repo URL to start");
     setNodes(INITIAL_NODES);
     setEdges(INITIAL_EDGES);
     setTree([]);
     setCreatedFiles([]);
     setResultText("");
     setThinking([
-      "Drop project docs here and I will turn them into a structured brain that agents can inspect.",
+      "Paste a public GitHub repo URL to bootstrap a brain from the codebase. Extra PDFs or notes are optional.",
     ]);
     setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
     setGithubRepos([newGithubRepoRow()]);
@@ -481,36 +481,23 @@ export function SessionStartPage() {
               AI Brain Session Builder
             </div>
             <h1 className="mt-6 text-5xl font-bold tracking-tight text-slate-950 md:text-6xl">
-              Drop files. Watch memory form.
+              Paste a repo. Get a codebase brain.
             </h1>
             <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-500">
-              Upload files, paste a public GitHub repo URL, or both — then watch context become a navigable, agent-readable brain with a live build trace.
+              Built for real codebases: link a public GitHub repository and we clone, scan, and distill it into a structured brain. Drop extra PDFs or notes only if you want more context.
             </p>
           </div>
 
-          <DocumentDropzone
-            docs={docs}
-            isDragging={isDragging}
-            isRunning={isRunning}
-            onBrowse={() => inputRef.current?.click()}
-            onRemove={(id) => setDocs((prev) => prev.filter((doc) => doc.id !== id))}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            variant="hero"
-          />
-
-          <div className="mt-5 w-full max-w-3xl rounded-[2rem] border border-slate-200/80 bg-white/70 p-5 shadow-sm backdrop-blur-xl">
+          <div className="w-full max-w-3xl rounded-[2rem] border border-slate-200/80 bg-white/70 p-5 shadow-sm backdrop-blur-xl">
             <div className="mb-3 flex items-center gap-2">
               <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
                 <GitBranch size={16} />
               </span>
               <div>
-                <p className="text-sm font-semibold text-slate-800">GitHub repository</p>
-                <p className="text-xs text-slate-500">Public HTTPS links only — cloned shallow, scanned like a PDF bundle.</p>
+                <p className="text-sm font-semibold text-slate-800">GitHub repository — primary</p>
+                <p className="text-xs text-slate-500">
+                  Public HTTPS only. One URL is enough to initialize; no uploads required. We shallow-clone and rank source files like an IDE would.
+                </p>
               </div>
             </div>
             <div className="space-y-3">
@@ -570,6 +557,22 @@ export function SessionStartPage() {
               </button>
             )}
           </div>
+
+          <DocumentDropzone
+            docs={docs}
+            isDragging={isDragging}
+            isRunning={isRunning}
+            onBrowse={() => inputRef.current?.click()}
+            onRemove={(id) => setDocs((prev) => prev.filter((doc) => doc.id !== id))}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setIsDragging(true);
+            }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={handleDrop}
+            variant="hero"
+            supportingFiles
+          />
 
           <div className="mt-6 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <AgentStatus online={agentOnline} compact />
@@ -659,6 +662,7 @@ function DocumentDropzone({
   isDragging,
   isRunning,
   variant = "panel",
+  supportingFiles = false,
   onBrowse,
   onRemove,
   onDragOver,
@@ -669,6 +673,8 @@ function DocumentDropzone({
   isDragging: boolean;
   isRunning: boolean;
   variant?: "hero" | "panel";
+  /** When true, de-emphasize as optional extras (codebase URL is primary). */
+  supportingFiles?: boolean;
   onBrowse: () => void;
   onRemove: (id: string) => void;
   onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
@@ -693,7 +699,9 @@ function DocumentDropzone({
         disabled={isRunning}
         className={cn(
           "group relative flex w-full flex-col items-center justify-center overflow-hidden border border-white/80 bg-gradient-to-b from-violet-50/80 to-white/80 text-center transition hover:from-violet-100/80 disabled:opacity-60",
-          isHero ? "min-h-[360px] rounded-[2rem] px-8 py-12" : "rounded-[1.5rem] px-5 py-8",
+          isHero && !supportingFiles ? "min-h-[360px] rounded-[2rem] px-8 py-12"
+            : isHero ? "min-h-[220px] rounded-[2rem] px-6 py-8"
+            : "rounded-[1.5rem] px-5 py-8",
         )}
       >
         <div className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
@@ -701,15 +709,17 @@ function DocumentDropzone({
         </div>
         <div className={cn(
           "relative flex items-center justify-center rounded-3xl bg-violet-100 ring-1 ring-violet-200/70 transition-transform duration-300 group-hover:scale-105",
-          isHero ? "h-20 w-20" : "h-14 w-14",
+          isHero && !supportingFiles ? "h-20 w-20" : isHero ? "h-14 w-14" : "h-14 w-14",
         )}>
-          <Upload size={isHero ? 32 : 22} className="text-violet-600" />
+          <Upload size={isHero && !supportingFiles ? 32 : 22} className="text-violet-600" />
         </div>
-        <p className={cn("relative mt-5 font-semibold text-slate-900", isHero ? "text-2xl" : "text-sm")}>
-          Drop files here
+        <p className={cn("relative mt-5 font-semibold text-slate-900", isHero && !supportingFiles ? "text-2xl" : isHero ? "text-lg" : "text-sm")}>
+          {supportingFiles ? "Extra files (optional)" : "Drop files here"}
         </p>
         <p className={cn("relative mt-2 max-w-md leading-6 text-slate-500", isHero ? "text-sm" : "text-xs")}>
-          Add docs, notes, specs, code, Markdown — or use the GitHub section below. The agent turns it all into a structured brain.
+          {supportingFiles
+            ? "Specs, PDFs, meeting notes, or loose Markdown — skip this if the GitHub repo above is enough."
+            : "Add docs, notes, specs, code, Markdown. The agent turns them into a structured brain."}
         </p>
         <p className="relative mt-5 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
           .pdf .docx .pptx .xlsx .md .txt .json .yaml .csv .ts .tsx .py

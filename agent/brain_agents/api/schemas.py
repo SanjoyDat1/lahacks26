@@ -77,7 +77,9 @@ class BootstrapStreamRequest(BaseModel):
     @model_validator(mode="after")
     def at_least_one_source(self) -> Self:
         if not self.documents and not self.github_repos:
-            raise ValueError("Provide at least one uploaded document or a GitHub repository URL.")
+            raise ValueError(
+                "Provide at least one public GitHub repository URL (recommended) and/or optional uploaded documents."
+            )
         return self
 
 
@@ -93,7 +95,9 @@ class UpdateStreamRequest(BaseModel):
     @model_validator(mode="after")
     def at_least_one_source(self) -> Self:
         if not self.documents and not self.github_repos:
-            raise ValueError("Provide at least one document or a GitHub repository URL.")
+            raise ValueError(
+                "Provide at least one public GitHub repository URL and/or optional documents."
+            )
         return self
 
 

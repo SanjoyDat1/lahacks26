@@ -403,7 +403,7 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
                   </div>
                   <div>
                     <p className="text-[11px] font-semibold text-slate-700">GitHub repository</p>
-                    <p className="text-[9px] text-slate-400">Public HTTPS URL — optional alongside files</p>
+                    <p className="text-[9px] text-slate-400">Point at a codebase; no uploads required. Add files below only for extra context.</p>
                   </div>
                 </div>
                 {githubRepos.map((row, index) => (
@@ -478,8 +478,8 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
                   )}>
                     <Upload size={18} className={isDragging ? "text-violet-600" : "text-slate-400"} />
                   </div>
-                  <p className="text-xs font-semibold text-slate-700">Drop files to add context</p>
-                  <p className="text-[10px] text-slate-400">.pdf .docx .md .txt .json and more</p>
+                  <p className="text-xs font-semibold text-slate-700">Extra files (optional)</p>
+                  <p className="text-[10px] text-slate-400">Skip if the repo URL above is enough — .pdf .docx .md .txt and more</p>
                 </button>
 
                 {(docs.length > 0 || githubApiList.length > 0) && (

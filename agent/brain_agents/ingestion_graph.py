@@ -493,11 +493,14 @@ def run_initialize_streaming(
         },
     )
 
-    yield _event("stage_start", stage="normalize", label="Scanning uploaded documents")
-    yield _event("graph_node", id="documents", label="Uploaded documents", status="active")
+    yield _event("stage_start", stage="normalize", label="Scanning source context")
+    yield _event("graph_node", id="documents", label="Codebase & sources", status="active")
     yield _event("graph_node", id="normalize", label="Normalize", status="active")
     yield _event("graph_edge", from_="documents", to="normalize", status="active")
-    yield _event("thinking", content="I am reading the uploaded files, filtering unsupported input, and converting everything into clean source documents.\n")
+    yield _event(
+        "thinking",
+        content="I am reading repository excerpts and any uploaded files, normalizing them into clean source documents for the brain.\n",
+    )
     norm = _normalize_node(st)
     st.update(norm)
     if st.get("error"):
@@ -506,7 +509,7 @@ def run_initialize_streaming(
     docs = list(st.get("normalized_docs", []))
     for doc in docs:
         yield _event("document", name=doc.name, chars=len(doc.text), status="scanned")
-    yield _event("graph_node", id="documents", label="Uploaded documents", status="done")
+    yield _event("graph_node", id="documents", label="Codebase & sources", status="done")
     yield _event("graph_node", id="normalize", label="Normalize", status="done")
     yield _event("graph_edge", from_="documents", to="normalize", status="done")
 
