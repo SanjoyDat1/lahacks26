@@ -35,6 +35,7 @@ MAX_SOURCE_CHARS = 45_000
 MAX_TEMPLATE_CHARS = 12_000
 MAX_CATALOG_CHARS = 18_000
 DEFAULT_MAX_BOOTSTRAP_FILES = 3
+BATCH_GENERATION_SIZE = 5
 INDEX_PATH = "index.md"
 
 
@@ -316,38 +317,69 @@ def _ensure_index_links(content: str, selected_paths: list[str]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _generate_file_content(
+def _strip_markdown_fence(content: str) -> str:
+    text = content.strip()
+    if not text.startswith("```"):
+        return text
+    lines = text.splitlines()
+    if lines and lines[0].startswith("```"):
+        lines = lines[1:]
+    if lines and lines[-1].startswith("```"):
+        lines = lines[:-1]
+    return "\n".join(lines).strip()
+
+
+def _batched(items: list[str], size: int) -> Iterable[list[str]]:
+    for start in range(0, len(items), size):
+        yield items[start : start + size]
+
+
+def _generate_file_batch(
     model: object,
-    relative_path: str,
-    template: str,
+    reference_dir: Path,
+    batch_paths: list[str],
     source_digest: str,
     initial_prompt: str,
     selected_paths: list[str],
-) -> str:
+) -> dict[str, str]:
+    templates = []
+    for relative_path in batch_paths:
+        template_file = reference_dir / relative_path
+        template = _read_text_file(template_file) if template_file.is_file() else ""
+        templates.append(
+            {
+                "path": relative_path,
+                "template": template[:MAX_TEMPLATE_CHARS],
+            }
+        )
+
     system = SystemMessage(
         "You create Markdown project-brain files from raw source documents. "
-        "Return only the complete Markdown file content, including YAML frontmatter."
+        "Return only valid JSON with generated file contents."
     )
     user = HumanMessage(
-        f"""Create `{relative_path}` for a new working brain.
+        f"""Create these Markdown files for a new working brain: {", ".join(batch_paths)}.
 
-Use the template below for structure, frontmatter style, heading style, and level of detail.
+Use each template for that file's structure, frontmatter style, heading style, and level of detail.
 Replace Brian/sample-specific facts with facts supported by the source documents.
-Keep the same purpose as the template file. Preserve the same YAML keys when possible:
+Keep the same purpose as each template file. Preserve the same YAML keys when possible:
 id, type, title, status, importance, updated, links, keywords.
 Use `{date.today().isoformat()}` only if the template has an updated field.
 Do not invent unsupported implementation details. If source material is thin, write a concise starter note and list open questions.
 Keep links limited to these selected files, and omit links to uncreated files: {", ".join(selected_paths) or "(none)"}
 If creating `index.md`, treat it as the mandatory entry point and include Markdown links to every other selected file.
 
+Return JSON exactly like:
+{{"files": [{{"path": "index.md", "content": "---\\n...complete markdown...\\n"}}]}}
+
 INITIAL PROMPT:
 ```text
 {initial_prompt.strip() or "(none provided)"}
 ```
 
-TEMPLATE:
-```markdown
-{template[:MAX_TEMPLATE_CHARS]}
+TEMPLATES:
+```json
+{json.dumps(templates, ensure_ascii=True)}
 ```
 
 SOURCE DOCUMENTS:
@@ -359,19 +391,39 @@ SOURCE DOCUMENTS:
     response = invoke_chat_model(  # type: ignore[arg-type]
         model,
         [system, user],
-        label=f"generate {relative_path}",
+        label=f"generate batch {', '.join(batch_paths)}",
     )
-    content = _message_text(getattr(response, "content", response)).strip()
-    if content.startswith("```"):
-        lines = content.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        content = "\n".join(lines).strip()
-    if relative_path == INDEX_PATH:
-        content = _ensure_index_links(content, selected_paths).rstrip()
-    return content + "\n"
+    raw = _strip_fenced_json(_message_text(getattr(response, "content", response)))
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Model did not return valid batch-generation JSON: {raw[:500]}") from exc
+
+    files = parsed.get("files") if isinstance(parsed, dict) else None
+    if not isinstance(files, list):
+        raise ValueError("Batch-generation JSON must include a files list")
+
+    generated: dict[str, str] = {}
+    expected = set(batch_paths)
+    for item in files:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        content = item.get("content")
+        if not isinstance(path, str) or not isinstance(content, str):
+            continue
+        relative_path = path.replace("\\", "/").strip()
+        if relative_path not in expected:
+            continue
+        clean_content = _strip_markdown_fence(content)
+        if relative_path == INDEX_PATH:
+            clean_content = _ensure_index_links(clean_content, selected_paths).rstrip()
+        generated[relative_path] = clean_content.rstrip() + "\n"
+
+    missing = [path for path in batch_paths if path not in generated]
+    if missing:
+        raise ValueError(f"Batch-generation JSON omitted files: {', '.join(missing)}")
+    return generated
 
 
 def create_brain_from_documents(
@@ -404,20 +456,19 @@ def create_brain_from_documents(
     model = make_chat_model(s)
     selected_paths = _select_relevant_files(model, ref, source_digest, initial_prompt, max_files)
     written: dict[str, str] = {}
-    for relative_path in selected_paths:
-        output_file = out / relative_path
-        template_file = ref / relative_path
-        template = _read_text_file(template_file) if template_file.is_file() else ""
-        content = _generate_file_content(
+    for batch_paths in _batched(selected_paths, BATCH_GENERATION_SIZE):
+        batch_content = _generate_file_batch(
             model,
-            relative_path,
-            template,
+            ref,
+            batch_paths,
             source_digest,
             initial_prompt,
             selected_paths,
         )
-        output_file.parent.mkdir(parents=True, exist_ok=True)
-        output_file.write_text(content, encoding="utf-8")
-        written[relative_path] = content
+        for relative_path, content in batch_content.items():
+            output_file = out / relative_path
+            output_file.parent.mkdir(parents=True, exist_ok=True)
+            output_file.write_text(content, encoding="utf-8")
+            written[relative_path] = content
 
     return written
