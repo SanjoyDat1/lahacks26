@@ -1,12 +1,12 @@
 [project]
 name = "brain-agents"
 version = "0.1.0"
-description = "LangGraph brain agents (reader + writer) with OpenRouter"
+description = "LangGraph brain agents (reader + writer) with Gemini"
 requires-python = ">=3.11"
 dependencies = [
     "langgraph>=0.2.0",
     "langchain-core>=0.3.0",
-    "langchain-openai>=0.2.0",
+    "langchain-google-genai>=2.0.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",
