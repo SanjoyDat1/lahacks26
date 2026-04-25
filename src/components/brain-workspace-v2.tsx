@@ -5,7 +5,9 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   AlertTriangle,
+  BookOpen,
   Bot,
+  Calendar,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
@@ -14,6 +16,7 @@ import {
   GitBranch,
   Hash,
   LayoutDashboard,
+  Link2,
   MessageSquare,
   Network,
   TrendingUp,
@@ -261,7 +264,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
                 highlightMap={highlightMap}
               />
             </div>
-            <div className="h-[52%] min-h-0 flex-shrink-0 overflow-hidden border-t border-slate-200/60 bg-white/60 backdrop-blur-2xl">
+            <div className="h-[58%] min-h-0 flex-shrink-0 overflow-hidden border-t border-slate-200/60">
               <BrainAgentSim files={files} onHighlightChange={handleHighlightChange} />
             </div>
           </div>
@@ -305,16 +308,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
                 </div>
 
                 {showPreview ? (
-                  <div className="flex-1 overflow-y-auto bg-white/20 px-8 py-7">
-                    {/* Frontmatter card */}
-                    <FrontmatterCard file={selectedFile} />
-                    {/* Markdown body */}
-                    <div className="prose prose-slate max-w-3xl leading-7 [&_h1]:text-xl [&_h1]:font-bold [&_h1]:text-slate-900 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:text-slate-800 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:text-slate-700 [&_p]:text-slate-600 [&_li]:text-slate-600 [&_code]:bg-slate-100 [&_code]:text-violet-700 [&_code]:rounded [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:text-[12px] [&_pre]:bg-slate-900 [&_pre]:text-slate-100 [&_pre]:rounded-xl [&_pre]:p-4 [&_blockquote]:border-l-violet-400 [&_blockquote]:text-slate-500 [&_a]:text-violet-600 [&_a]:no-underline [&_a:hover]:underline [&_table]:w-full [&_th]:bg-slate-100 [&_th]:text-slate-700 [&_th]:text-left [&_th]:px-3 [&_th]:py-2 [&_td]:px-3 [&_td]:py-2 [&_td]:border-b [&_td]:border-slate-100 [&_input[type=checkbox]]:accent-violet-600">
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {selectedFile.content}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
+                  <DocumentPreview file={selectedFile} files={files} onFileClick={openFile} />
                 ) : (
                   <div className="flex-1 overflow-y-auto bg-slate-50/40">
                     <pre className="min-h-full whitespace-pre-wrap px-10 py-8 font-mono text-sm leading-7 text-slate-600">
@@ -322,36 +316,6 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
                     </pre>
                   </div>
                 )}
-
-                {/* Linked files */}
-                {selectedFile.frontmatter.links?.length ? (
-                  <div className="border-t border-slate-200/50 bg-white/50 px-6 py-3 backdrop-blur-sm">
-                    <p className="mb-2 text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                      Linked
-                    </p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {selectedFile.frontmatter.links.map((linkId) => {
-                        const linked = files.find((f) => f.frontmatter.id === linkId);
-                        return linked ? (
-                          <button
-                            key={linkId}
-                            onClick={() => openFile(linked)}
-                            className="rounded-full border border-slate-200/70 bg-white/70 px-2.5 py-0.5 text-[10px] text-slate-500 transition-all hover:border-violet-300/60 hover:bg-violet-50/80 hover:text-violet-600"
-                          >
-                            {linked.frontmatter.title ?? linked.path}
-                          </button>
-                        ) : (
-                          <span
-                            key={linkId}
-                            className="rounded-full border border-slate-200/40 px-2.5 py-0.5 text-[10px] text-slate-400"
-                          >
-                            {linkId}
-                          </span>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ) : null}
               </>
             ) : (
               <div className="flex h-full items-center justify-center text-slate-400 text-sm">
@@ -799,6 +763,214 @@ function SectionLabel({ children, className }: { children: React.ReactNode; clas
     <p className={cn("mb-3.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-slate-400", className)}>
       {children}
     </p>
+  );
+}
+
+// ─── Document preview ─────────────────────────────────────────────────────────
+
+function DocumentPreview({
+  file,
+  files,
+  onFileClick,
+}: {
+  file: import("@/lib/brian/reader").BrianFile;
+  files: import("@/lib/brian/reader").BrianFile[];
+  onFileClick: (f: import("@/lib/brian/reader").BrianFile) => void;
+}) {
+  const fm = file.frontmatter;
+
+  // Strip leading H1 if it duplicates the frontmatter title
+  const bodyContent = file.content
+    .replace(/^---[\s\S]*?---\s*/m, "") // strip frontmatter block
+    .replace(/^#\s+.+\n?/, "")          // strip first H1
+    .trimStart();
+
+  // Rough reading time: ~200 words per minute
+  const wordCount = bodyContent.split(/\s+/).filter(Boolean).length;
+  const readMins = Math.max(1, Math.round(wordCount / 200));
+
+  const displayTitle =
+    fm.title ??
+    file.path.split("/").pop()?.replace(".md", "").replace(/_/g, " ") ??
+    file.path;
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto">
+
+        {/* ── Document header ─────────────────────────────────────────── */}
+        <div className="border-b border-slate-200/50 bg-gradient-to-b from-white/90 via-white/70 to-white/30 px-10 py-10">
+          {/* Type + importance pills */}
+          <div className="mb-5 flex flex-wrap items-center gap-2">
+            {fm.type && (
+              <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold capitalize", TYPE_PILL[fm.type] ?? "border-slate-200/60 bg-slate-50 text-slate-600")}>
+                {fm.type.replace(/_/g, " ")}
+              </span>
+            )}
+            {fm.importance && (
+              <span className={cn("rounded-full border px-3 py-1 text-xs font-semibold capitalize", IMPORTANCE_PILL[fm.importance] ?? "border-slate-200/60 bg-slate-50 text-slate-500")}>
+                {fm.importance} importance
+              </span>
+            )}
+            {fm.status && (
+              <span className="rounded-full border border-slate-200/60 bg-white/80 px-3 py-1 text-xs text-slate-500 capitalize">
+                {fm.status}
+              </span>
+            )}
+          </div>
+
+          {/* Title */}
+          <h1 className="text-3xl font-bold leading-tight tracking-tight text-slate-900">
+            {displayTitle}
+          </h1>
+
+          {/* Meta row */}
+          <div className="mt-4 flex flex-wrap items-center gap-5 text-sm text-slate-400">
+            {fm.updated && (
+              <span className="flex items-center gap-1.5">
+                <Calendar size={13} />
+                Updated {fm.updated}
+              </span>
+            )}
+            {fm.links && fm.links.length > 0 && (
+              <span className="flex items-center gap-1.5">
+                <Link2 size={13} />
+                {fm.links.length} connection{fm.links.length !== 1 ? "s" : ""}
+              </span>
+            )}
+            <span className="flex items-center gap-1.5">
+              <BookOpen size={13} />
+              {readMins} min read · {wordCount} words
+            </span>
+          </div>
+
+          {/* Keywords */}
+          {fm.keywords && fm.keywords.length > 0 && (
+            <div className="mt-5 flex flex-wrap gap-1.5">
+              {fm.keywords.map((kw) => (
+                <span key={kw} className="rounded-full border border-violet-200/60 bg-violet-50/80 px-3 py-1 text-xs font-medium text-violet-600">
+                  #{kw}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Markdown body ──────────────────────────────────────────── */}
+        <div className="px-10 py-10">
+          <div className="max-w-3xl">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                h1: ({ children }) => (
+                  <h1 className="mb-4 mt-8 text-2xl font-bold text-slate-900 first:mt-0">{children}</h1>
+                ),
+                h2: ({ children }) => (
+                  <h2 className="mb-3 mt-7 text-xl font-semibold text-slate-800">{children}</h2>
+                ),
+                h3: ({ children }) => (
+                  <h3 className="mb-2 mt-5 text-base font-semibold text-slate-700">{children}</h3>
+                ),
+                p: ({ children }) => (
+                  <p className="mb-4 text-[15px] leading-7 text-slate-600">{children}</p>
+                ),
+                li: ({ children }) => (
+                  <li className="mb-1.5 text-[15px] leading-7 text-slate-600">{children}</li>
+                ),
+                ul: ({ children }) => (
+                  <ul className="mb-4 list-disc pl-6">{children}</ul>
+                ),
+                ol: ({ children }) => (
+                  <ol className="mb-4 list-decimal pl-6">{children}</ol>
+                ),
+                code: ({ inline, children, ...props }: { inline?: boolean; children?: React.ReactNode }) =>
+                  inline ? (
+                    <code className="rounded-md border border-violet-200/50 bg-violet-50/80 px-1.5 py-0.5 font-mono text-[13px] text-violet-700" {...props}>
+                      {children}
+                    </code>
+                  ) : (
+                    <code className="block" {...props}>{children}</code>
+                  ),
+                pre: ({ children }) => (
+                  <pre className="mb-4 overflow-x-auto rounded-2xl border border-slate-800/20 bg-slate-900 p-5 text-sm leading-6 text-slate-100">
+                    {children}
+                  </pre>
+                ),
+                blockquote: ({ children }) => (
+                  <blockquote className="mb-4 border-l-4 border-violet-400/60 bg-violet-50/40 pl-5 pr-4 py-3 rounded-r-xl italic text-slate-500">
+                    {children}
+                  </blockquote>
+                ),
+                a: ({ href, children }) => (
+                  <a href={href} className="text-violet-600 no-underline hover:underline" target="_blank" rel="noopener noreferrer">
+                    {children}
+                  </a>
+                ),
+                table: ({ children }) => (
+                  <div className="mb-4 overflow-x-auto rounded-xl border border-slate-200/60">
+                    <table className="w-full text-sm">{children}</table>
+                  </div>
+                ),
+                th: ({ children }) => (
+                  <th className="bg-slate-50 px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-slate-600">{children}</th>
+                ),
+                td: ({ children }) => (
+                  <td className="border-t border-slate-100 px-4 py-2.5 text-slate-600">{children}</td>
+                ),
+                hr: () => <hr className="my-8 border-slate-200/60" />,
+                strong: ({ children }) => <strong className="font-semibold text-slate-800">{children}</strong>,
+              }}
+            >
+              {bodyContent}
+            </ReactMarkdown>
+          </div>
+        </div>
+
+        {/* ── Related documents ──────────────────────────────────────── */}
+        {fm.links && fm.links.length > 0 && (
+          <div className="border-t border-slate-200/50 bg-white/40 px-10 py-8">
+            <div className="flex items-center gap-2 mb-5">
+              <Link2 size={14} className="text-slate-400" />
+              <p className="text-sm font-semibold text-slate-700">Related documents</p>
+              <span className="text-xs text-slate-400">· linked from frontmatter</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 max-w-3xl">
+              {fm.links.map((linkId) => {
+                const linked = files.find((f) => f.frontmatter.id === linkId);
+                return linked ? (
+                  <button
+                    key={linkId}
+                    onClick={() => onFileClick(linked)}
+                    className="flex items-start gap-3 rounded-2xl border border-slate-200/60 bg-white/70 p-4 text-left shadow-sm transition-all hover:bg-white/90 hover:shadow-md group"
+                  >
+                    <div className={cn("mt-0.5 h-2 w-2 flex-shrink-0 rounded-full", typeDot(linked.frontmatter.type))} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-700 group-hover:text-violet-700 transition-colors truncate">
+                        {linked.frontmatter.title ?? linked.path}
+                      </p>
+                      {linked.frontmatter.type && (
+                        <p className="mt-0.5 text-xs text-slate-400 capitalize">
+                          {linked.frontmatter.type.replace(/_/g, " ")}
+                        </p>
+                      )}
+                    </div>
+                  </button>
+                ) : (
+                  <div
+                    key={linkId}
+                    className="flex items-center gap-2 rounded-2xl border border-dashed border-slate-200/60 p-4 text-xs text-slate-400"
+                  >
+                    <Hash size={12} />
+                    {linkId}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+      </div>
+    </div>
   );
 }
 
