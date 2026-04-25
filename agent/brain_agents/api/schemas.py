@@ -40,6 +40,63 @@ class BootstrapResponse(BaseModel):
     written_files: list[str]
 
 
+class InitializeGitHubRepoSource(BaseModel):
+    repo_url: str = Field(min_length=1, description="https://github.com/owner/repo")
+    ref: str | None = Field(
+        default=None,
+        description="Optional branch, tag, or commit to checkout after clone.",
+    )
+    include_globs: list[str] = Field(default_factory=list)
+    exclude_globs: list[str] = Field(default_factory=list)
+    max_files: int = Field(default=200, ge=1, le=2_000)
+    max_chars: int = Field(default=120_000, ge=1_000, le=500_000)
+
+
+class InitializeRequest(BaseModel):
+    """Initialize a working brain from text context, GitHub repositories, or both."""
+
+    prompt: str = ""
+    context: str = Field(
+        default="",
+        description="Single raw text context document to use during initialization.",
+    )
+    sources: list[str] = Field(
+        default_factory=list,
+        description="Raw text context documents to use during initialization.",
+    )
+    github_repos: list[InitializeGitHubRepoSource] = Field(default_factory=list)
+    overwrite: bool = False
+    max_files: int = Field(
+        default=8,
+        ge=1,
+        le=50,
+        description="Maximum number of brain Markdown files to create.",
+    )
+    apply: bool = True
+    clone_timeout_s: int = Field(default=300, ge=30, le=3_600)
+
+
+class InitializeGitHubRepoResult(BaseModel):
+    owner: str
+    repo: str
+    normalized_url: str
+    ref: str | None
+    commit: str | None
+    files_scanned: int
+    files_included: int
+    content_truncated: bool
+
+
+class InitializeResponse(BaseModel):
+    ok: bool = True
+    mode: Literal["initialize"] = "initialize"
+    result_text: str = ""
+    applied: bool | None = None
+    written_files: list[str] = Field(default_factory=list)
+    github_repos: list[InitializeGitHubRepoResult] = Field(default_factory=list)
+    content_truncated: bool = False
+
+
 class UpdateRequest(BaseModel):
     prompt: str = Field(min_length=1)
     update_mode: UpdateMode | None = None

@@ -12,7 +12,7 @@ router = APIRouter()
 
 @router.post("/github/ingest", response_model=GitHubRepoIngestResponse)
 def github_ingest(req: GitHubRepoIngestRequest) -> GitHubRepoIngestResponse:
-    """Clone a public GitHub repository, analyze text files, and update the working brain."""
+    """Clone a public GitHub repository, analyze text files, and initialize the working brain."""
     try:
         out = ingest_public_github_repo(
             req.repo_url,

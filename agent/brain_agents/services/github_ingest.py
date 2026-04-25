@@ -468,6 +468,49 @@ def build_repo_ingest_prompt(
     return body, scanned, included, min(len(body), int(max_chars)), truncated
 
 
+def build_public_github_repo_context(
+    repo_url: str,
+    *,
+    ref: str | None = None,
+    include_globs: list[str] | None = None,
+    exclude_globs: list[str] | None = None,
+    max_files: int = 200,
+    max_chars: int = 120_000,
+    clone_timeout_s: int = 300,
+) -> dict[str, Any]:
+    """Clone a public GitHub repository and return prompt-ready context plus scan metadata."""
+    include_globs = list(include_globs or [])
+    exclude_globs = list(exclude_globs or [])
+
+    parsed = parse_public_github_url(repo_url)
+
+    with tempfile.TemporaryDirectory(prefix="gh-ingest-") as tmp:
+        work = Path(tmp) / "repo"
+        _clone_shallow(parsed.clone_url, work, ref, timeout_s=clone_timeout_s)
+        commit = _git_head_commit(work, timeout=60)
+        body, scanned, included, _, content_trunc = build_repo_ingest_prompt(
+            parsed,
+            work,
+            include_globs=include_globs,
+            exclude_globs=exclude_globs,
+            max_files=max_files,
+            max_chars=max_chars,
+        )
+
+    return {
+        "owner": parsed.owner,
+        "repo": parsed.name,
+        "normalized_url": parsed.html_url,
+        "clone_url": parsed.clone_url,
+        "ref": (ref or "").strip() or None,
+        "commit": commit,
+        "files_scanned": scanned,
+        "files_included": included,
+        "content_truncated": content_trunc,
+        "context": body,
+    }
+
+
 def ingest_public_github_repo(
     repo_url: str,
     *,
@@ -490,26 +533,21 @@ def ingest_public_github_repo(
     include_globs = list(include_globs or [])
     exclude_globs = list(exclude_globs or [])
 
-    parsed = parse_public_github_url(repo_url)
-
     s = settings or load_settings(validate=True)
     # Keep GitHub initialization free of dense retrieval side effects if later
     # graph steps are reused; initialize itself does not need retrieval.
     s = s.model_copy(update={"retrieval_dense_enabled": False})
 
-    with tempfile.TemporaryDirectory(prefix="gh-ingest-") as tmp:
-        work = Path(tmp) / "repo"
-        _clone_shallow(parsed.clone_url, work, ref, timeout_s=clone_timeout_s)
-        commit = _git_head_commit(work, timeout=60)
-        body, scanned, included, _, content_trunc = build_repo_ingest_prompt(
-            parsed,
-            work,
-            include_globs=include_globs,
-            exclude_globs=exclude_globs,
-            max_files=max_files,
-            max_chars=max_chars,
-        )
-
+    repo_context = build_public_github_repo_context(
+        repo_url,
+        ref=ref,
+        include_globs=include_globs,
+        exclude_globs=exclude_globs,
+        max_files=max_files,
+        max_chars=max_chars,
+        clone_timeout_s=clone_timeout_s,
+    )
+    body = str(repo_context["context"])
     extra = (additional_instructions or "").strip()
     prompt = body if not extra else f"{body}\n\n## Additional instructions\n{extra}\n"
 
@@ -531,14 +569,14 @@ def ingest_public_github_repo(
 
     return {
         "ok": True,
-        "owner": parsed.owner,
-        "repo": parsed.name,
-        "normalized_url": parsed.html_url,
+        "owner": repo_context["owner"],
+        "repo": repo_context["repo"],
+        "normalized_url": repo_context["normalized_url"],
         "ref": (ref or "").strip() or None,
-        "commit": commit,
-        "files_scanned": scanned,
-        "files_included": included,
-        "content_truncated": content_trunc,
+        "commit": repo_context["commit"],
+        "files_scanned": repo_context["files_scanned"],
+        "files_included": repo_context["files_included"],
+        "content_truncated": repo_context["content_truncated"],
         "mode": "initialize",
         "result_text": result_text,
         "applied": applied,
@@ -557,5 +595,6 @@ __all__ = [
     "score_repo_path",
     "select_ranked_text_files_for_ingest",
     "build_repo_ingest_prompt",
+    "build_public_github_repo_context",
     "ingest_public_github_repo",
 ]

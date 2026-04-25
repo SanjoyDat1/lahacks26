@@ -10,8 +10,9 @@ AGENT_ROOT = Path(__file__).resolve().parents[1]
 if str(AGENT_ROOT) not in sys.path:
     sys.path.insert(0, str(AGENT_ROOT))
 
+from brain_agents.api.routes.bootstrap import initialize  # noqa: E402
 from brain_agents.api.routes.github import github_ingest  # noqa: E402
-from brain_agents.api.schemas import GitHubRepoIngestRequest  # noqa: E402
+from brain_agents.api.schemas import GitHubRepoIngestRequest, InitializeRequest  # noqa: E402
 from brain_agents.config import Settings  # noqa: E402
 from brain_agents.services.github_ingest import (  # noqa: E402
     build_repo_ingest_prompt,
@@ -251,6 +252,70 @@ class GithubRouteTest(unittest.TestCase):
         self.assertEqual(r.owner, "a")
         self.assertEqual(r.result_text, "done")
         self.assertEqual(r.written_files, ["x.md"])
+
+
+class InitializeRouteTest(unittest.TestCase):
+    @mock.patch("brain_agents.api.routes.bootstrap.agent_runner.bootstrap")
+    def test_initialize_accepts_text_context(
+        self, mock_bootstrap: mock.MagicMock
+    ) -> None:
+        mock_bootstrap.return_value = {
+            "written_files": ["index.md", "summaries/project_summary.md"],
+            "result_text": "Initialized working brain.",
+        }
+
+        r = initialize(
+            InitializeRequest(
+                prompt="Build a brain",
+                context="This should be first.",
+                sources=["The app is a Next.js landing page."],
+                max_files=4,
+            )
+        )
+
+        self.assertTrue(r.applied)
+        self.assertEqual(r.written_files, ["index.md", "summaries/project_summary.md"])
+        self.assertEqual(mock_bootstrap.call_args[0][0], "Build a brain")
+        self.assertEqual(
+            mock_bootstrap.call_args[0][1],
+            ["This should be first.", "The app is a Next.js landing page."],
+        )
+        self.assertEqual(mock_bootstrap.call_args.kwargs["max_files"], 4)
+
+    @mock.patch("brain_agents.api.routes.bootstrap.agent_runner.bootstrap")
+    @mock.patch("brain_agents.api.routes.bootstrap.build_public_github_repo_context")
+    def test_initialize_accepts_github_repo_context(
+        self, mock_context: mock.MagicMock, mock_bootstrap: mock.MagicMock
+    ) -> None:
+        mock_context.return_value = {
+            "owner": "a",
+            "repo": "b",
+            "normalized_url": "https://github.com/a/b",
+            "clone_url": "https://github.com/a/b.git",
+            "ref": None,
+            "commit": "abc",
+            "files_scanned": 2,
+            "files_included": 1,
+            "content_truncated": False,
+            "context": "repo context",
+        }
+        mock_bootstrap.return_value = {
+            "written_files": ["index.md"],
+            "result_text": "done",
+        }
+
+        r = initialize(
+            InitializeRequest(
+                prompt="Build repo brain",
+                github_repos=[{"repo_url": "https://github.com/a/b"}],
+                overwrite=True,
+            )
+        )
+
+        self.assertTrue(r.applied)
+        self.assertEqual(r.github_repos[0].normalized_url, "https://github.com/a/b")
+        self.assertEqual(mock_bootstrap.call_args[0][1], ["repo context"])
+        self.assertTrue(mock_bootstrap.call_args.kwargs["overwrite"])
 
 
 if __name__ == "__main__":
