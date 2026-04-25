@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import List
 
 import yaml
 from langchain_core.tools import tool
+
+from .retrieval import RetrievalHit, Retriever
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +64,41 @@ def _parse_frontmatter_and_body(text: str) -> tuple[dict, str]:
     if not isinstance(fm, dict):
         fm = {}
     return fm, body
+
+
+# Lazy, process-wide cache of Retriever instances keyed by brain root path.
+# Building the index + loading BGE weights costs ~seconds; we only want to pay
+# that price once per (process, brain_root) pair. The Retriever itself is
+# safe to share across calls — query() is read-only and the BGE encoder is
+# stateless after corpus encoding.
+_RETRIEVER_CACHE: dict[str, Retriever] = {}
+
+
+def _get_retriever(brain_root: Path) -> Retriever:
+    key = str(brain_root.resolve())
+    r = _RETRIEVER_CACHE.get(key)
+    if r is None:
+        r = Retriever(brain_root=brain_root)
+        _RETRIEVER_CACHE[key] = r
+    return r
+
+
+def _format_hits(hits: list[RetrievalHit]) -> str:
+    if not hits:
+        return "(no relevant sections found)"
+    out: list[str] = []
+    total_tokens = 0
+    for h in hits:
+        total_tokens += h.tokens
+        head = f"## {h.heading}" if h.heading and h.heading != "Intro" else "## (file intro)"
+        out.append(
+            f"### {h.file_path}  —  `{h.section_id}`\n"
+            f"_rerank={h.rerank_score:.3f}  dense={h.dense_score:.3f}  "
+            f"tokens={h.tokens}  source={h.source_kind or 'n/a'}_\n\n"
+            f"{head}\n\n{h.content.strip()}"
+        )
+    out.append(f"\n_(total tokens ≈ {total_tokens})_")
+    return "\n\n---\n\n".join(out)
 
 
 def build_all_tools(ctx: BrainContext) -> list:
@@ -153,6 +191,118 @@ def build_all_tools(ctx: BrainContext) -> list:
         p.write_text(new_content, encoding="utf-8")
         return f"Wrote {relative_path} ({len(new_content)} chars)."
 
+    @tool
+    def semantic_search(query: str, top_k: int = 5) -> str:
+        """
+        Two-stage semantic search across the working brain.
+
+        Uses a BGE dense encoder + cross-encoder reranker (with offline BM25 +
+        keyword fallback per ADR-0002), authority weighting from frontmatter
+        `source.kind`, and a default token budget appropriate for short
+        previews. Returns a Markdown bundle of the top sections with file
+        paths, section IDs, and scores. Prefer this over `search_working_brain`
+        for natural-language questions.
+        """
+        try:
+            r = _get_retriever(wk if wk.is_dir() else ref)
+        except FileNotFoundError as e:
+            return f"Brain not initialized: {e}"
+        hits = r.query(query, top_k=top_k, token_budget=2000)
+        return _format_hits(hits)
+
+    @tool
+    def get_brief(task: str, token_budget: int = 2000) -> str:
+        """
+        Build a token-budgeted briefing bundle for a task.
+
+        Same retrieval pipeline as `semantic_search`, but explicitly packs the
+        result to the requested token budget (default 2000 cl100k tokens).
+        Always tries to include `context/constraints.md` and
+        `context/open_questions.md` when they're in the shortlist, even if
+        that pushes ≤20% over budget. Use this when feeding the brain into
+        another LLM call where context-window pressure matters.
+        """
+        try:
+            r = _get_retriever(wk if wk.is_dir() else ref)
+        except FileNotFoundError as e:
+            return f"Brain not initialized: {e}"
+        hits = r.query(task, top_k=8, token_budget=int(token_budget))
+        return _format_hits(hits)
+
+    @tool
+    def propose_update(
+        incoming_text: str,
+        source_kind: str,
+        source_url: str = "",
+        source_timestamp: str = "",
+    ) -> str:
+        """
+        Build a ReconciliationPlan for a new piece of incoming context.
+
+        Runs fact extraction (LLM with heuristic fallback) over `incoming_text`,
+        retrieves related sections via the shared Retriever, and emits a JSON
+        plan describing exactly which operations should change the working
+        brain (append / supersede / flag_conflict / ignore / create_section).
+
+        Does NOT mutate any brain files: it only returns the plan and appends
+        it to `<brain_root>/.audit/log.jsonl` for traceability. Hand the plan
+        to a human reviewer or to `replace_working_file` to apply.
+
+        `source_kind` should be one of: merged_pr, adr, decision_log, manual,
+        meeting, review_comment, issue, slack, demo (drives source authority).
+        """
+        from .update import Reconciler
+
+        try:
+            retriever = _get_retriever(wk if wk.is_dir() else ref)
+        except FileNotFoundError as exc:
+            return f"propose_update refused: {exc}"
+
+        rec = Reconciler(retriever=retriever)
+        plan = rec.reconcile(
+            incoming_text,
+            source={
+                "kind": source_kind,
+                "url": source_url,
+                "timestamp": source_timestamp,
+            },
+        )
+        return json.dumps(plan.to_dict(), ensure_ascii=False, indent=2)
+
+    @tool
+    def record_audit(plan_json: str) -> str:
+        """
+        Persist a ReconciliationPlan JSON blob (e.g. the output of
+        `propose_update` or a manually-constructed plan) to the audit log at
+        `<brain_root>/.audit/log.jsonl`.
+
+        Use this when the agent assembles a plan across several tool calls and
+        wants to record the final, edited version separately from whatever
+        `propose_update` produced internally.
+        """
+        from .update import ReconciliationPlan
+        from .update.audit import AuditLog
+
+        try:
+            payload = json.loads(plan_json)
+        except json.JSONDecodeError as exc:
+            return f"record_audit refused: invalid JSON ({exc})"
+
+        try:
+            plan = ReconciliationPlan.from_dict(payload)
+        except (KeyError, TypeError, ValueError) as exc:
+            return f"record_audit refused: not a valid plan ({exc})"
+
+        log = AuditLog(wk if wk.is_dir() else ref)
+        entry = log.append(
+            {
+                "kind": "reconciliation_plan",
+                "source": "agent_recorded",
+                "plan": plan.to_dict(),
+            }
+        )
+        return f"Recorded plan with {len(plan.operations)} op(s) at {entry.get('timestamp')}."
+
     return [
         list_reference_brain,
         read_reference_file,
@@ -162,14 +312,45 @@ def build_all_tools(ctx: BrainContext) -> list:
         search_working_brain,
         get_working_frontmatter,
         replace_working_file,
+        semantic_search,
+        get_brief,
+        propose_update,
+        record_audit,
     ]
 
 
+# Tool routing per agent role. Read tools never mutate; write tools may write
+# files OR write the audit log. `propose_update` is on the writer because
+# producing a plan is part of the update workflow even though it's read-only
+# against the brain itself (it does write to .audit/log.jsonl).
+_READER_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "list_reference_brain",
+        "read_reference_file",
+        "search_reference_brain",
+        "list_working_brain",
+        "read_working_file",
+        "search_working_brain",
+        "get_working_frontmatter",
+        "semantic_search",
+        "get_brief",
+    }
+)
+
+_WRITER_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "replace_working_file",
+        "propose_update",
+        "record_audit",
+    }
+)
+
+
 def build_reader_toolkit(ctx: BrainContext) -> list:
-    """All tools except the write tool."""
-    return [t for t in build_all_tools(ctx) if t.name != "replace_working_file"]
+    """Read-side toolkit: file listing/reading + retrieval (no mutations)."""
+    return [t for t in build_all_tools(ctx) if t.name in _READER_TOOL_NAMES]
 
 
 def build_writer_toolkit(ctx: BrainContext) -> list:
-    """Write tool only."""
-    return [t for t in build_all_tools(ctx) if t.name == "replace_working_file"]
+    """Write-side toolkit: file replacement + reconciliation planning + audit."""
+    return [t for t in build_all_tools(ctx) if t.name in _WRITER_TOOL_NAMES]
