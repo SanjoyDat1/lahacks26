@@ -92,8 +92,40 @@ def _load_st_model(model_name: str):
     return m
 
 
+# Per-model prompt formatting. Each entry is ``(query_prefix, doc_prefix)``
+# applied as ``f"{prefix}{text}"`` before feeding the sentence-transformer.
+# Keys are matched as case-insensitive substrings of the model name so the
+# same rule covers a family (e5-small / e5-base / multilingual-e5).
+#
+# References:
+#   * BGE   — https://huggingface.co/BAAI/bge-small-en-v1.5  (query-only prefix)
+#   * E5    — https://huggingface.co/intfloat/e5-small-v2    (both query+passage)
+#   * BCE   — https://huggingface.co/maidalun1020/bce-embedding-base_v1
+#             (no instruction; identity formatting)
+_MODEL_PROMPTS: list[tuple[str, str, str]] = [
+    # (substring, query_prefix, doc_prefix)
+    ("e5", "query: ", "passage: "),
+    ("bge", "Represent this sentence for searching relevant passages: ", ""),
+    ("bce", "", ""),
+]
+
+
+def _prompts_for(model_name: str) -> tuple[str, str]:
+    n = model_name.lower()
+    for needle, qp, dp in _MODEL_PROMPTS:
+        if needle in n:
+            return qp, dp
+    return "", ""  # safe default for unknown models
+
+
 class BGEEncoder:
-    """Dense encoder using ``BAAI/bge-small-en-v1.5``.
+    """Dense encoder backed by a ``sentence-transformers`` model.
+
+    The class is named after the default checkpoint
+    (``BAAI/bge-small-en-v1.5``, 384-dim) but accepts any model resolvable
+    by ``sentence-transformers``. Per-family prompt formatting (BGE query
+    prefix, E5 ``query:``/``passage:`` prefixes, BCE no-prefix) is dispatched
+    via :data:`_MODEL_PROMPTS`.
 
     Loaded lazily so import never fails on machines without torch. The
     constructor raises if the model can't be obtained (no cache + no network);
@@ -103,11 +135,18 @@ class BGEEncoder:
     corpus + model name so that warm starts avoid re-encoding identical text.
     """
 
+    # Class-level default kept for callers that introspect ``BGEEncoder.name``
+    # before instantiating. Instances always overwrite with a model-derived
+    # value in ``__init__``.
     name = "bge-small-en-v1.5"
 
     def __init__(self, model_name: str = "BAAI/bge-small-en-v1.5") -> None:
         self._model = _load_st_model(model_name)
         self._model_name = model_name
+        # Friendly short name (e.g. "bge-small-en-v1.5", "e5-small-v2"). Used
+        # by ``Retriever.backend_label`` and the benchmark report.
+        self.name = model_name.split("/")[-1]
+        self._query_prefix, self._doc_prefix = _prompts_for(model_name)
         self._embeddings = None  # numpy array, shape (n_docs, dim)
         self._cache_path: Path | None = None
 
@@ -118,14 +157,19 @@ class BGEEncoder:
         """
         self._cache_path = path
 
-    @staticmethod
-    def _add_query_prefix(text: str) -> str:
-        # bge-small recommends this prefix to align query/doc spaces.
-        return f"Represent this sentence for searching relevant passages: {text}"
+    def _format_query(self, text: str) -> str:
+        return f"{self._query_prefix}{text}"
+
+    def _format_doc(self, text: str) -> str:
+        return f"{self._doc_prefix}{text}" if self._doc_prefix else text
 
     def _corpus_fingerprint(self, texts: list[str]) -> str:
         h = hashlib.sha256()
         h.update(self._model_name.encode("utf-8"))
+        # Doc prefix is part of the cache key so swapping prompt formats forces
+        # a re-encode even if the model name and texts are identical.
+        h.update(b"\x01")
+        h.update(self._doc_prefix.encode("utf-8"))
         for t in texts:
             h.update(b"\x00")
             h.update(t.encode("utf-8", errors="replace"))
@@ -153,8 +197,9 @@ class BGEEncoder:
             except Exception:
                 pass  # fall through to re-encode
 
+        formatted = [self._format_doc(t) for t in texts]
         emb = self._model.encode(
-            texts,
+            formatted,
             batch_size=32,
             normalize_embeddings=True,
             show_progress_bar=False,
@@ -175,7 +220,7 @@ class BGEEncoder:
         if self._embeddings is None or self._embeddings.size == 0:
             return []
         q_vec = self._model.encode(
-            [self._add_query_prefix(query)],
+            [self._format_query(query)],
             normalize_embeddings=True,
             show_progress_bar=False,
             convert_to_numpy=True,
