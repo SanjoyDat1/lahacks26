@@ -447,6 +447,37 @@ SOURCE DOCUMENTS:
     return plans[:max_files]
 
 
+def _cousin_project_paths(relative_path: str, selected_paths: list[str], *, max_cousins: int = 3) -> list[str]:
+    """Other `projects/<slug>/` hubs (prefer overview.md) for cross-project graph edges."""
+    parts = relative_path.split("/")
+    if len(parts) < 2 or parts[0] != "projects":
+        return []
+    my_slug = parts[1]
+    slugs = sorted(
+        {
+            p.split("/")[1]
+            for p in selected_paths
+            if p.startswith("projects/") and len(p.split("/")) > 1
+        }
+    )
+    out: list[str] = []
+    for slug in slugs:
+        if slug == my_slug:
+            continue
+        ovs = sorted(
+            p
+            for p in selected_paths
+            if p.startswith(f"projects/{slug}/") and p.endswith("overview.md")
+        )
+        if not ovs:
+            ovs = sorted(p for p in selected_paths if p.startswith(f"projects/{slug}/"))
+        if ovs:
+            out.append(ovs[0])
+        if len(out) >= max_cousins:
+            break
+    return out
+
+
 def _ensure_index_links(content: str, selected_paths: list[str]) -> str:
     linked_paths = [path for path in selected_paths if path != INDEX_PATH]
     missing = [path for path in linked_paths if path not in content]
@@ -470,6 +501,16 @@ def _ensure_frontmatter_links(content: str, relative_path: str, selected_paths: 
             for path in selected_paths
             if path != relative_path and (path == INDEX_PATH or path.startswith(relative_path.split("/")[0] + "/"))
         ][:5]
+
+    hub_extra = [
+        p
+        for p in REQUIRED_BOOTSTRAP_PATHS
+        if p in selected_paths and p != relative_path
+    ]
+    cousin_extra = _cousin_project_paths(relative_path, selected_paths)
+    merged = list(dict.fromkeys([*valid_links, *hub_extra, *cousin_extra]))[:10]
+    valid_links = merged
+
     if not valid_links:
         return content
 
