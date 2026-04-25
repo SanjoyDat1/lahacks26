@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, LayoutDashboard, Radio, Search } from "lucide-react";
+import { Bot, Brain, LayoutDashboard, Radio, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/",        label: "Dashboard", Icon: LayoutDashboard },
   { href: "/brain",   label: "Brain",     Icon: Brain           },
+  { href: "/agent",   label: "Agent",     Icon: Bot             },
   { href: "/events",  label: "Events",    Icon: Radio           },
   { href: "/search",  label: "Search",    Icon: Search          },
 ];
@@ -58,6 +59,12 @@ export function Nav() {
         <div className="hidden items-center gap-2 text-[11px] text-slate-400 sm:flex">
           <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
           System ready
+        </div>
+        <div className="hidden items-center gap-2 text-[11px] text-slate-400 sm:flex">
+          <Link href="/agent" className="flex items-center gap-1.5 rounded-full border border-violet-200/60 bg-violet-50/80 px-2.5 py-1 text-[10px] font-medium text-violet-700 transition hover:bg-violet-100/80">
+            <Bot size={10} className="text-violet-500" />
+            Live Agent
+          </Link>
         </div>
       </div>
     </header>

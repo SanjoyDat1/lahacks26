@@ -47,8 +47,20 @@ const importanceOrder: Record<string, number> = {
   low: 3,
 };
 
+function resolveBrianDir(): string {
+  // Support BRIAN_DIR env var override
+  if (process.env.BRIAN_DIR) return process.env.BRIAN_DIR;
+  // Running from repo root (next dev from /lahacks26)
+  const direct = path.join(process.cwd(), "brian");
+  if (fs.existsSync(direct)) return direct;
+  // Running from frontend/ subdirectory
+  const up = path.join(process.cwd(), "..", "brian");
+  if (fs.existsSync(up)) return up;
+  return direct;
+}
+
 export function readBrianFiles(): BrianFile[] {
-  const brianDir = path.join(process.cwd(), "brian");
+  const brianDir = resolveBrianDir();
   if (!fs.existsSync(brianDir)) return [];
 
   const files: BrianFile[] = [];

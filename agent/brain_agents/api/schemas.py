@@ -19,6 +19,11 @@ class QueryRequest(BaseModel):
     prompt: str = Field(min_length=1)
 
 
+class StreamRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    task: Literal["query", "update"] = "query"
+
+
 class QueryResponse(BaseModel):
     result_text: str
 
