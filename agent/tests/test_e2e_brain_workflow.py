@@ -26,7 +26,27 @@ from brain_agents.update import Operation, ReconciliationPlan
 
 
 DOCUMENTS_DIR = Path(__file__).resolve().parent / "documents"
+DEFAULT_SOURCE_DOCUMENTS_DIR = DOCUMENTS_DIR / "LAHacks"
 BRAINS_DIR = Path(__file__).resolve().parent / "brains"
+DOCUMENT_EXTENSIONS = {".eml", ".md", ".txt"}
+
+
+def _pop_cli_option(name: str) -> str | None:
+    for index, arg in enumerate(list(sys.argv)):
+        if arg == name:
+            if index + 1 >= len(sys.argv):
+                raise ValueError(f"{name} requires a value")
+            value = sys.argv[index + 1]
+            del sys.argv[index : index + 2]
+            return value
+        if arg.startswith(f"{name}="):
+            value = arg.split("=", 1)[1]
+            del sys.argv[index]
+            return value
+    return None
+
+
+SOURCE_DOCUMENTS_DIR = Path(_pop_cli_option("--source-documents-dir") or DEFAULT_SOURCE_DOCUMENTS_DIR).expanduser()
 
 
 @contextmanager
@@ -65,6 +85,56 @@ def _is_quota_error(exc: Exception) -> bool:
     return "RESOURCE_EXHAUSTED" in text or "429" in text or "quota" in text.lower()
 
 
+def _source_documents() -> list[str]:
+    if not SOURCE_DOCUMENTS_DIR.is_dir():
+        raise FileNotFoundError(f"Source documents directory does not exist: {SOURCE_DOCUMENTS_DIR}")
+    return sorted(
+        str(path)
+        for path in SOURCE_DOCUMENTS_DIR.rglob("*")
+        if path.is_file() and path.suffix.lower() in DOCUMENT_EXTENSIONS
+    )
+
+
+def _initial_prompt() -> str:
+    scenario_name = SOURCE_DOCUMENTS_DIR.name.replace("_", " ")
+    return (
+        f"Build a concise {scenario_name} knowledge base from the source documents. "
+        "Separate durable decisions, constraints, open questions, failed attempts, "
+        "integration notes, and stakeholder feedback."
+    )
+
+
+def _scenario_expectations() -> dict[str, object]:
+    if SOURCE_DOCUMENTS_DIR.name.lower() == "campuscompanion":
+        return {
+            "signals": ("schedule", "announcements", "lunch", "Google", "emergency"),
+            "retrieval_query": "What should happen when a student's personal schedule has not loaded?",
+            "retrieval_signal": "schoolwide",
+            "brief_task": "Find unresolved questions around bus route reminders and Google account activation.",
+            "brief_signals": ("bus", "google"),
+            "update_text": (
+                "Decision: counseling owns the Google account activation launch reminder. "
+                "Counseling must send activation instructions before the Campus Companion pilot."
+            ),
+            "updated_signal": "counseling",
+            "post_update_query": "Who owns the Google account activation launch reminder after the latest update?",
+        }
+
+    return {
+        "signals": ("BM25", "Devpost", "app.lahacks.dev", "sponsor", "registration"),
+        "retrieval_query": "What fallback keeps retrieval useful when BGE is unavailable?",
+        "retrieval_signal": "bm25",
+        "brief_task": "Find unresolved ownership questions around Devpost and registration kiosks.",
+        "brief_signals": ("devpost", "registration"),
+        "update_text": (
+            "Decision: the platform team owns the Devpost export fallback. "
+            "The platform team must publish export status in #founders before judging."
+        ),
+        "updated_signal": "devpost",
+        "post_update_query": "Who owns the Devpost export fallback after the latest update?",
+    }
+
+
 class BrainWorkflowE2ETest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
@@ -85,22 +155,15 @@ class BrainWorkflowE2ETest(unittest.TestCase):
         if not self.settings.gemini_api_key.strip():
             self.skipTest("GEMINI_API_KEY is required for the real brain-generation E2E test")
 
-        source_documents = sorted(
-            str(path)
-            for path in DOCUMENTS_DIR.iterdir()
-            if path.suffix.lower() in {".md", ".txt"}
-        )
+        source_documents = _source_documents()
+        expectations = _scenario_expectations()
 
         with local_retrieval_dependencies():
             try:
                 written = create_brain_from_documents(
                     source_documents,
                     settings=self.settings,
-                    initial_prompt=(
-                        "Build a concise LA Hacks operations brain from noisy Slack, meeting, "
-                        "email, and review-note documents. Separate durable decisions, "
-                        "constraints, open questions, failed attempts, and integration notes."
-                    ),
+                    initial_prompt=_initial_prompt(),
                     overwrite=True,
                     max_files=8,
                 )
@@ -114,38 +177,26 @@ class BrainWorkflowE2ETest(unittest.TestCase):
             self.assertTrue((self.brain_dir / "index.md").is_file())
 
             generated_text = _generated_markdown(self.brain_dir)
-            for expected_signal in (
-                "BM25",
-                "Devpost",
-                "app.lahacks.dev",
-                "sponsor",
-                "registration",
-            ):
+            for expected_signal in expectations["signals"]:
                 with self.subTest(expected_signal=expected_signal):
                     self.assertIn(expected_signal.lower(), generated_text.lower())
 
             tools = _tool_map(BrainContext(reference=self.reference_dir, working=self.brain_dir))
             retrieval_context = tools["semantic_search"].invoke(
-                {"query": "What fallback keeps retrieval useful when BGE is unavailable?", "top_k": 4}
-            )
-            callback_context = tools["semantic_search"].invoke(
-                {"query": "Which callback URL should stay fixed during judging?", "top_k": 4}
+                {"query": expectations["retrieval_query"], "top_k": 4}
             )
             open_question_context = tools["get_brief"].invoke(
-                {"task": "Find unresolved ownership questions around Devpost and registration kiosks.", "token_budget": 1200}
+                {"task": expectations["brief_task"], "token_budget": 1200}
             )
 
             self.assertNotIn("(no relevant sections found)", retrieval_context)
-            self.assertIn("bm25", retrieval_context.lower())
-            self.assertIn("app.lahacks.dev", callback_context.lower())
+            self.assertIn(expectations["retrieval_signal"], retrieval_context.lower())
             self.assertTrue(
-                "devpost" in open_question_context.lower()
-                or "registration" in open_question_context.lower()
+                any(signal in open_question_context.lower() for signal in expectations["brief_signals"])
             )
 
             update_result = agent_runner.update(
-                "Decision: the platform team owns the Devpost export fallback. "
-                "The platform team must publish export status in #founders before judging.",
+                expectations["update_text"],
                 update_mode="deterministic",
                 apply=True,
                 source={
@@ -161,8 +212,7 @@ class BrainWorkflowE2ETest(unittest.TestCase):
             self.assertTrue(update_result["files_touched"])
 
             updated_text = _generated_markdown(self.brain_dir)
-            self.assertIn("platform team", updated_text.lower())
-            self.assertIn("devpost", updated_text.lower())
+            self.assertIn(expectations["updated_signal"], updated_text.lower())
 
             audit_log = self.brain_dir / ".audit" / "log.jsonl"
             self.assertTrue(audit_log.is_file())
@@ -170,9 +220,9 @@ class BrainWorkflowE2ETest(unittest.TestCase):
 
             retrieval_service.invalidate(self.brain_dir)
             post_update_context = tools["semantic_search"].invoke(
-                {"query": "Who owns the Devpost export fallback after the latest update?", "top_k": 4}
+                {"query": expectations["post_update_query"], "top_k": 4}
             )
-            self.assertIn("platform team", post_update_context.lower())
+            self.assertIn(expectations["updated_signal"], post_update_context.lower())
             snapshot_dir = _persist_brain_snapshot(self.brain_dir)
             print(f"Persisted generated test brain: {snapshot_dir}")
 

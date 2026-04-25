@@ -1,0 +1,43 @@
+From: dana.alvarez@northview.example.edu
+To: campus-companion-team@example.edu
+Cc: faculty-council@northview.example.edu
+Subject: Faculty review notes for Campus Companion pilot
+Date: Thu, 12 Mar 2026 08:15:00 -0700
+
+Hi team,
+
+Faculty council reviewed the Campus Companion pilot proposal this morning. The group supports the pilot if the first release stays focused on practical school-day information and avoids features that would create new moderation work.
+
+Approved for pilot:
+- Personalized class schedule and schoolwide bell schedule
+- School announcements approved by the front office
+- Lunch menu and cafeteria notices
+- Club and activity calendar items
+- Push notifications for urgent announcements, schedule changes, and emergency alerts
+
+Not approved for the first release:
+- Direct student-to-teacher messaging
+- Student comment threads on announcements
+- Gradebook, attendance, discipline, or counseling information
+
+For announcements, the front office approval workflow is required. Club advisors may submit items, but the announcement must be marked approved by office staff before it appears in the app. I can serve as the approval owner during the spring pilot.
+
+Please also make sure emergency information is phrased carefully. The district emergency notification system remains the official source. Campus Companion may display approved emergency alerts, but it should not be described as replacing the district system.
+
+Thank you,
+Dana Alvarez
+Assistant Principal
+
+From: mina.patel@example.edu
+To: dana.alvarez@northview.example.edu
+Cc: faculty-council@northview.example.edu
+Subject: Re: Faculty review notes for Campus Companion pilot
+Date: Thu, 12 Mar 2026 09:02:00 -0700
+
+Thanks, Ms. Alvarez.
+
+We will treat your list as the release-one scope. We will remove direct messaging from the pilot roadmap and keep comments disabled. The app copy will say that emergency alerts are mirrored from the district system after approval.
+
+We will also add an admin note to the announcement importer: only rows with the office approval flag set to "approved" should sync into the app.
+
+Mina
