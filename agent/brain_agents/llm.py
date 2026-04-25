@@ -1,14 +1,20 @@
 from __future__ import annotations
 
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.language_models.chat_models import BaseChatModel
 from collections.abc import Sequence
 from typing import Any
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import BaseMessage
 
 from .config import Settings
 
 
+def make_chat_model(settings: Settings) -> BaseChatModel:
+    return ChatGoogleGenerativeAI(
+        model=settings.gemini_model,
+        google_api_key=settings.google_api_key,
+    )
 def make_chat_model(settings: Settings) -> ChatGoogleGenerativeAI:
     kwargs: dict[str, Any] = {
         "model": settings.gemini_model,
