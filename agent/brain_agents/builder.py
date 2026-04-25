@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
+import sys
 from datetime import date
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +16,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from .config import Settings, load_settings
 from .llm import invoke_chat_model, make_chat_model
 
+logger = logging.getLogger(__name__)
 
 TEXT_EXTENSIONS = {
     ".md",
@@ -37,6 +40,11 @@ MAX_CATALOG_CHARS = 18_000
 DEFAULT_MAX_BOOTSTRAP_FILES = 3
 BATCH_GENERATION_SIZE = 5
 INDEX_PATH = "index.md"
+
+
+def _log_bootstrap(message: str) -> None:
+    logger.info(message)
+    print(f"[brain-agent] bootstrap: {message}", file=sys.stderr, flush=True)
 
 
 @dataclass(frozen=True, slots=True)
@@ -241,6 +249,11 @@ def _select_relevant_files(
     catalog, valid_paths = _reference_catalog(reference_dir)
     if not valid_paths:
         raise ValueError(f"Reference brain has no Markdown templates: {reference_dir}")
+    _log_bootstrap(
+        "selecting relevant files "
+        f"templates={len(valid_paths)} catalog_chars={len(catalog)} "
+        f"source_digest_chars={len(source_digest)} max_files={max_files}"
+    )
 
     system = SystemMessage(
         "You select the smallest useful set of Markdown project-brain files to create "
@@ -300,10 +313,14 @@ SOURCE DOCUMENTS:
             break
 
     if INDEX_PATH not in valid_paths:
-        return selected[:max_files]
+        selected_paths = selected[:max_files]
+        _log_bootstrap(f"selected files={selected_paths}")
+        return selected_paths
 
     linked_files = [path for path in selected if path != INDEX_PATH]
-    return [INDEX_PATH, *linked_files[: max_files - 1]]
+    selected_paths = [INDEX_PATH, *linked_files[: max_files - 1]]
+    _log_bootstrap(f"selected files={selected_paths}")
+    return selected_paths
 
 
 def _ensure_index_links(content: str, selected_paths: list[str]) -> str:
@@ -352,6 +369,10 @@ def _generate_file_batch(
                 "template": template[:MAX_TEMPLATE_CHARS],
             }
         )
+    _log_bootstrap(
+        f"generating batch size={len(batch_paths)} files={batch_paths} "
+        f"template_chars={sum(len(item['template']) for item in templates)}"
+    )
 
     system = SystemMessage(
         "You create Markdown project-brain files from raw source documents. "
@@ -423,6 +444,7 @@ SOURCE DOCUMENTS:
     missing = [path for path in batch_paths if path not in generated]
     if missing:
         raise ValueError(f"Batch-generation JSON omitted files: {', '.join(missing)}")
+    _log_bootstrap(f"generated batch files={sorted(generated)}")
     return generated
 
 
@@ -448,15 +470,25 @@ def create_brain_from_documents(
         raise ValueError("max_files must be at least 1")
     ref = Path(reference_dir or s.brian_reference_dir).expanduser().resolve()
     out = Path(output_dir or s.brain_dir).expanduser().resolve()
+    _log_bootstrap(f"starting create_brain_from_documents max_files={max_files} overwrite={overwrite}")
     source_docs = normalize_documents(documents)
     source_digest = _source_digest(source_docs)
+    source_chars = sum(len(doc.text) for doc in source_docs)
+    _log_bootstrap(
+        f"normalized documents count={len(source_docs)} source_chars={source_chars} "
+        f"digest_chars={len(source_digest)} names={[doc.name for doc in source_docs]}"
+    )
 
     _prepare_output_tree(ref, out, overwrite=overwrite)
+    _log_bootstrap(f"prepared output tree reference={ref} output={out}")
 
     model = make_chat_model(s)
     selected_paths = _select_relevant_files(model, ref, source_digest, initial_prompt, max_files)
     written: dict[str, str] = {}
-    for batch_paths in _batched(selected_paths, BATCH_GENERATION_SIZE):
+    batches = list(_batched(selected_paths, BATCH_GENERATION_SIZE))
+    _log_bootstrap(f"generating {len(selected_paths)} selected files in {len(batches)} batch(es)")
+    for index, batch_paths in enumerate(batches, 1):
+        _log_bootstrap(f"starting batch {index}/{len(batches)}")
         batch_content = _generate_file_batch(
             model,
             ref,
@@ -470,5 +502,7 @@ def create_brain_from_documents(
             output_file.parent.mkdir(parents=True, exist_ok=True)
             output_file.write_text(content, encoding="utf-8")
             written[relative_path] = content
+            _log_bootstrap(f"wrote file={relative_path} chars={len(content)}")
 
+    _log_bootstrap(f"finished create_brain_from_documents written={sorted(written)}")
     return written
