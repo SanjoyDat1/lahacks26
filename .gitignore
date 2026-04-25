@@ -1,0 +1,16 @@
+# Runtime-generated artifacts inside any brain root.
+# The retriever caches its parsed sections here, and the reconciler appends
+# audit entries here. Both must never be committed -- they belong to the
+# *working* brain at runtime, not to the read-only reference example.
+.index/
+.audit/
+brain/.index/
+brain/.audit/
+brian/.index/
+brian/.audit/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+.venv/
