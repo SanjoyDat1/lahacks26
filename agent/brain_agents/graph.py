@@ -6,7 +6,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langgraph.prebuilt import create_react_agent
 
 from .config import Settings, ensure_working_brain, load_settings
-from .llm import make_chat_model
+from .llm import make_chat_model, print_gemini_thinking
 from .tools import BrainContext, build_reader_toolkit, build_writer_toolkit
 
 
@@ -33,8 +33,22 @@ def _last_ai_text(messages: list[BaseMessage]) -> str:
             if isinstance(c, str):
                 return c
             if isinstance(c, list) and c:
+                chunks: list[str] = []
+                for block in c:
+                    if isinstance(block, dict) and block.get("type") == "text":
+                        text = block.get("text")
+                        if isinstance(text, str):
+                            chunks.append(text)
+                if chunks:
+                    return "\n".join(chunks)
                 return str(c)
     return ""
+
+
+def _print_agent_thinking(messages: list[BaseMessage], label: str) -> None:
+    for index, message in enumerate(messages, 1):
+        if isinstance(message, AIMessage):
+            print_gemini_thinking(message, f"{label} message {index}")
 
 
 def _prepare_user_message(
@@ -69,6 +83,7 @@ def run_task(
     m0 = _prepare_user_message(user, task)
     st = reader.invoke({"messages": [m0]})
     messages: list[BaseMessage] = list(st.get("messages", []))
+    _print_agent_thinking(messages, "reader")
 
     if task == "query":
         return _last_ai_text(messages) or str(st)
@@ -91,4 +106,6 @@ def run_task(
         }
     )
     final_msgs: list[BaseMessage] = list(st2.get("messages", []))
+    writer_msgs = final_msgs[len(messages) :] if len(final_msgs) >= len(messages) else final_msgs
+    _print_agent_thinking(writer_msgs, "writer")
     return _last_ai_text(final_msgs) or str(st2)
