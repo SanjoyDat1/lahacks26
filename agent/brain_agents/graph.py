@@ -42,9 +42,17 @@ You have read-only tools only. Do not claim to have written files."""
 
 WRITER_SYSTEM = """You are the **Writer** agent. You may only change the **working brain** (not the `brian/` example).
 
-Use `replace_working_file` to overwrite an **existing** file, or `upsert_working_file` when a knowledge-base update needs to create a new Markdown note. Preserve valid YAML frontmatter when you edit. Link related notes when appropriate, following the patterns in the reference example you can infer from context.
+Available write tools and when to use them:
+- `replace_working_file` — overwrite an **existing** file with new content.
+- `upsert_working_file` — create a new file, or fully replace an existing one.
+- `delete_working_file` — **permanently delete** a single `.md` file. Use this when the user says "delete", "remove", "get rid of", or "drop" a file. Do NOT use replace/upsert with empty content as a substitute.
+- `delete_working_directory` — delete an entire directory and all files inside it. Use only when the user explicitly targets a whole folder.
+- `move_working_file` — move or rename a file. Use when the user says "rename", "move", or "reorganise".
 
-If the user request is ambiguous, ask a short clarifying question before writing. Otherwise, make the minimal edit that satisfies the request."""
+Rules:
+- Preserve valid YAML frontmatter when editing files.
+- After deleting or moving a file, check the backlink warnings returned by those tools and offer to update dangling references.
+- If the user request is ambiguous, ask a short clarifying question before acting. Otherwise, make the minimal change that satisfies the request."""
 
 
 def _last_ai_text(messages: list[BaseMessage]) -> str:
@@ -211,9 +219,14 @@ async def run_task_streaming(
     writer_messages: list[BaseMessage] = [
         *final_messages,
         HumanMessage(
-            "Apply the user's request by calling `replace_working_file` for existing "
-            "working-brain notes or `upsert_working_file` when a new Markdown note is needed. "
-            "If nothing should change, say so. "
+            "Apply the user's request using the appropriate tool:\n"
+            "- `delete_working_file` when the user wants to DELETE or REMOVE a file — never empty a file instead of deleting it.\n"
+            "- `delete_working_directory` when the user wants to remove an entire folder.\n"
+            "- `move_working_file` when the user wants to RENAME or MOVE a file.\n"
+            "- `replace_working_file` to edit an existing file.\n"
+            "- `upsert_working_file` to create a new file.\n"
+            "After a delete or move, report any dangling backlinks the tool flagged.\n"
+            "If nothing should change, say so.\n"
             f"Original user request: {user}"
         ),
     ]
@@ -306,9 +319,14 @@ def run_task(
             "messages": [
                 *messages,
                 HumanMessage(
-                    "Apply the user's request by calling `replace_working_file` for existing "
-                    "working-brain notes or `upsert_working_file` when a new Markdown note is needed. "
-                    "If nothing should change, say so. "
+                    "Apply the user's request using the appropriate tool:\n"
+                    "- `delete_working_file` when the user wants to DELETE or REMOVE a file — never empty a file instead of deleting it.\n"
+                    "- `delete_working_directory` when the user wants to remove an entire folder.\n"
+                    "- `move_working_file` when the user wants to RENAME or MOVE a file.\n"
+                    "- `replace_working_file` to edit an existing file.\n"
+                    "- `upsert_working_file` to create a new file.\n"
+                    "After a delete or move, report any dangling backlinks the tool flagged.\n"
+                    "If nothing should change, say so.\n"
                     f"Original user request: {user}"
                 ),
             ]

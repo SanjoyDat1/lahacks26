@@ -279,6 +279,181 @@ def build_all_tools(ctx: BrainContext) -> list:
         return json.dumps(plan.to_dict(), ensure_ascii=False, indent=2)
 
     @tool
+    def delete_working_file(relative_path: str) -> str:
+        """
+        Permanently delete a Markdown file from the working brain.
+
+        Removes the file, prunes any now-empty parent directories up to the brain
+        root, invalidates the retrieval index, and reports other files that linked
+        to the deleted path so dangling references can be cleaned up.
+
+        Use this whenever the user explicitly requests a file be deleted or removed.
+        NEVER substitute upsert/replace with empty content — use this tool instead.
+        """
+        p = _safe_join(wk, relative_path)
+        if not p.is_file():
+            return f"File not found: {relative_path}"
+        if p.suffix.lower() != ".md":
+            return "Refuse: only .md files may be deleted"
+
+        # Detect backlinks before deleting
+        stem = relative_path.removesuffix(".md")
+        backlinks: list[str] = []
+        for other_rel in _iter_markdown_files(wk):
+            if other_rel == relative_path:
+                continue
+            try:
+                text = _read_text(wk / other_rel)
+                if relative_path in text or stem in text:
+                    backlinks.append(other_rel)
+            except Exception:
+                pass
+
+        p.unlink()
+        retrieval_service.invalidate(wk)
+
+        # Prune empty parent directories up to the brain root
+        try:
+            parent = p.parent
+            wk_resolved = wk.resolve()
+            while parent.resolve() != wk_resolved and parent.is_dir():
+                if not any(parent.iterdir()):
+                    parent.rmdir()
+                    parent = parent.parent
+                else:
+                    break
+        except Exception:
+            pass
+
+        msg = f"Deleted {relative_path}."
+        if backlinks:
+            msg += (
+                f" ⚠ {len(backlinks)} file(s) may have dangling links: "
+                + ", ".join(backlinks[:5])
+                + ("…" if len(backlinks) > 5 else "")
+                + ". Consider updating them."
+            )
+        return msg
+
+    @tool
+    def delete_working_directory(relative_dir: str) -> str:
+        """
+        Permanently delete a directory and ALL Markdown files within it from the
+        working brain.
+
+        Returns a summary of deleted files. Refuses if the target is the brain root
+        or if it would delete more than 50 files (to avoid accidental mass removal —
+        delete files individually in that case).
+
+        Use only when the user explicitly asks to remove an entire folder/section.
+        """
+        import shutil
+
+        # Normalise — strip trailing slashes
+        rel = relative_dir.rstrip("/")
+        d = _safe_join(wk, rel)
+        if not d.is_dir():
+            return f"Directory not found: {relative_dir}"
+        if d.resolve() == wk.resolve():
+            return "Refuse: cannot delete the brain root directory"
+
+        files = _iter_markdown_files(d)
+        if len(files) > 50:
+            return (
+                f"Refuse: would delete {len(files)} files — that exceeds the safety "
+                "limit of 50. Delete sub-directories or files individually."
+            )
+
+        shutil.rmtree(d)
+        retrieval_service.invalidate(wk)
+
+        if files:
+            return (
+                f"Deleted directory '{rel}' and {len(files)} file(s): "
+                + ", ".join(files[:10])
+                + ("…" if len(files) > 10 else "")
+            )
+        return f"Deleted empty directory '{rel}'."
+
+    @tool
+    def move_working_file(source_path: str, dest_path: str) -> str:
+        """
+        Move (rename) a Markdown file within the working brain.
+
+        Creates any missing parent directories for the destination, updates the
+        `id` frontmatter field to match the new path (if present), and reports
+        other files that linked to the old path so those references can be updated.
+
+        Use this when the user wants to rename or reorganise a file.
+        """
+        import re as _re
+
+        src = _safe_join(wk, source_path)
+        if not src.is_file():
+            return f"File not found: {source_path}"
+        if src.suffix.lower() != ".md":
+            return "Refuse: only .md files may be moved"
+
+        dst = _safe_join(wk, dest_path)
+        if dst.suffix.lower() != ".md":
+            return "Refuse: destination must be a .md path"
+        if dst.exists():
+            return f"Refuse: destination already exists: {dest_path}"
+
+        # Detect backlinks before moving
+        stem = source_path.removesuffix(".md")
+        backlinks: list[str] = []
+        for other_rel in _iter_markdown_files(wk):
+            if other_rel == source_path:
+                continue
+            try:
+                text = _read_text(wk / other_rel)
+                if source_path in text or stem in text:
+                    backlinks.append(other_rel)
+            except Exception:
+                pass
+
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        content = src.read_text(encoding="utf-8", errors="replace")
+
+        # Update the `id:` frontmatter field to match the new path
+        new_id = dest_path.removesuffix(".md").replace("\\", "/")
+        if content.startswith("---\n") or content.startswith("---\r\n"):
+            m = _re.match(r"^---\r?\n(.*?)\r?\n---\r?\n?", content, _re.DOTALL)
+            if m:
+                fm_raw = m.group(1)
+                if _re.search(r"^id:", fm_raw, _re.MULTILINE):
+                    fm_raw = _re.sub(r"^id:.*$", f"id: {new_id}", fm_raw, flags=_re.MULTILINE)
+                    content = f"---\n{fm_raw}\n---\n{content[m.end():]}"
+
+        dst.write_text(content, encoding="utf-8")
+        src.unlink()
+
+        # Prune empty source parent directories
+        try:
+            parent = src.parent
+            wk_resolved = wk.resolve()
+            while parent.resolve() != wk_resolved and parent.is_dir():
+                if not any(parent.iterdir()):
+                    parent.rmdir()
+                    parent = parent.parent
+                else:
+                    break
+        except Exception:
+            pass
+
+        retrieval_service.invalidate(wk)
+        msg = f"Moved {source_path} → {dest_path}."
+        if backlinks:
+            msg += (
+                f" ⚠ {len(backlinks)} file(s) still reference the old path: "
+                + ", ".join(backlinks[:5])
+                + ("…" if len(backlinks) > 5 else "")
+                + ". Update those links manually or call `replace_working_file`."
+            )
+        return msg
+
+    @tool
     def record_audit(plan_json: str) -> str:
         """
         Persist a ReconciliationPlan JSON blob (e.g. the output of
@@ -322,6 +497,9 @@ def build_all_tools(ctx: BrainContext) -> list:
         get_working_frontmatter,
         upsert_working_file,
         replace_working_file,
+        delete_working_file,
+        delete_working_directory,
+        move_working_file,
         semantic_search,
         get_brief,
         propose_update,
@@ -364,6 +542,9 @@ _WRITER_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "upsert_working_file",
         "replace_working_file",
+        "delete_working_file",
+        "delete_working_directory",
+        "move_working_file",
         "propose_update",
         "record_audit",
     }
