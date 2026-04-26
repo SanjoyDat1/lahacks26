@@ -5,7 +5,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
-  Bot,
   Brain,
   CheckCircle2,
   ChevronDown,
@@ -17,9 +16,6 @@ import {
   Loader2,
   Paperclip,
   Send,
-  Sparkles,
-  Wifi,
-  WifiOff,
   X,
 } from "lucide-react";
 
@@ -32,10 +28,6 @@ import {
   githubReposForApi,
   type GithubRepoFormRow,
 } from "@/lib/brain/github-ingest";
-import {
-  SessionIntegrationSources,
-  type IntegrationDocBatch,
-} from "@/components/start/session-integration-sources";
 import { env } from "@/lib/env";
 import { cn } from "@/lib/utils";
 
@@ -215,14 +207,14 @@ export function SessionStartPage() {
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [stage, setStage] = useState<StageId>("upload");
 	const [stageLabel, setStageLabel] = useState(
-		"Add GitHub, Workspace sources, or uploads",
+		"Add a GitHub repo or uploads",
 	);
   const [, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
   const [, setEdges] = useState<GraphEdge[]>(INITIAL_EDGES);
   const [tree, setTree] = useState<BrainTreeNode[]>([]);
   const [createdFiles, setCreatedFiles] = useState<CreatedFile[]>([]);
   const [thinking, setThinking] = useState<string[]>([
-    "Connect GitHub, Google Workspace, uploads, or meeting webhooks—everything merges into one bootstrap for the brain agent.",
+    "Add a public GitHub repo and optional files, then start the brain bootstrap.",
   ]);
   const [resultText, setResultText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -291,66 +283,6 @@ export function SessionStartPage() {
     thinkingEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thinking]);
 
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const g = sp.get("google");
-    if (g === "connected") {
-      window.history.replaceState({}, "", window.location.pathname);
-      queueMicrotask(() => {
-        setThinking((p) => [
-          ...p,
-          "Google Workspace connected. Pick Drive files, paste a Sheet URL, and/or add a calendar snapshot, then import into this session.",
-        ]);
-      });
-    } else if (g === "error") {
-      const msg = sp.get("message") ?? "unknown";
-      window.history.replaceState({}, "", window.location.pathname);
-      queueMicrotask(() => {
-        setThinking((p) => [...p, `Google: ${decodeURIComponent(msg)}`]);
-      });
-    }
-  }, []);
-
-  const appendFromIntegration = useCallback(
-    (items: IntegrationDocBatch[]) => {
-      const valid = items.filter(
-        (item) =>
-          (item.text && item.text.trim().length > 0) ||
-          (item.content_base64 && item.content_base64.trim().length > 0),
-      );
-      if (valid.length === 0) {
-        setThinking((prev) => [
-          ...prev,
-          "Google import returned no readable documents (every item was empty). Try different files or check server logs.",
-        ]);
-        return;
-      }
-      if (valid.length < items.length) {
-        setThinking((prev) => [
-          ...prev,
-          `Skipped ${items.length - valid.length} empty item(s) from the import response.`,
-        ]);
-      }
-      const charSum = valid.reduce((s, d) => s + (d.chars || 0), 0);
-      const nextDocs: UploadDoc[] = valid.map((item) => ({
-        id: `int-${item.name}-${item.chars}-${Math.random().toString(36).slice(2, 9)}`,
-        name: item.name,
-        text: item.text,
-        content_base64: item.content_base64,
-        mime_type: item.mime_type,
-        size: item.size,
-        chars: item.chars,
-        status: "ready",
-      }));
-      setDocs((prev) => [...prev, ...nextDocs]);
-      setThinking((prev) => [
-        ...prev,
-        `Workspace: added ${valid.length} document(s) (${charSum.toLocaleString()} chars) to this session. They appear in “Extra files” above — click **Create Brain** to send everything to the agent.`,
-      ]);
-    },
-    [],
-  );
-
   const resetRun = useCallback(() => {
     cleanupRestBootstrap();
     socketRef.current?.close();
@@ -359,14 +291,14 @@ export function SessionStartPage() {
     setIsDone(false);
     setError(null);
     setStage("upload");
-    setStageLabel("Add GitHub, Workspace sources, or uploads");
+    setStageLabel("Add a GitHub repo or uploads");
     setNodes(INITIAL_NODES);
     setEdges(INITIAL_EDGES);
     setTree([]);
     setCreatedFiles([]);
     setResultText("");
     setThinking([
-      "Connect GitHub, Google Workspace, uploads, or meeting webhooks—everything merges into one bootstrap for the brain agent.",
+      "Add a public GitHub repo and optional files, then start the brain bootstrap.",
     ]);
     setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
     setGithubRepos([newGithubRepoRow()]);
@@ -728,7 +660,7 @@ export function SessionStartPage() {
             setError(formatInitializeErrorDetail(raw, res.status));
             setIsRunning(false);
             setStage("upload");
-            setStageLabel("Add GitHub, Workspace sources, or uploads");
+            setStageLabel("Add a GitHub repo or uploads");
             return;
           }
 
@@ -816,7 +748,7 @@ export function SessionStartPage() {
           );
           setIsRunning(false);
           setStage("upload");
-          setStageLabel("Add GitHub, Workspace sources, or uploads");
+          setStageLabel("Add a GitHub repo or uploads");
         }
       })();
       return;
@@ -957,42 +889,6 @@ export function SessionStartPage() {
               onDrop={handleDrop}
 						onSubmit={runBootstrap}
 					/>
-
-					<div className="mt-4 w-full max-w-5xl">
-						<SessionIntegrationSources
-							disabled={isRunning}
-							onImported={appendFromIntegration}
-							onLog={(msg) => setThinking((prev) => [...prev, msg])}
-						/>
-					</div>
-
-					<div className="mt-6 max-h-[min(420px,50vh)] min-h-[200px] w-full max-w-5xl">
-						<AgentThinkingStream
-							thinking={thinking}
-							endRef={thinkingEndRef}
-							subtitle="Imports, uploads, and bootstrap steps (visible while you set up — not only after Create Brain)."
-						/>
-					</div>
-
-					<div className="mt-6 flex w-full max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-						<AgentStatus online={agentOnline} compact />
-						<button
-							type="button"
-							onClick={runBootstrap}
-							disabled={
-								!hasBootstrapSource || isRunning || agentOnline === false
-							}
-							className={cn(
-								"inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all",
-								hasBootstrapSource && !isRunning && agentOnline !== false
-									? "bg-violet-600 text-white shadow-lg shadow-violet-300/40 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-violet-400/50"
-									: "cursor-not-allowed bg-white/70 text-slate-400 ring-1 ring-slate-200/70",
-							)}
-						>
-							<Send size={15} />
-							Create Brain
-						</button>
-					</div>
 
 					<p className="mt-4 w-[min(560px,calc(100vw-32px))] text-center text-[11px] leading-5 text-slate-500">
 						Supported: PDFs, Office docs, Markdown, text, JSON,
@@ -2220,99 +2116,6 @@ function BuildTreeNode({
       ) : (
         <span className="ml-1 mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-black/25" />
       )}
-    </div>
-  );
-}
-
-function AgentThinkingStream({
-  thinking,
-  endRef,
-  subtitle = "Every initialization step streamed live",
-}: {
-  thinking: string[];
-  endRef: React.RefObject<HTMLDivElement | null>;
-  subtitle?: string;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
-      <div className="mb-3 flex items-center gap-2">
-        <Bot size={15} className="text-violet-500" />
-        <div>
-          <h2 className="text-sm font-semibold text-slate-800">Session log</h2>
-          <p className="text-xs text-slate-400">{subtitle}</p>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-2xl border border-violet-100/70 bg-violet-50/40 p-3">
-        {thinking.map((line, index) => (
-          <div
-            key={`${line}-${index}`}
-            className="flex gap-2 rounded-xl bg-white/70 px-3 py-2 text-[12px] leading-5 text-slate-600"
-          >
-            <Sparkles
-              size={11}
-              className="mt-1 flex-shrink-0 text-violet-400"
-            />
-            <p>{line}</p>
-          </div>
-        ))}
-        <div ref={endRef} />
-      </div>
-    </div>
-  );
-}
-
-function AgentStatus({
-  online,
-  compact = false,
-}: {
-  online: boolean | null;
-  compact?: boolean;
-}) {
-  return (
-    <div
-      className={cn(
-        "flex items-start gap-3 rounded-[1.5rem] border p-4 shadow-sm backdrop-blur-xl",
-        compact && "w-full sm:w-auto sm:min-w-72",
-        online === true
-          ? "border-emerald-200/60 bg-emerald-50/80"
-          : online === false
-            ? "border-amber-200/60 bg-amber-50/80"
-            : "border-slate-200/60 bg-white/70",
-      )}
-    >
-      {online === null ? (
-        <Loader2
-          size={15}
-          className="mt-0.5 animate-spin text-slate-400"
-        />
-      ) : online ? (
-        <Wifi size={15} className="mt-0.5 text-emerald-600" />
-      ) : (
-        <WifiOff size={15} className="mt-0.5 text-amber-600" />
-      )}
-      <div>
-        <p
-          className={cn(
-            "text-xs font-semibold",
-            online
-              ? "text-emerald-700"
-              : online === false
-                ? "text-amber-800"
-                : "text-slate-600",
-          )}
-        >
-          {online === null
-            ? "Checking agent API"
-            : online
-              ? "Agent API connected"
-              : "Agent API offline"}
-        </p>
-        <p className="mt-1 text-[11px] leading-4 text-slate-500">
-          {online === false
-            ? "Start it with `cd agent && uv run brain-api` or run `./start.sh`."
-            : "The session builder streams initialization over a WebSocket."}
-        </p>
-      </div>
     </div>
   );
 }
