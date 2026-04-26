@@ -268,7 +268,9 @@ def _synthesize_initialize_context(
                 "**Distill strategy:** single-pass synthesis — your import is compact enough "
                 "to merge in one model pass (Google text, calendar, mail, etc. in one briefing).\n"
             )
-            model = make_chat_model(settings, max_tokens=_BOOTSTRAP_SINGLE_MAX_TOKENS)
+            model = make_chat_model(
+                settings, max_tokens=_BOOTSTRAP_SINGLE_MAX_TOKENS, tier="regular"
+            )
             emit("Extracting durable facts, names, dates, and decisions into one dense briefing…\n")
             out = _single_pass_bootstrap_distill(model, raw_digest)
             if out and len(out) >= 64:
@@ -300,7 +302,9 @@ def _synthesize_initialize_context(
             )
 
         def map_job(index: int, doc: SourceDocument) -> tuple[int, str, str]:
-            local = make_chat_model(settings, max_tokens=_BOOTSTRAP_MAP_MAX_TOKENS)
+            local = make_chat_model(
+                settings, max_tokens=_BOOTSTRAP_MAP_MAX_TOKENS, tier="mini"
+            )
             body = _map_one_document_for_bootstrap(local, doc)
             return index, doc.name, body
 
@@ -333,7 +337,9 @@ def _synthesize_initialize_context(
             "**Merge step:** folding per-source notes into one deduplicated markdown briefing "
             "(sections: domains, decisions, risks, people, open questions)…\n"
         )
-        reduce_model = make_chat_model(settings, max_tokens=_BOOTSTRAP_REDUCE_MAX_TOKENS)
+        reduce_model = make_chat_model(
+            settings, max_tokens=_BOOTSTRAP_REDUCE_MAX_TOKENS, tier="regular"
+        )
         reduced = _reduce_bootstrap_notes(reduce_model, merged)
         if reduced and len(reduced.strip()) >= 64:
             emit(f"**Merged briefing:** {len(reduced):,} characters — ready to plan brain files.\n")
@@ -413,7 +419,7 @@ def _distill_node(state: IngestionState) -> dict[str, Any]:
         content=f"Text to clean (may be long):\n\n{raw[:42000]}\n"
     )
     try:
-        model = make_chat_model(s)
+        model = make_chat_model(s, tier="mini")
         resp = invoke_chat_model(
             model,
             [system, user],
@@ -466,7 +472,11 @@ def _bootstrap_write_node(state: IngestionState) -> dict[str, Any]:
         }
     retrieval_service.invalidate(resolve_brain_root(s))
     _log_graph(f"bootstrap_write END files={sorted(written)}")
-    return {"written_map": written, "error": state.get("error")}
+    return {
+        "written_map": written,
+        "error": state.get("error"),
+        "verify_line": "Retrieval index invalidated; brain ready for search.",
+    }
 
 
 def _retrieve_node(state: IngestionState) -> dict[str, Any]:
@@ -657,7 +667,8 @@ def get_ingestion_workflow() -> object:
         _after_distill_router,
         {"init": "bootstrap_write", "update": "retrieve"},
     )
-    graph.add_edge("bootstrap_write", "verify")
+    # Init path invalidates in bootstrap_write; skip no-op verify smoke.
+    graph.add_edge("bootstrap_write", "final")
     graph.add_edge("retrieve", "reconcile")
     graph.add_edge("reconcile", "apply")
     graph.add_edge("apply", "verify")
@@ -913,6 +924,7 @@ def run_initialize_streaming(
         return
     st["written_map"] = written_map
     retrieval_service.invalidate(resolve_brain_root(settings))
+    st["verify_line"] = "Retrieval index invalidated; brain ready for search."
     yield _event("graph_node", id="brain_files", label="Brain files", status="done")
     yield _event("graph_edge", from_="distill", to="brain_files", status="done")
 
@@ -921,9 +933,6 @@ def run_initialize_streaming(
     yield _event("graph_edge", from_="brain_files", to="index", status="active")
     yield _event("thinking", content="I am warming the retrieval layer so the observatory and future coding agents can search this brain immediately.\n")
 
-    yield _event("stage_start", stage="verify", label="Verifying the new brain")
-    verify = _verify_node(st)
-    st.update(verify)
     yield _event("graph_node", id="index", label="Retrieval index", status="done")
     yield _event("graph_edge", from_="brain_files", to="index", status="done")
     yield _event("graph_node", id="ready", label="Brain ready", status="active")

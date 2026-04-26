@@ -5,7 +5,7 @@ import logging
 import sys
 import time
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from langchain_core.messages import BaseMessage
 
@@ -55,12 +55,29 @@ def _usage_summary(response: object) -> str:
     return ", ".join(parts) if parts else f"usage={usage}"
 
 
-def make_chat_model(settings: Settings, *, max_tokens: int | None = None):
-    """Return the configured OpenAI LangChain chat model."""
+def make_chat_model(
+    settings: Settings,
+    *,
+    max_tokens: int | None = None,
+    tier: Literal["regular", "mini"] = "regular",
+):
+    """Return the configured OpenAI LangChain chat model.
+
+    * ``regular`` — synthesis, planning, bootstrap write, reconciliation.
+    * ``mini`` — per-doc map, distill cleanup, fact JSON. If ``OPENAI_MINI_MODEL`` is
+      unset, defaults to ``gpt-4o-mini`` (not ``OPENAI_MODEL``) so the main model can
+      be upgraded while keeping cheap work on a small model.
+    """
     from langchain_openai import ChatOpenAI
 
+    if tier == "mini":
+        m = (getattr(settings, "openai_mini_model", "") or "").strip()
+        model_name = m or "gpt-4o-mini"
+    else:
+        model_name = (settings.openai_model or "").strip() or "gpt-4o-mini"
+
     kwargs: dict[str, Any] = {
-        "model": settings.openai_model,
+        "model": model_name,
         "api_key": settings.openai_api_key,  # type: ignore[arg-type]
         "temperature": 0,
         "streaming": True,

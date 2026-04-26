@@ -39,7 +39,9 @@ class Settings(BaseSettings):
 
     # ── OpenAI ────────────────────────────────────────────────────────────────
     openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4o-mini", validation_alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-5.4", validation_alias="OPENAI_MODEL")
+    # Cheaper model for extraction / cleanup. Empty → `make_chat_model` uses gpt-4o-mini for tier=mini.
+    openai_mini_model: str = Field(default="gpt-5.4-mini", validation_alias="OPENAI_MINI_MODEL")
 
     # ── Shared ────────────────────────────────────────────────────────────────
     brian_reference_dir: Path = Field(default=_DEFAULT_REFERENCE, validation_alias="BRIAN_REFERENCE_DIR")

@@ -215,7 +215,7 @@ def _build_chat_model() -> Any | None:
         settings = load_settings(validate=False)
         if not (settings.openai_api_key or "").strip():
             return None
-        return make_chat_model(settings)
+        return make_chat_model(settings, tier="mini")
     except Exception as exc:
         logger.debug("Could not build chat model: %s", exc)
         return None

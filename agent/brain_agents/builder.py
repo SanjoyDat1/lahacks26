@@ -46,7 +46,6 @@ MAX_PARALLEL_BATCHES = 3
 BOOTSTRAP_PLAN_MAX_TOKENS = 6_000
 BOOTSTRAP_GENERATION_MAX_TOKENS = 16_384
 INDEX_PATH = "index.md"
-MIN_RICH_BOOTSTRAP_FILES = 10
 REQUIRED_BOOTSTRAP_PATHS = [
     "index.md",
     "map.md",
@@ -359,12 +358,12 @@ def _plan_brain_files(
         f"source_digest_chars={len(source_digest)} max_files={max_files}"
     )
 
-    minimum_files = min(max_files, MIN_RICH_BOOTSTRAP_FILES)
     system = SystemMessage(
         "You plan interlinked Markdown files for an **enterprise company brain**: one **directory per org section** "
         "(`divisions/<slug>/` or `company/<slug>/`, pick one convention) when sources support it. Within each section, add "
         "**nested subfolders** (e.g. `divisions/eng/delivery/milestones.md`) when the material warrants depth—not only a flat set of files. "
-        "Rich **cross-section** links so the org is navigable as Markdown + graph. "
+        "Prefer **distinct, non-overlapping** files per section; do not pad with parallel pages that repeat the same facts. "
+        "Link across sections when sources show hand-offs. "
         "Infer structure only from INITIAL PROMPT + SOURCE DOCUMENTS. "
         "Not the Brian documentation product or this repo's tooling unless sources discuss them. Reference catalog is layout-only. Return only JSON."
     )
@@ -379,16 +378,19 @@ def _plan_brain_files(
   - `divisions/<slug>/delivery/milestones.md`, `divisions/<slug>/delivery/dependencies.md`
   - `divisions/<slug>/people/team.md`, `divisions/<slug>/risks/tracker.md` (or flat `.../risks.md` if shallow)
   - `company/<slug>/roadmap/now-next-later.md` (same idea under `company/`)
-- Aim for **at least 3 files per org section** when sources are rich (hub overview + 2+ supporting pages). Weak sources → one hub + `open_questions.md` (or `notes/capture.md`) only.
-- **Peer links:** The section hub’s `links` must include the spine plus **at least two** other planned paths: peer `divisions/*/overview.md` or `company/*/overview.md`, and/or `projects/*` or `governance/*` when dependencies exist. Show how sections hand off work.
-- **`map.md`:** `links` to **every** section hub you planned (`divisions/*/overview.md` and/or `company/*/overview.md`) and to `projects/*/overview.md` when present.
+- **Depth vs noise:** add another file under a section only for a **distinct subtopic** the hub cannot cover without duplicating. Weak sources → one `overview.md` (plus `open_questions.md` or `notes/capture.md` when needed) is better than many thin parallel pages.
+- **Engineering vs project (graph filters):** `divisions/engineering/` is the **engineering org / function** (owners, process, delivery, decisions, risks, hand-offs). `projects/<repo-or-product>/` is the **concrete product or codebase** (architecture, setup, testing, data flow, todos). **Do not** paste the same facts into both; link `divisions/engineering/overview.md` ↔ `projects/<slug>/overview.md` when sources show ownership or dependencies.
+- **Peer links:** The section hub’s `links` should include the spine, plus **evidence-based** links to peer `divisions/*/overview.md` or `company/*/overview.md`, and/or `projects/*` or `governance/*` when hand-offs exist. Do not add cross-links just to meet a count.
+- **`map.md`:** `links` to every section hub you planned and to `projects/*/overview.md` when present; Mermaid (if any) should show **separate** subgraphs for divisions/company vs projects when both exist.
 - **`index.md`:** a **## Org sections** (or **## Company sections**) block listing every section hub with one line each, plus `map.md`, summary, and `projects/` when present.
-- **GitHub / code:** `projects/<repo-slug>/` for repo depth; link from the relevant **section hub** (e.g. `divisions/engineering/overview.md` ↔ `projects/<repo>/overview.md`).
-- If imports are **only one codebase**, a single **section** (e.g. `divisions/engineering/`) plus `projects/<slug>/` is enough—do **not** fabricate empty trees.
+- **Code / repos:** `projects/<repo-slug>/` for the artifact; the engineering division hub should link to it, not replace it. If imports are **only one codebase**, a single `divisions/engineering/` (or one division) plus `projects/<slug>/` is enough—do **not** fabricate empty trees.
 - Optional cross-org topics: `divisions/cross-cutting/` or `company/cross-cutting/` only when sources support it.
 - Legacy `context/<slug>/` is discouraged; prefer `divisions/<slug>/` or `company/<slug>/`.
 - Optional spine: `meta/using_this_brain.md`, `governance/agent_guardrails.md` (at most one each).
 - `summaries/project_summary.md`: executive view of the **whole company / initiative** with bullets for each section and **explicit markdown links** to every section overview—evidence-backed only.
+
+## App graph / filter alignment
+- The UI groups paths into filters: `divisions/<slug>/` (Division), `company/<slug>/` (Company section), `projects/<repo>/` (Project), root + `summaries/` (org / platform). One clear `.../overview.md` hub per active division/company section and per project keeps toggles meaningful.
 
 ## Grounding
 - Every planned file: 1–3 `evidence` bullets from SOURCE DOCUMENTS or INITIAL PROMPT.
@@ -396,7 +398,7 @@ def _plan_brain_files(
 - Do NOT name or market the Brian documentation product, this tool, or irrelevant demo stacks unless sources say so.
 
 ## Graph / linking
-- Each file plan's `links`: **2–6** paths from this plan. Prefer **cross-section** links (Product ↔ Engineering ↔ Finance) grounded in sources.
+- Each file plan's `links`: **2–6** paths from this plan when justified. Prefer **cross-section** links grounded in sources.
 - `template_path` only when a reference file helps structure.
 
 ## Titles (YAML `title` in generated frontmatter)
@@ -409,7 +411,7 @@ def _plan_brain_files(
   {{"context_domains": [{{"slug": "engineering", "rationale": "Engineering from repo + product docs"}}], "files": [{{"path": "index.md", "title": "Brain index", "purpose": "Entry; lists org sections", "template_path": "index.md", "evidence": ["…"], "links": ["summaries/project_summary.md", "map.md", "divisions/engineering/overview.md"]}}, {{"path": "divisions/engineering/delivery/milestones.md", "title": "Milestones", "purpose": "Delivery schedule grounded in sources", "template_path": "", "evidence": ["…"], "links": ["divisions/engineering/overview.md", "map.md"]}}], "rationale": "…"}}
 
 ## Budget
-- Plan at least {minimum_files} files and at most {max_files} files total.
+- Plan at most {max_files} files total. Prefer the **smallest** set that covers the sources (spine + evidence-backed divisions/company and projects). Do **not** add files to fill a quota.
 
 INITIAL PROMPT:
 ```text
@@ -461,28 +463,6 @@ SOURCE DOCUMENTS:
         if plan.path in {existing.path for existing in plans}:
             continue
         plans.append(plan)
-
-    if len(plans) < minimum_files:
-        fallback_paths = [
-            "company/cross-cutting/key_facts.md",
-            "company/cross-cutting/open_questions.md",
-            "divisions/cross-cutting/key_context.md",
-            "divisions/cross-cutting/open_questions.md",
-        ]
-        for fallback_path in fallback_paths:
-            if len(plans) >= min(max_files, minimum_files):
-                break
-            if fallback_path in {existing.path for existing in plans}:
-                continue
-            plans.append(
-                BrainFilePlan(
-                    path=fallback_path,
-                    title=Path(fallback_path).stem.replace("_", " ").replace("-", " ").title(),
-                    purpose="Source-grounded supporting context created because the uploaded material needs a richer retrieval graph.",
-                    template_path=fallback_path if fallback_path in valid_paths else "",
-                    links=("index.md", "summaries/project_summary.md"),
-                )
-            )
 
     _log_bootstrap(f"planned files={[plan.path for plan in plans]}")
     return plans[:max_files]
@@ -696,8 +676,8 @@ def _generate_file_batch(
     user = HumanMessage(
         f"""Create these Markdown files: {", ".join(batch_paths)}.
 
-For **`company/<section>/`** files: after frontmatter, add **## Audience** (roles). Add **## How this section connects** (or **## Peer sections**) with **bullet list of Markdown links** to other `company/*/overview.md` and relevant `projects/*` files when those paths exist in the selected set—this is the main “inner company” navigation.
-For **`company/cross-cutting/**`: org-wide themes that span departments.
+For **`divisions/<section>/`** or **`company/<section>/`** files: after frontmatter, add **## Audience** (roles). Add **## How this section connects** (or **## Peer sections**) with a **short bullet list of Markdown links** to other `divisions/*/overview.md` or `company/*/overview.md` and relevant `projects/*` when those paths exist in the selected set and the sources support a hand-off. **Project** pages under `projects/<repo>/` should focus on the codebase or product; **division** pages focus on the org/team and process—do not duplicate the same narrative in both.
+For **`company/cross-cutting/**` or `divisions/cross-cutting/`: org-wide themes that span departments.
 For **governance/** or **meta/**: guardrails and what agents must verify with humans.
 
 Use each file plan's title, purpose, and `source_evidence`.
@@ -705,6 +685,7 @@ Use templates only for frontmatter style, heading style, and organization hints.
 Never copy prose, product names, or stack claims from a template file body.
 Never mention the Brian documentation product, this tool, or stack trivia unless those facts appear in SOURCE DOCUMENTS or INITIAL PROMPT.
 Every factual statement must be supported by SOURCE DOCUMENTS or INITIAL PROMPT.
+**Do not restate the same supporting sentences** across multiple files in this batch; each file should add what its siblings do not.
 If under-specified, write a concise source-grounded note plus `## Open questions`—no invented metrics.
 
 Preserve useful YAML keys when possible:
@@ -712,13 +693,13 @@ id, type, title, status, importance, updated, links, keywords.
 Use `{date.today().isoformat()}` only if the template has an updated field.
 Keep links limited to these selected files: {", ".join(selected_paths) or "(none)"}
 Use each file plan's `planned_links` as the default frontmatter `links`, plus clearly related selected paths.
-Prefer exact paths such as `company/engineering/overview.md` and `projects/my-repo/overview.md`.
+Prefer exact paths such as `divisions/engineering/overview.md`, `company/engineering/overview.md`, and `projects/my-repo/overview.md`.
 
-If creating `index.md`: entry point with **## Company sections** — for each `company/*/overview.md` in the selected set, a short bullet with a Markdown link and one-line purpose; also link `map.md`, `summaries/project_summary.md`, and `projects/*/overview.md` hubs.
-If creating `map.md`: a **Mermaid** diagram (flowchart or graph) with **one subgraph per `company/<slug>/` section** that has files in the plan, and edges showing dependencies between sections and key `projects/*` hubs (labels from sources). If Mermaid is too large, use a compact diagram plus a **## Link index** table listing section pairs and relationship from evidence.
-If creating `summaries/project_summary.md`: executive snapshot; **## Company sections at a glance** with links to every section overview; **what agents must know first**; evidence-backed only.
+If creating `index.md`: entry point with **## Org sections** (or **## Company sections**) — for each `divisions/*/overview.md` and/or `company/*/overview.md` in the selected set, a short bullet with a Markdown link and one-line purpose; also link `map.md`, `summaries/project_summary.md`, and `projects/*/overview.md` when present.
+If creating `map.md`: a **Mermaid** diagram with **one subgraph per `divisions/<slug>/` and per `company/<slug>/` that has files**, and **separate** subgraph(s) for `projects/<repo>/` as needed; edges show hand-offs or dependencies from the sources. If Mermaid is too large, use a compact diagram plus a **## Link index** table.
+If creating `summaries/project_summary.md`: executive snapshot; **## Org / company at a glance** with links to every section overview; **what agents must know first**; evidence-backed only.
 
-Include `## Source Evidence` in every non-index file with bullets from the file plan and/or SOURCE DOCUMENTS.
+For **leaf / detail** files (not `index.md` or `map.md`), add at most a short `## Source evidence` section with bullets **specific to that file’s scope**—do not copy the same block into every file.
 
 Return ONE complete JSON object (no markdown fences). In each `content` string use JSON escapes for newlines (\\n) only—no raw line breaks inside the string.
 The JSON must be **complete and valid** so `json.loads` succeeds: if you are near the output limit, shorten sections rather than stopping mid-string.
@@ -861,8 +842,12 @@ def create_brain_from_documents_streaming(
     _prepare_output_tree(ref, out, overwrite=overwrite)
     _log_bootstrap(f"prepared output tree reference={ref} output={out}")
 
-    plan_model = make_chat_model(s, max_tokens=BOOTSTRAP_PLAN_MAX_TOKENS)
-    write_model = make_chat_model(s, max_tokens=BOOTSTRAP_GENERATION_MAX_TOKENS)
+    plan_model = make_chat_model(
+        s, max_tokens=BOOTSTRAP_PLAN_MAX_TOKENS, tier="regular"
+    )
+    write_model = make_chat_model(
+        s, max_tokens=BOOTSTRAP_GENERATION_MAX_TOKENS, tier="regular"
+    )
     file_plans = _plan_brain_files(plan_model, ref, source_digest, initial_prompt, max_files)
     selected_paths = [plan.path for plan in file_plans]
     written: dict[str, str] = {}
