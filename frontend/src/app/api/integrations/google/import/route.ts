@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { googleIntegrationConfigured } from "@/lib/integrations/google/config";
-import { readGoogleSessionCookie } from "@/lib/integrations/google/session-cookie";
+import { loadGoogleSessionForApi } from "@/lib/integrations/google/session-cookie";
 import {
   buildCalendarSnapshot,
   buildGmailSnapshot,
+  expandDriveFoldersToFileIds,
+  extractDriveFolderIdFromUrl,
   extractSpreadsheetIdFromUrl,
   importDriveFiles,
   importSpreadsheetById,
@@ -12,6 +14,10 @@ import {
 
 type Body = {
   fileIds?: string[];
+  /** Drive folder ids — expanded recursively (capped) into file ids before import. */
+  folderIds?: string[];
+  /** Paste a drive.google.com/.../folders/... link (optional). */
+  folderUrl?: string;
   spreadsheetUrl?: string;
   includeCalendar?: boolean;
   includeGmail?: boolean;
@@ -22,7 +28,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "not_configured" }, { status: 501 });
   }
 
-  const session = await readGoogleSessionCookie();
+  let session;
+  try {
+    session = await loadGoogleSessionForApi();
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "session_refresh_failed";
+    return NextResponse.json({ error: msg }, { status: 401 });
+  }
   if (!session) {
     return NextResponse.json({ error: "not_connected" }, { status: 401 });
   }
@@ -37,9 +49,33 @@ export async function POST(request: NextRequest) {
   const documents: Awaited<ReturnType<typeof importDriveFiles>> = [];
 
   try {
-    const ids = Array.isArray(body.fileIds) ? body.fileIds.filter((x) => typeof x === "string" && x.length > 0) : [];
-    if (ids.length) {
-      documents.push(...(await importDriveFiles(session, ids)));
+    const rawFileIds = Array.isArray(body.fileIds)
+      ? body.fileIds.filter((x) => typeof x === "string" && x.length > 0)
+      : [];
+    const rawFolderIds = Array.isArray(body.folderIds)
+      ? body.folderIds.filter((x) => typeof x === "string" && x.length > 0)
+      : [];
+    const fromUrl =
+      typeof body.folderUrl === "string" ? extractDriveFolderIdFromUrl(body.folderUrl.trim()) : null;
+    const folderDedup = new Set<string>(rawFolderIds);
+    if (fromUrl) folderDedup.add(fromUrl);
+    const allFolderIds = [...folderDedup];
+
+    const fromFolders =
+      allFolderIds.length > 0 ? await expandDriveFoldersToFileIds(session, allFolderIds) : [];
+
+    const mergedDriveIds = [...rawFileIds, ...fromFolders];
+    const seen = new Set<string>();
+    const driveIds: string[] = [];
+    for (const id of mergedDriveIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        driveIds.push(id);
+      }
+    }
+
+    if (driveIds.length) {
+      documents.push(...(await importDriveFiles(session, driveIds)));
     }
 
     const sheetRaw = typeof body.spreadsheetUrl === "string" ? body.spreadsheetUrl.trim() : "";

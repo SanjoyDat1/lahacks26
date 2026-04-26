@@ -1,6 +1,24 @@
+import path from "path";
+
+import { applyEnvDotFilesOnly } from "../../load-env-dot-only";
+
 export const GOOGLE_COOKIE_NAME = "google_workspace_session";
 export const GOOGLE_STATE_COOKIE = "google_oauth_state";
 export const GOOGLE_NEXT_COOKIE = "google_oauth_next";
+
+/**
+ * Ensure only `.env` (repo root + `frontend/`) is merged into `process.env` — not `.env.local`.
+ * Re-applied at runtime so API routes / Turbopack always see the same `GOOGLE_*` as `next.config.ts`.
+ */
+let monorepoEnvLoaded = false;
+
+/** Load `{repo}/.env` then `frontend/.env` into `process.env` (server runtime). */
+export function loadGoogleWorkspaceEnvFromDisk(): void {
+  if (monorepoEnvLoaded) return;
+  monorepoEnvLoaded = true;
+  const frontendDir = path.resolve(__dirname, "..", "..", "..", "..");
+  applyEnvDotFilesOnly([path.resolve(frontendDir, ".."), frontendDir]);
+}
 
 /** Read-only Workspace coverage: Drive files, Docs, Sheets, Calendar. */
 export const GOOGLE_WORKSPACE_SCOPES = [
@@ -15,17 +33,19 @@ export const GOOGLE_WORKSPACE_SCOPES = [
 ].join(" ");
 
 export function googleIntegrationConfigured() {
+  loadGoogleWorkspaceEnvFromDisk();
+  const cookie = process.env.GOOGLE_COOKIE_SECRET?.trim() ?? "";
   return Boolean(
     process.env.GOOGLE_CLIENT_ID?.trim() &&
       process.env.GOOGLE_CLIENT_SECRET?.trim() &&
-      process.env.GOOGLE_COOKIE_SECRET &&
-      process.env.GOOGLE_COOKIE_SECRET.length >= 16,
+      cookie.length >= 16,
   );
 }
 
 export function getGoogleCookieSecret(): string {
-  const s = process.env.GOOGLE_COOKIE_SECRET;
-  if (!s || s.length < 16) {
+  loadGoogleWorkspaceEnvFromDisk();
+  const s = process.env.GOOGLE_COOKIE_SECRET?.trim() ?? "";
+  if (s.length < 16) {
     throw new Error("GOOGLE_COOKIE_SECRET must be set (min 16 characters)");
   }
   return s;

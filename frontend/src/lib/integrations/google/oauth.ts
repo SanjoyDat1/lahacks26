@@ -1,4 +1,5 @@
 import type { GoogleTokenPayload } from "./crypto";
+import { loadGoogleWorkspaceEnvFromDisk } from "./config";
 
 type TokenResponse = {
   access_token: string;
@@ -37,6 +38,7 @@ export function buildGoogleAuthUrl(opts: {
 }
 
 export async function exchangeGoogleCode(code: string, redirectUri: string): Promise<TokenResponse> {
+  loadGoogleWorkspaceEnvFromDisk();
   const clientId = process.env.GOOGLE_CLIENT_ID!;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
   const body = new URLSearchParams({
@@ -59,6 +61,7 @@ export async function exchangeGoogleCode(code: string, redirectUri: string): Pro
 }
 
 export async function refreshGoogleAccess(refreshToken: string): Promise<TokenResponse> {
+  loadGoogleWorkspaceEnvFromDisk();
   const clientId = process.env.GOOGLE_CLIENT_ID!;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET!;
   const body = new URLSearchParams({

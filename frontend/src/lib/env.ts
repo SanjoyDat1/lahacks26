@@ -2,6 +2,8 @@ const databaseUrl = normalizeDatabaseUrl(process.env.DATABASE_URL);
 
 export const env = {
   appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  /** Same host the browser should use for `brain-api` (bootstrap WebSocket). Set in `.env` for tunnels / non-default ports. */
+  agentApiUrlPublic: (process.env.NEXT_PUBLIC_AGENT_API_URL ?? "").replace(/\/+$/, ""),
   databaseUrl,
   openaiApiKey: process.env.OPENAI_API_KEY,
   openaiModel: process.env.OPENAI_MODEL ?? "gpt-4o-mini",
