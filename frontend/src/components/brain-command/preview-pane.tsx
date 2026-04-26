@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowDownLeft,
@@ -17,8 +17,7 @@ import {
 
 import type { BrianFile } from "@/lib/brian/reader";
 import { cn } from "@/lib/utils";
-
-type Answer = { markdown: string; sources: string[] };
+import { mdComponents, useExpandedModal } from "./markdown-components";
 
 type ConnectedPage = {
   file: BrianFile;
@@ -215,159 +214,22 @@ function ConnectedPagesList({
   );
 }
 
-const mdComponents: Components = {
-  h1: ({ children, ...p }) => (
-    <h1 {...p} className="mt-6 mb-4 text-2xl font-semibold tracking-tight text-black first:mt-0">
-      {children}
-    </h1>
-  ),
-  h2: ({ children, ...p }) => (
-    <h2 {...p} className="mt-7 mb-3 text-xl font-semibold tracking-tight text-black first:mt-0">
-      {children}
-    </h2>
-  ),
-  h3: ({ children, ...p }) => (
-    <h3 {...p} className="mt-6 mb-2.5 text-base font-semibold tracking-tight text-black/95 first:mt-0">
-      {children}
-    </h3>
-  ),
-  h4: ({ children, ...p }) => (
-    <h4 {...p} className="mt-5 mb-2 text-sm font-semibold uppercase tracking-[0.12em] text-black/80 first:mt-0">
-      {children}
-    </h4>
-  ),
-  p: ({ children, ...p }) => (
-    <p {...p} className="my-3 text-[13px] leading-7 text-black/80">
-      {children}
-    </p>
-  ),
-  ul: ({ children, ...p }) => (
-    <ul {...p} className="my-3 ml-5 list-disc space-y-1.5 text-[13px] leading-7 text-black/80 marker:text-black/45">
-      {children}
-    </ul>
-  ),
-  ol: ({ children, ...p }) => (
-    <ol {...p} className="my-3 ml-5 list-decimal space-y-1.5 text-[13px] leading-7 text-black/80 marker:text-black/55">
-      {children}
-    </ol>
-  ),
-  li: ({ children, ...p }) => (
-    <li {...p} className="pl-1">
-      {children}
-    </li>
-  ),
-  a: ({ children, ...p }) => (
-    <a {...p} className="text-[color:var(--accent-700)] underline decoration-black/20 underline-offset-2 hover:decoration-[color:var(--accent-700)]">
-      {children}
-    </a>
-  ),
-  strong: ({ children, ...p }) => (
-    <strong {...p} className="font-semibold text-black">
-      {children}
-    </strong>
-  ),
-  em: ({ children, ...p }) => (
-    <em {...p} className="italic text-black/85">
-      {children}
-    </em>
-  ),
-  blockquote: ({ children, ...p }) => (
-    <blockquote {...p} className="my-4 border-l-2 border-black/20 pl-4 text-[13px] italic text-black/70">
-      {children}
-    </blockquote>
-  ),
-  hr: (p) => <hr {...p} className="my-6 border-black/10" />,
-  code: ({ className, children, ...p }) => {
-    const isBlock = /language-/.test(className ?? "");
-    if (isBlock) {
-      return (
-        <code {...p} className={cn(className, "block whitespace-pre text-[12px] leading-6 text-black/85")}>
-          {children}
-        </code>
-      );
-    }
-    return (
-      <code
-        {...p}
-        className="rounded-md border border-black/10 bg-black/[0.05] px-1.5 py-0.5 font-mono text-[12px] text-black/90"
-      >
-        {children}
-      </code>
-    );
-  },
-  pre: ({ children, ...p }) => (
-    <pre
-      {...p}
-      className="my-4 overflow-x-auto rounded-xl border border-black/10 bg-black/[0.05] p-4 font-mono text-[12px] leading-6 text-black/85"
-    >
-      {children}
-    </pre>
-  ),
-  table: ({ children, ...p }) => (
-    <div className="my-4 overflow-x-auto rounded-xl border border-black/10">
-      <table {...p} className="w-full border-collapse text-[12px] text-black/80">
-        {children}
-      </table>
-    </div>
-  ),
-  th: ({ children, ...p }) => (
-    <th {...p} className="border-b border-black/10 bg-black/[0.04] px-3 py-2 text-left font-semibold text-black/85">
-      {children}
-    </th>
-  ),
-  td: ({ children, ...p }) => (
-    <td {...p} className="border-b border-black/[0.06] px-3 py-2 align-top">
-      {children}
-    </td>
-  ),
-};
-
 export function PreviewPane({
   file,
-  lastAnswer,
   onSelectSource,
   accentForPath,
   allFiles = [],
 }: {
   file: BrianFile | null;
-  lastAnswer: Answer | null;
   onSelectSource: (titleOrPath: string) => void;
   accentForPath: (path: string) => string;
   allFiles?: BrianFile[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
+  const close = useMemo(() => () => setExpanded(false), []);
+  const { mounted, visible } = useExpandedModal(expanded, close);
 
-  useEffect(() => {
-    if (expanded) {
-      setMounted(true);
-      const id = requestAnimationFrame(() => {
-        requestAnimationFrame(() => setVisible(true));
-      });
-      return () => cancelAnimationFrame(id);
-    }
-    setVisible(false);
-    if (!mounted) return;
-    const t = window.setTimeout(() => setMounted(false), 220);
-    return () => window.clearTimeout(t);
-  }, [expanded, mounted]);
-
-  useEffect(() => {
-    if (!expanded) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpanded(false);
-    };
-    window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [expanded]);
-
-  const hasContent = !!file || !!lastAnswer;
+  const hasContent = !!file;
 
   const cleanedContent = useMemo(() => {
     if (!file) return "";
@@ -386,52 +248,10 @@ export function PreviewPane({
     [file, allFiles],
   );
 
-  const answerBlock = lastAnswer ? (
-    <div className="space-y-4">
-      <div className="max-w-none">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-          Assistant
-        </p>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-          {lastAnswer.markdown}
-        </ReactMarkdown>
-      </div>
-
-      {lastAnswer.sources?.length ? (
-        <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-            Sources
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {lastAnswer.sources.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onSelectSource(s)}
-                className={cn(
-                  "rounded-full border border-black/10 bg-white/70 px-3 py-1 text-[11px] font-medium text-black/75 transition",
-                  "hover:bg-white hover:text-black",
-                )}
-                style={{ boxShadow: `inset 0 0 0 1px ${accentForPath(s)}33` }}
-                title={s}
-              >
-                <span className="font-mono">{s}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  ) : null;
-
   const body = (sized: "inline" | "expanded") => (
     <div className={cn("min-h-0 flex-1 overflow-y-auto", sized === "expanded" ? "px-10 py-8" : "px-5 py-5")}>
       {file ? (
         <div className="max-w-none space-y-8">
-          {answerBlock ? (
-            <div className="rounded-xl border border-black/10 bg-white/60 p-4 shadow-sm">{answerBlock}</div>
-          ) : null}
-
           <div>
             {displayTitle ? (
               <h1 className="mt-0 mb-3 text-2xl font-semibold tracking-tight text-black">
@@ -450,8 +270,6 @@ export function PreviewPane({
             </ReactMarkdown>
           </div>
         </div>
-      ) : lastAnswer ? (
-        answerBlock
       ) : (
         <div className="flex h-full items-center justify-center text-center text-black/55">
           <div>

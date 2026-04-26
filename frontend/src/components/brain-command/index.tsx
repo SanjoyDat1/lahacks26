@@ -4,9 +4,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrianFile, GraphData, GraphLink } from "@/lib/brian/reader";
+import type { Relevance } from "@/lib/brian/scenarios";
 import { categoryOf, categoryShade, type BrainCategory } from "@/lib/brain/categories";
 import { addGraphLink, removeGraphLink } from "@/lib/brain/graph-link-mutations";
+import { cn } from "@/lib/utils";
 
+import { AnswerCard } from "@/components/brain-command/answer-card";
 import { FilterChips } from "@/components/brain-command/filter-chips";
 import { FileTree } from "@/components/brain-command/file-tree";
 import { GraphCanvas } from "@/components/brain-command/graph-canvas";
@@ -62,6 +65,8 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
   >("idle");
   const [selectedEdge, setSelectedEdge] = useState<GraphLink | null>(null);
   const [flashEdge, setFlashEdge] = useState<GraphLink | null>(null);
+  /** Brain file paths the agent has read while deriving the in-flight answer. */
+  const [activeSources, setActiveSources] = useState<string[] | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
   const flashEdgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -87,6 +92,19 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
   const colorOverride = useMemo(() => {
     return (node: { path?: string }) => categoryShade(node.path ?? "");
   }, []);
+
+  const highlightMap = useMemo<Map<string, Relevance> | undefined>(() => {
+    if (!activeSources || activeSources.length === 0) return undefined;
+    const map = new Map<string, Relevance>();
+    for (const path of activeSources) {
+      // Mark by both the raw path and the dotted node id, so the graph picks
+      // it up regardless of which key the node uses.
+      map.set(path, "primary");
+      const dotted = path.replace(/\.md$/i, "").replace(/\//g, ".");
+      map.set(dotted, "primary");
+    }
+    return map;
+  }, [activeSources]);
 
   const leftPanelRef = useRef<HTMLElement>(null);
   const rightPanelRef = useRef<HTMLElement>(null);
@@ -213,6 +231,7 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
           selectedId={selectedFile?.frontmatter.id ?? selectedFile?.path}
           selectedEdge={selectedEdge}
           flashEdge={flashEdge}
+          highlightMap={highlightMap}
           onSelectFile={(filePathOrId) => {
             setSelectedEdge(null);
             const f = files.find(
@@ -275,7 +294,6 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
         <section ref={rightPanelRef} className="glass pointer-events-auto min-h-0 overflow-hidden">
           <PreviewPane
             file={selectedFile}
-            lastAnswer={lastAnswer}
             allFiles={files}
             onSelectSource={(titleOrPath) => {
               const f =
@@ -325,14 +343,38 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
         </div>
       )}
 
-      {/* Bottom prompt bar */}
+      {/* Bottom prompt bar with attached answer card */}
       <div className="absolute inset-x-0 bottom-0 z-30 px-4 pb-10">
-        <div className="mx-auto w-[min(560px,calc(100vw-32px))]">
+        <div
+          className={cn(
+            "mx-auto flex w-[min(640px,calc(100vw-32px))] flex-col",
+            lastAnswer && "rounded-2xl shadow-lg",
+          )}
+        >
+          {lastAnswer ? (
+            <AnswerCard
+              answer={lastAnswer}
+              attached
+              onClose={() => setLastAnswer(null)}
+              onSelectSource={(titleOrPath) => {
+                const f =
+                  files.find((x) => x.path === titleOrPath) ??
+                  files.find((x) => (x.frontmatter.title ?? "") === titleOrPath);
+                if (f) {
+                  setSelectedEdge(null);
+                  setSelectedFile(f);
+                }
+              }}
+              accentForPath={(p) => categoryShade(p)}
+            />
+          ) : null}
           <PromptBar
             status={status}
             onStatusChange={setStatus}
             onAnswer={setLastAnswer}
+            onActiveSources={setActiveSources}
             files={files}
+            attached={!!lastAnswer}
             onSelectFile={(f) => {
               setSelectedEdge(null);
               setSelectedFile(f);

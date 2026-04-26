@@ -5,6 +5,7 @@ import { Bot, CheckCircle, FileText, Pencil, Send, User, X } from "lucide-react"
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
+import type { BrianFile } from "@/lib/brian/reader";
 import { cn } from "@/lib/utils";
 
 type Message = {
@@ -33,7 +34,13 @@ const WELCOME: Message = {
 
 type Mode = "chat" | "edit";
 
-export function BrainChat({ contextHint }: { contextHint?: string }) {
+type BrainChatProps = {
+  contextHint?: string;
+  files?: BrianFile[];
+  onOpenSource?: (file: BrianFile) => void;
+};
+
+export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatProps) {
   const [mode, setMode] = useState<Mode>("chat");
   const [messages, setMessages] = useState<Message[]>([WELCOME]);
   const [input, setInput] = useState("");
@@ -91,20 +98,26 @@ export function BrainChat({ contextHint }: { contextHint?: string }) {
         const decoder = new TextDecoder();
         let accumulated = "";
         let sources: string[] = [];
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          for (const line of chunk.split("\n")) {
-            if (!line.startsWith("data: ")) continue;
-            const raw = line.slice(6);
-            if (raw === "[DONE]") break;
-            try {
-              const parsed = JSON.parse(raw) as { sources?: string[]; delta?: string };
-              if (parsed.sources) sources = parsed.sources;
-              if (parsed.delta) accumulated += parsed.delta;
-            } catch { /* ignore */ }
+          buffer += decoder.decode(value, { stream: true });
+          const events = buffer.split("\n\n");
+          buffer = events.pop() ?? "";
+
+          for (const event of events) {
+            for (const line of event.split("\n")) {
+              if (!line.startsWith("data:")) continue;
+              const raw = line.slice(5).trim();
+              if (raw === "[DONE]") break;
+              try {
+                const parsed = JSON.parse(raw) as { sources?: string[]; delta?: string };
+                if (parsed.sources) sources = parsed.sources;
+                if (parsed.delta) accumulated += parsed.delta;
+              } catch { /* ignore */ }
+            }
           }
           setMessages((prev) =>
             prev.map((m) =>
@@ -233,15 +246,22 @@ export function BrainChat({ contextHint }: { contextHint?: string }) {
                   </div>
                   {msg.sources && msg.sources.length > 0 && !msg.streaming && (
                     <div className="flex flex-wrap gap-1">
-                      {msg.sources.map((s) => (
-                        <span
-                          key={s}
-                          className="flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/70 px-2.5 py-0.5 text-[10px] text-slate-500 shadow-sm"
-                        >
-                          <FileText size={9} />
-                          {s}
-                        </span>
-                      ))}
+                      {msg.sources.map((s) => {
+                        const file = files.find((f) => f.path === s || f.frontmatter.title === s);
+                        return (
+                          <button
+                            key={s}
+                            type="button"
+                            onClick={() => file && onOpenSource?.(file)}
+                            disabled={!file || !onOpenSource}
+                            title={file?.path ?? s}
+                            className="flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/70 px-2.5 py-0.5 text-[10px] text-slate-500 shadow-sm transition hover:bg-white hover:text-slate-700 disabled:cursor-default disabled:hover:bg-white/70 disabled:hover:text-slate-500"
+                          >
+                            <FileText size={9} />
+                            {file?.frontmatter.title ?? s}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
