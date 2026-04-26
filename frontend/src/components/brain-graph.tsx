@@ -30,6 +30,12 @@ function nodeRadius(val: number) {
   return Math.max(6, val * 2.6);
 }
 
+/** Canvas px: drag this far from a node press to start a link; shorter motion keeps a click for selection. */
+const LINK_DRAG_THRESHOLD_PX = 8;
+const PAN_DRAG_THRESHOLD_PX = 4;
+/** Radians: half the apex angle of link arrowheads (wings at ang ± this). */
+const ARROW_HEAD_HALF_ANGLE = 0.42;
+
 // ─── simulation ────────────────────────────────────────────────────────────────
 
 type SimNode = GraphNode & { x: number; y: number; vx: number; vy: number };
@@ -53,6 +59,141 @@ function buildLinks(simNodes: SimNode[], raw: GraphData["links"]): SimLink[] {
     const t = byId.get(l.target);
     return s && t ? [{ source: s, target: t }] : [];
   });
+}
+
+/** Unordered endpoints so A→B and B→A share a bucket (visual overlap). */
+function undirectedPairKey(a: string, b: string) {
+  return a < b ? `${a}\0${b}` : `${b}\0${a}`;
+}
+
+/**
+ * Lane index per directed edge: 0 when this pair is the only link between the
+ * two nodes; otherwise symmetric offsets so multiple links curve apart.
+ * Topology is unchanged — layout-only.
+ */
+function buildLaneByDirectedKey(links: SimLink[]): Map<string, number> {
+  const pairBuckets = new Map<string, SimLink[]>();
+  for (const L of links) {
+    const pk = undirectedPairKey(L.source.id, L.target.id);
+    let arr = pairBuckets.get(pk);
+    if (!arr) {
+      arr = [];
+      pairBuckets.set(pk, arr);
+    }
+    arr.push(L);
+  }
+  const laneByDirected = new Map<string, number>();
+  for (const arr of pairBuckets.values()) {
+    if (arr.length < 2) {
+      for (const L of arr) laneByDirected.set(`${L.source.id}\0${L.target.id}`, 0);
+      continue;
+    }
+    const sorted = [...arr].sort((a, b) =>
+      `${a.source.id}\0${a.target.id}`.localeCompare(`${b.source.id}\0${b.target.id}`, "en"),
+    );
+    const n = sorted.length;
+    for (let i = 0; i < n; i++) {
+      laneByDirected.set(`${sorted[i]!.source.id}\0${sorted[i]!.target.id}`, i - (n - 1) / 2);
+    }
+  }
+  return laneByDirected;
+}
+
+type LinkDrawGeom = {
+  straight: boolean;
+  p0x: number;
+  p0y: number;
+  cx: number;
+  cy: number;
+  lineEx: number;
+  lineEy: number;
+  ex: number;
+  ey: number;
+  /** Direction from stroke end toward arrow tip (same convention as straight chords). */
+  ang: number;
+};
+
+function computeLinkDrawGeom(s: SimNode, t: SimNode, lane: number, arrowLen: number): LinkDrawGeom {
+  const dx = t.x - s.x;
+  const dy = t.y - s.y;
+  const len = Math.sqrt(dx * dx + dy * dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nr = nodeRadius(t.val);
+  const headDepth = arrowLen * Math.cos(ARROW_HEAD_HALF_ANGLE);
+
+  if (Math.abs(lane) < 1e-6) {
+    const ang = Math.atan2(dy, dx);
+    const ex = t.x - ux * (nr + 7);
+    const ey = t.y - uy * (nr + 7);
+    const lineEx = ex - headDepth * Math.cos(ang);
+    const lineEy = ey - headDepth * Math.sin(ang);
+    return { straight: true, p0x: s.x, p0y: s.y, cx: 0, cy: 0, lineEx, lineEy, ex, ey, ang };
+  }
+
+  const mx = (s.x + t.x) / 2;
+  const my = (s.y + t.y) / 2;
+  const nx = -uy;
+  const ny = ux;
+  const spread = lane * Math.min(len * 0.16, 52);
+  const cx = mx + nx * spread;
+  const cy = my + ny * spread;
+
+  let ex = t.x - ux * (nr + 7);
+  let ey = t.y - uy * (nr + 7);
+  let lineEx = ex - headDepth * ux;
+  let lineEy = ey - headDepth * uy;
+
+  for (let iter = 0; iter < 2; iter++) {
+    const tx = lineEx - cx;
+    const ty = lineEy - cy;
+    const tlen = Math.sqrt(tx * tx + ty * ty) || 1;
+    const vx = tx / tlen;
+    const vy = ty / tlen;
+    ex = t.x - vx * (nr + 7);
+    ey = t.y - vy * (nr + 7);
+    lineEx = ex - headDepth * vx;
+    lineEy = ey - headDepth * vy;
+  }
+
+  const ang = Math.atan2(ey - lineEy, ex - lineEx);
+  return { straight: false, p0x: s.x, p0y: s.y, cx, cy, lineEx, lineEy, ex, ey, ang };
+}
+
+function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lenSq = dx * dx + dy * dy || 1;
+  const u = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
+  const x = ax + u * dx;
+  const y = ay + u * dy;
+  return Math.hypot(px - x, py - y);
+}
+
+function distanceToQuadraticBezier(
+  px: number,
+  py: number,
+  x0: number,
+  y0: number,
+  cx: number,
+  cy: number,
+  x1: number,
+  y1: number,
+  segments: number,
+) {
+  let minD = Infinity;
+  let prevX = x0;
+  let prevY = y0;
+  for (let i = 1; i <= segments; i++) {
+    const u = i / segments;
+    const o = 1 - u;
+    const x = o * o * x0 + 2 * o * u * cx + u * u * x1;
+    const y = o * o * y0 + 2 * o * u * cy + u * u * y1;
+    minD = Math.min(minD, distanceToSegment(px, py, prevX, prevY, x, y));
+    prevX = x;
+    prevY = y;
+  }
+  return minD;
 }
 
 const REPULSION = 14000;
@@ -110,6 +251,8 @@ interface Props {
   onLinkCreate?: (sourceId: string, targetId: string) => Promise<void>;
   selectedId?: string;
   selectedEdge?: GraphLink | null;
+  /** Briefly emphasize this edge after a successful link create (client-driven). */
+  flashEdge?: GraphLink | null;
   highlightMap?: Map<string, Relevance>;
   updateVisu?: UpdateVisuState;
   visibleFilter?: (node: GraphNode) => boolean;
@@ -129,6 +272,7 @@ export function BrainGraph({
   onLinkCreate,
   selectedId,
   selectedEdge,
+  flashEdge = null,
   highlightMap,
   updateVisu,
   visibleFilter,
@@ -160,8 +304,11 @@ export function BrainGraph({
   const hoverIdRef = useRef<string | null>(null);
   const selectedIdRef = useRef(selectedId);
   const selectedEdgeRef = useRef<GraphLink | null | undefined>(selectedEdge);
+  const flashEdgeRef = useRef<GraphLink | null>(null);
   const draggingRef = useRef<SimNode | null>(null);
   const connectDragRef = useRef<{ source: SimNode; x: number; y: number } | null>(null);
+  /** Press on node body — becomes a link drag after LINK_DRAG_PX movement (click still selects if you don't drag). */
+  const connectAnchorRef = useRef<SimNode | null>(null);
   const connectTargetRef = useRef<SimNode | null>(null);
   const panRef = useRef<{ mx: number; my: number; ox0: number; oy0: number } | null>(null);
   const mouseDownRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
@@ -177,6 +324,8 @@ export function BrainGraph({
   const highlightAlphaRef = useRef(0);
   const updateVisuRef = useRef<UpdateVisuState | undefined>(updateVisu);
   const panTargetRef = useRef<{ x: number; y: number } | null>(null);
+  /** When the visible node id set is unchanged, preserve positions and camera (e.g. new edge only). */
+  const visibleNodeSetRef = useRef<string>("");
 
   const isDark = theme === "dark";
 
@@ -196,13 +345,15 @@ export function BrainGraph({
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   useEffect(() => { selectedEdgeRef.current = selectedEdge; }, [selectedEdge]);
   useEffect(() => {
+    flashEdgeRef.current = flashEdge;
+  }, [flashEdge]);
+  useEffect(() => {
     highlightMapRef.current = highlightMap;
   }, [highlightMap]);
 
   useEffect(() => {
     updateVisuRef.current = updateVisu;
   }, [updateVisu]);
-
   // Pan camera to active update node
   useEffect(() => {
     if (updateVisu?.active) {
@@ -266,9 +417,9 @@ export function BrainGraph({
     highlightAlphaRef.current += (targetHL - highlightAlphaRef.current) * 0.07;
     const hl = highlightAlphaRef.current;
 
-    const t = Date.now();
-    const pulse = Math.sin(t / 420) * 0.5 + 0.5;
-    const pulseFast = Math.sin(t / 240) * 0.5 + 0.5;
+    const frameNowMs = Date.now();
+    const pulse = Math.sin(frameNowMs / 420) * 0.5 + 0.5;
+    const pulseFast = Math.sin(frameNowMs / 240) * 0.5 + 0.5;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
@@ -296,14 +447,12 @@ export function BrainGraph({
     }
 
     // ── links ────────────────────────────────────────────────────────────────
+    const flashLink = flashEdgeRef.current;
+    const laneByDirected = buildLaneByDirectedKey(linksRef.current);
+    const alBase = 7 / k;
+
     for (const { source: s, target: t } of linksRef.current) {
-      const dx = t.x - s.x, dy = t.y - s.y;
-      const len = Math.sqrt(dx * dx + dy * dy) || 1;
-      const nr = nodeRadius(t.val);
-      const ex = t.x - (dx / len) * (nr + 7);
-      const ey = t.y - (dy / len) * (nr + 7);
-      const ang = Math.atan2(dy, dx);
-      const al = 7 / k;
+      const lane = laneByDirected.get(`${s.id}\0${t.id}`) ?? 0;
 
       const sRel = hmap?.get(s.id);
       const tRel = hmap?.get(t.id);
@@ -311,6 +460,8 @@ export function BrainGraph({
       const isLinkedToHov = hovId && (s.id === hovId || t.id === hovId);
       const isLinkedToSel = selId && (s.id === selId || t.id === selId);
       const isSelectedEdge = !!selEdge && selEdge.source === s.id && selEdge.target === t.id;
+      const isFlashEdge =
+        !!flashLink && flashLink.source === s.id && flashLink.target === t.id;
       const sMatches = nodeMatches(s), tMatches = nodeMatches(t);
       const sUpdState = nodeUpdateState(s);
       const tUpdState = nodeUpdateState(t);
@@ -319,7 +470,12 @@ export function BrainGraph({
       let lineWidth: number;
       let arrowColor: string;
 
-      if (isSelectedEdge) {
+      if (isFlashEdge) {
+        const flashPulse = 0.78 + Math.sin(frameNowMs / 100) * 0.22;
+        lineColor = `rgba(5, 150, 105, ${flashPulse})`;
+        lineWidth = 4.6 / k;
+        arrowColor = `rgba(167, 243, 208, ${0.88 + 0.12 * flashPulse})`;
+      } else if (isSelectedEdge) {
         lineColor = "#8b5cf6";
         lineWidth = 3 / k;
         arrowColor = "#8b5cf6";
@@ -351,9 +507,9 @@ export function BrainGraph({
         arrowColor = base + (bright ? "AA" : "55");
       } else if (inHoverMode && isLinkedToHov) {
         const base = colorOverride ? colorOverride(s) : nodeColor(s.type);
-        lineColor = base + "CC";
-        lineWidth = 2 / k;
-        arrowColor = base + "99";
+        lineColor = minimal ? base + "F0" : base + "EE";
+        lineWidth = minimal ? 3.1 / k : 2.85 / k;
+        arrowColor = minimal ? base + "FA" : base + "F0";
       } else if (inHoverMode && !isLinkedToHov) {
         lineColor = `rgba(100,116,139,0.04)`;
         lineWidth = 0.4 / k;
@@ -384,24 +540,46 @@ export function BrainGraph({
         }
       }
 
+      let arrowLen = alBase;
+      if (isFlashEdge) {
+        arrowLen = 12 / k;
+      } else if (inHoverMode && isLinkedToHov && !isSelectedEdge && !inUpdateMode) {
+        arrowLen = (minimal ? 10.5 : 9.5) / k;
+      }
+
+      const { straight, p0x, p0y, cx, cy, lineEx, lineEy, ex, ey, ang } = computeLinkDrawGeom(
+        s,
+        t,
+        lane,
+        arrowLen,
+      );
+
       ctx.beginPath();
-      ctx.moveTo(s.x, s.y);
-      ctx.lineTo(ex, ey);
+      ctx.moveTo(p0x, p0y);
+      if (straight) ctx.lineTo(lineEx, lineEy);
+      else ctx.quadraticCurveTo(cx, cy, lineEx, lineEy);
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = lineWidth;
+      ctx.lineCap = "butt";
       ctx.stroke();
 
       ctx.beginPath();
       ctx.moveTo(ex, ey);
-      ctx.lineTo(ex - al * Math.cos(ang - 0.45), ey - al * Math.sin(ang - 0.45));
-      ctx.lineTo(ex - al * Math.cos(ang + 0.45), ey - al * Math.sin(ang + 0.45));
+      ctx.lineTo(
+        ex - arrowLen * Math.cos(ang - ARROW_HEAD_HALF_ANGLE),
+        ey - arrowLen * Math.sin(ang - ARROW_HEAD_HALF_ANGLE),
+      );
+      ctx.lineTo(
+        ex - arrowLen * Math.cos(ang + ARROW_HEAD_HALF_ANGLE),
+        ey - arrowLen * Math.sin(ang + ARROW_HEAD_HALF_ANGLE),
+      );
       ctx.closePath();
       ctx.fillStyle = arrowColor;
       ctx.fill();
     }
 
     const pending = connectDragRef.current;
-    if (pending && mouseDownRef.current?.moved) {
+    if (pending) {
       const target = connectTarget && connectTarget.id !== pending.source.id ? connectTarget : null;
       const endX = target?.x ?? pending.x;
       const endY = target?.y ?? pending.y;
@@ -654,10 +832,24 @@ export function BrainGraph({
   // ── init & animation loop ──────────────────────────────────────────────────
   useEffect(() => {
     if (!filteredGraph.nodes.length) return;
-    nodesRef.current = initNodes(filteredGraph.nodes);
-    linksRef.current = buildLinks(nodesRef.current, filteredGraph.links);
-    alphaRef.current = 1;
-    viewRef.current = { ox: 0, oy: 0, k: 1 };
+    const nodeKey = [...filteredGraph.nodes].map((n) => n.id).sort().join("\0");
+
+    if (visibleNodeSetRef.current !== nodeKey) {
+      visibleNodeSetRef.current = nodeKey;
+      nodesRef.current = initNodes(filteredGraph.nodes);
+      linksRef.current = buildLinks(nodesRef.current, filteredGraph.links);
+      alphaRef.current = 1;
+      viewRef.current = { ox: 0, oy: 0, k: 1 };
+    } else {
+      const byId = new Map(nodesRef.current.map((n) => [n.id, n]));
+      nodesRef.current = filteredGraph.nodes.map((gn) => {
+        const o = byId.get(gn.id);
+        if (o) return { ...gn, x: o.x, y: o.y, vx: o.vx, vy: o.vy };
+        return initNodes([gn])[0]!;
+      });
+      linksRef.current = buildLinks(nodesRef.current, filteredGraph.links);
+      alphaRef.current = Math.max(alphaRef.current, 0.18);
+    }
     cancelAnimationFrame(rafRef.current);
 
     function frame() {
@@ -701,66 +893,73 @@ export function BrainGraph({
     return null;
   }
 
-  function findConnectHandle(cx: number, cy: number): SimNode | null {
-    const sim = toSim(cx, cy);
-    const { k } = viewRef.current;
-    for (const n of nodesRef.current) {
-      const r = nodeRadius(n.val);
-      const hx = n.x + r + 11 / k;
-      const dx = sim.x - hx, dy = sim.y - n.y;
-      if (dx * dx + dy * dy < (10 / k) ** 2) return n;
-    }
-    return null;
-  }
-
-  function distanceToSegment(px: number, py: number, ax: number, ay: number, bx: number, by: number) {
-    const dx = bx - ax, dy = by - ay;
-    const lenSq = dx * dx + dy * dy || 1;
-    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / lenSq));
-    const x = ax + t * dx, y = ay + t * dy;
-    return Math.hypot(px - x, py - y);
-  }
-
   function findLink(cx: number, cy: number): GraphLink | null {
     const sim = toSim(cx, cy);
     const { k } = viewRef.current;
+    const threshold = 8 / k;
+    const lanes = buildLaneByDirectedKey(linksRef.current);
+    const arrowLenHit = 7 / k;
+    let best: GraphLink | null = null;
+    let bestD = threshold;
     for (const link of linksRef.current) {
-      const hit = distanceToSegment(sim.x, sim.y, link.source.x, link.source.y, link.target.x, link.target.y);
-      if (hit < 8 / k) return { source: link.source.id, target: link.target.id };
+      const lane = lanes.get(`${link.source.id}\0${link.target.id}`) ?? 0;
+      const g = computeLinkDrawGeom(link.source, link.target, lane, arrowLenHit);
+      const d = g.straight
+        ? distanceToSegment(sim.x, sim.y, g.p0x, g.p0y, g.lineEx, g.lineEy)
+        : distanceToQuadraticBezier(sim.x, sim.y, g.p0x, g.p0y, g.cx, g.cy, g.lineEx, g.lineEy, 32);
+      if (d < bestD) {
+        bestD = d;
+        best = { source: link.source.id, target: link.target.id };
+      }
     }
-    return null;
+    return best;
   }
 
   // ── event handlers ─────────────────────────────────────────────────────────
   function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
     const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
     mouseDownRef.current = { x: cx, y: cy, moved: false };
-    const node = findConnectHandle(cx, cy) ?? findNode(cx, cy);
-    if (node) {
-      const sim = toSim(cx, cy);
-      connectDragRef.current = { source: node, x: sim.x, y: sim.y };
-      alphaRef.current = Math.max(alphaRef.current, 0.25);
-      return;
+    connectAnchorRef.current = null;
+
+    if (onLinkCreate) {
+      const bodyNode = findNode(cx, cy);
+      if (bodyNode) {
+        connectAnchorRef.current = bodyNode;
+        return;
+      }
     }
+
     const { ox, oy } = viewRef.current;
     panRef.current = { mx: cx, my: cy, ox0: ox, oy0: oy };
   }
 
   function onMouseMove(e: React.MouseEvent<HTMLCanvasElement>) {
     const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
-    if (mouseDownRef.current && Math.hypot(cx - mouseDownRef.current.x, cy - mouseDownRef.current.y) > 4) {
-      mouseDownRef.current.moved = true;
+    const dragDist =
+      mouseDownRef.current ? Math.hypot(cx - mouseDownRef.current.x, cy - mouseDownRef.current.y) : 0;
+
+    if (connectAnchorRef.current && !connectDragRef.current && onLinkCreate && dragDist > LINK_DRAG_THRESHOLD_PX) {
+      const src = connectAnchorRef.current;
+      connectAnchorRef.current = null;
+      const sim = toSim(cx, cy);
+      connectDragRef.current = { source: src, x: sim.x, y: sim.y };
+      const target = findNode(cx, cy);
+      connectTargetRef.current = target && target.id !== src.id ? target : null;
+      alphaRef.current = Math.max(alphaRef.current, 0.25);
+      if (!isConnecting) setIsConnecting(true);
+    }
+
+    if (mouseDownRef.current) {
+      if (panRef.current && dragDist > PAN_DRAG_THRESHOLD_PX) mouseDownRef.current.moved = true;
+      if (connectDragRef.current && dragDist > PAN_DRAG_THRESHOLD_PX) mouseDownRef.current.moved = true;
     }
 
     if (connectDragRef.current) {
-      if (mouseDownRef.current?.moved) {
-        if (!isConnecting) setIsConnecting(true);
-        const sim = toSim(cx, cy);
-        connectDragRef.current.x = sim.x;
-        connectDragRef.current.y = sim.y;
-        const target = findNode(cx, cy);
-        connectTargetRef.current = target && target.id !== connectDragRef.current.source.id ? target : null;
-      }
+      const sim = toSim(cx, cy);
+      connectDragRef.current.x = sim.x;
+      connectDragRef.current.y = sim.y;
+      const target = findNode(cx, cy);
+      connectTargetRef.current = target && target.id !== connectDragRef.current.source.id ? target : null;
     } else if (panRef.current) {
       const { mx, my, ox0, oy0 } = panRef.current;
       viewRef.current = { ...viewRef.current, ox: ox0 + (cx - mx), oy: oy0 + (cy - my) };
@@ -790,16 +989,15 @@ export function BrainGraph({
   function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
     if (connectDragRef.current) {
       const source = connectDragRef.current.source;
-      if (mouseDownRef.current?.moved) {
-        const target = connectTargetRef.current ?? findNode(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-        if (target && target.id !== source.id) {
-          void onLinkCreate?.(source.id, target.id);
-        }
+      const target = connectTargetRef.current ?? findNode(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+      if (target && target.id !== source.id) {
+        void onLinkCreate?.(source.id, target.id);
       }
       connectDragRef.current = null;
       connectTargetRef.current = null;
       setIsConnecting(false);
     }
+    connectAnchorRef.current = null;
     panRef.current = null;
   }
 
@@ -885,6 +1083,7 @@ export function BrainGraph({
         onMouseLeave={() => {
           draggingRef.current = null;
           connectDragRef.current = null;
+          connectAnchorRef.current = null;
           connectTargetRef.current = null;
           setIsConnecting(false);
           panRef.current = null;
