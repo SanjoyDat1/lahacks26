@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .routes import (
     bootstrap,
     bootstrap_stream,
+    compat,
     github,
     health,
     query,
@@ -28,6 +29,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(compat.router)
     app.include_router(health.router)
     app.include_router(query.router)
     app.include_router(update.router)

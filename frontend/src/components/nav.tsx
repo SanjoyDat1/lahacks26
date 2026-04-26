@@ -1,69 +1,68 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { Bot, Brain, LayoutDashboard, Plus, Radio, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Brain } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-const links = [
-  { href: "/dashboard", label: "Dashboard", Icon: LayoutDashboard },
-  { href: "/brain",   label: "Brain",     Icon: Brain           },
-  { href: "/agent",   label: "Agent",     Icon: Bot             },
-  { href: "/events",  label: "Events",    Icon: Radio           },
-  { href: "/search",  label: "Search",    Icon: Search          },
-];
-
 export function Nav() {
-  const pathname = usePathname();
+  const [online, setOnline] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      try {
+        const res = await fetch("/api/agent/stream");
+        const data = (await res.json()) as { offline?: boolean };
+        if (!cancelled) setOnline(data.offline === true ? false : true);
+      } catch {
+        if (!cancelled) setOnline(false);
+      }
+    }
+    void check();
+    const t = window.setInterval(check, 6000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, []);
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200/60 bg-white/75 backdrop-blur-2xl">
-      <div className="mx-auto flex max-w-screen-xl items-center justify-between px-6 py-3">
+    <header className="sticky top-0 z-30 border-b border-black/10 bg-white/55 backdrop-blur-2xl">
+      <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-3">
         {/* Brand */}
         <Link href="/" className="group flex items-center gap-2.5">
           <div className="relative flex h-8 w-8 items-center justify-center">
-            <div className="absolute inset-0 rounded-xl bg-violet-500 opacity-10 transition group-hover:opacity-20" />
-            <div className="absolute inset-0 rounded-xl ring-1 ring-violet-400/30" />
-            <Brain size={16} className="relative text-violet-600" />
+            <div className="absolute inset-0 rounded-xl bg-black/[0.05] transition group-hover:bg-black/[0.08]" />
+            <div className="absolute inset-0 rounded-xl ring-1 ring-black/10" />
+            <Brain size={16} className="relative text-black/80" />
           </div>
           <div>
-            <span className="text-[13px] font-semibold tracking-tight text-slate-900">AI Brain</span>
-            <span className="ml-1.5 hidden text-[11px] text-slate-400 sm:inline">for coding agents</span>
+            <span className="text-[13px] font-semibold tracking-tight text-black/90">AI Brain</span>
+            <span className="ml-1.5 hidden text-[11px] text-black/55 sm:inline">command center</span>
           </div>
         </Link>
 
-        {/* Nav links */}
-        <nav className="flex items-center rounded-2xl border border-slate-200/60 bg-white/80 p-1 shadow-sm backdrop-blur-xl">
-          {links.map(({ href, label, Icon }) => {
-            const active = pathname === href;
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-[13px] font-medium transition-all duration-150",
-                  active
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-slate-500 hover:bg-slate-100/80 hover:text-slate-800",
-                )}
-              >
-                <Icon size={13} className={active ? "text-violet-200" : "text-slate-400"} />
-                {label}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* Right: primary demo action */}
-        <div className="hidden items-center gap-2 sm:flex">
-          <span className="hidden items-center gap-2 text-[11px] text-slate-400 lg:flex">
-            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.6)]" />
-            System ready
+        <div className="flex items-center gap-2">
+          <span className="hidden items-center gap-2 text-[11px] text-black/55 sm:flex">
+            <span
+              className={cn(
+                "inline-flex h-1.5 w-1.5 rounded-full",
+                online === null
+                  ? "bg-black/30"
+                  : online
+                    ? "bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.45)]"
+                    : "bg-amber-500 shadow-[0_0_10px_rgba(245,158,11,0.35)]",
+              )}
+            />
+            {online === null ? "Checking agent…" : online ? "Agent online" : "Agent offline"}
           </span>
-          <Link href="/" className="flex items-center gap-1.5 rounded-full border border-violet-200/60 bg-violet-50/80 px-2.5 py-1 text-[10px] font-medium text-violet-700 transition hover:bg-violet-100/80">
-            <Plus size={10} className="text-violet-500" />
-            New Session
+          <Link
+            href="/brain"
+            className="rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-[11px] font-semibold text-black/75 transition hover:bg-white hover:text-black"
+          >
+            Open brain
           </Link>
         </div>
       </div>

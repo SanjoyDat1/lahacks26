@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -361,6 +361,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
   const updateProcessingRef = useRef(false);
   const updateTotalRef = useRef(0);
   const updateAppliedRef = useRef(0);
+  const processNextUpdateOpRef = useRef<() => void>(() => {});
 
   const handleHighlightChange = useCallback(
     (map: Map<string, Relevance> | undefined) => setHighlightMap(map),
@@ -393,9 +394,13 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
         done: new Set([...prev.done, op.path]),
       }));
       // Brief pause between ops so each result is visible
-      setTimeout(processNextUpdateOp, 280);
+      setTimeout(() => processNextUpdateOpRef.current(), 280);
     }, 780);
   }, []);
+
+  useEffect(() => {
+    processNextUpdateOpRef.current = processNextUpdateOp;
+  }, [processNextUpdateOp]);
 
   const handleUpdateEvent = useCallback((event: UpdateEvent) => {
     // Queue planned ops so the graph can show queued (violet dashed) nodes

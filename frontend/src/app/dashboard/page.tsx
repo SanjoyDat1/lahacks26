@@ -1,3 +1,5 @@
-import { DashboardHome } from "../page";
+import { redirect } from "next/navigation";
 
-export default DashboardHome;
+export default function DashboardPage() {
+  redirect("/");
+}

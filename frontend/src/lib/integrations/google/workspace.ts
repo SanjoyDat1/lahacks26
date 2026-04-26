@@ -1,0 +1,284 @@
+import type { GoogleTokenPayload } from "./crypto";
+import { ensureFreshAccessToken } from "./oauth";
+
+const DRIVE_BASE = "https://www.googleapis.com/drive/v3";
+const SHEETS_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
+const CAL_BASE = "https://www.googleapis.com/calendar/v3";
+
+export type DriveListItem = {
+  id: string;
+  name: string;
+  mimeType: string;
+  modifiedTime?: string;
+};
+
+export type ImportedDoc = {
+  name: string;
+  text?: string;
+  content_base64?: string;
+  mime_type?: string;
+  size: number;
+  chars: number;
+  source: "google_drive";
+};
+
+const DOC_MIME = "application/vnd.google-apps.document";
+const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+async function gfetch(path: string, accessToken: string, init?: RequestInit) {
+  const res = await fetch(path, {
+    ...init,
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      ...(init?.headers as Record<string, string>),
+    },
+  });
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`Google API ${res.status}: ${t.slice(0, 500)}`);
+  }
+  return res;
+}
+
+export async function listRecentDriveFiles(
+  payload: GoogleTokenPayload,
+  opts?: { query?: string; pageSize?: number },
+): Promise<DriveListItem[]> {
+  const p = await ensureFreshAccessToken(payload);
+  const qParts = ["trashed = false", `mimeType != '${FOLDER_MIME}'`];
+  const rawQ = opts?.query?.trim();
+  if (rawQ) {
+    const safe = rawQ.replace(/[^a-zA-Z0-9 _.-]/g, "").slice(0, 80);
+    if (safe.length > 0) qParts.push(`name contains '${safe.replace(/'/g, "\\'")}'`);
+  }
+  const q = qParts.join(" and ");
+  const u = new URL(`${DRIVE_BASE}/files`);
+  u.searchParams.set("pageSize", String(opts?.pageSize ?? 25));
+  u.searchParams.set("q", q);
+  u.searchParams.set("orderBy", "modifiedTime desc");
+  u.searchParams.set(
+    "fields",
+    "files(id,name,mimeType,modifiedTime)",
+  );
+  const res = await gfetch(u.toString(), p.access_token);
+  const data = (await res.json()) as { files?: DriveListItem[] };
+  return data.files ?? [];
+}
+
+async function getFileMeta(accessToken: string, fileId: string) {
+  const u = new URL(`${DRIVE_BASE}/files/${encodeURIComponent(fileId)}`);
+  u.searchParams.set("fields", "id,name,mimeType,size");
+  const res = await gfetch(u.toString(), accessToken);
+  return (await res.json()) as { id: string; name: string; mimeType: string; size?: string };
+}
+
+async function exportFile(accessToken: string, fileId: string, mime: string) {
+  const u = `${DRIVE_BASE}/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(mime)}`;
+  const res = await gfetch(u, accessToken);
+  return res.text();
+}
+
+async function downloadMedia(accessToken: string, fileId: string) {
+  const u = `${DRIVE_BASE}/files/${encodeURIComponent(fileId)}?alt=media`;
+  const res = await gfetch(u, accessToken);
+  const buf = Buffer.from(await res.arrayBuffer());
+  return buf;
+}
+
+async function sheetAsTsv(accessToken: string, spreadsheetId: string) {
+  const metaUrl = `${SHEETS_BASE}/${encodeURIComponent(spreadsheetId)}?fields=sheets(properties(title))`;
+  const metaRes = await gfetch(metaUrl, accessToken);
+  const meta = (await metaRes.json()) as { sheets?: { properties?: { title?: string } }[] };
+  const title = meta.sheets?.[0]?.properties?.title ?? "Sheet1";
+  const range = encodeURIComponent(`${title}!A1:Z5000`);
+  const valUrl = `${SHEETS_BASE}/${encodeURIComponent(spreadsheetId)}/values/${range}`;
+  const valRes = await gfetch(valUrl, accessToken);
+  const vals = (await valRes.json()) as { values?: string[][] };
+  const rows = vals.values ?? [];
+  return rows.map((r) => r.join("\t")).join("\n");
+}
+
+export async function importDriveFiles(
+  payload: GoogleTokenPayload,
+  fileIds: string[],
+): Promise<ImportedDoc[]> {
+  const p = await ensureFreshAccessToken(payload);
+  const out: ImportedDoc[] = [];
+  const maxCharsPerFile = 150_000;
+  const maxTotal = 400_000;
+  let total = 0;
+
+  for (const fileId of fileIds) {
+    if (total >= maxTotal) break;
+    const meta = await getFileMeta(p.access_token, fileId);
+    let text: string | undefined;
+    let content_base64: string | undefined;
+    let mimeOut = meta.mimeType;
+
+    if (meta.mimeType === DOC_MIME) {
+      text = await exportFile(p.access_token, fileId, "text/plain");
+    } else if (meta.mimeType === SHEET_MIME) {
+      text = await sheetAsTsv(p.access_token, fileId);
+      mimeOut = "text/tab-separated-values";
+    } else if (meta.mimeType.startsWith("text/") || meta.mimeType === "application/json") {
+      const buf = await downloadMedia(p.access_token, fileId);
+      text = buf.toString("utf8");
+    } else if (meta.mimeType === "application/pdf") {
+      const buf = await downloadMedia(p.access_token, fileId);
+      content_base64 = buf.toString("base64");
+      mimeOut = "application/pdf";
+    } else {
+      try {
+        text = await exportFile(p.access_token, fileId, "text/plain");
+      } catch {
+        continue;
+      }
+    }
+
+    if (text) {
+      const slice = text.length > maxCharsPerFile ? text.slice(0, maxCharsPerFile) + "\n…[truncated]" : text;
+      const chars = slice.length;
+      if (total + chars > maxTotal) {
+        const room = maxTotal - total;
+        if (room < 500) break;
+        out.push({
+          name: `[Drive] ${meta.name}`,
+          text: slice.slice(0, room) + "\n…[truncated for session budget]",
+          mime_type: mimeOut,
+          size: chars,
+          chars: room,
+          source: "google_drive",
+        });
+        break;
+      }
+      total += chars;
+      out.push({
+        name: `[Drive] ${meta.name}`,
+        text: slice,
+        mime_type: mimeOut,
+        size: chars,
+        chars,
+        source: "google_drive",
+      });
+    } else if (content_base64) {
+      const approx = Math.floor(content_base64.length * 0.75);
+      if (total + approx > maxTotal) continue;
+      total += approx;
+      out.push({
+        name: `[Drive] ${meta.name}`,
+        content_base64,
+        mime_type: mimeOut,
+        size: approx,
+        chars: approx,
+        source: "google_drive",
+      });
+    }
+  }
+
+  return out;
+}
+
+export async function buildCalendarSnapshot(
+  payload: GoogleTokenPayload,
+  opts?: { maxResults?: number },
+): Promise<ImportedDoc> {
+  const p = await ensureFreshAccessToken(payload);
+  const max = Math.min(opts?.maxResults ?? 80, 250);
+  const timeMin = new Date().toISOString();
+  const timeMax = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
+  const u = new URL(`${CAL_BASE}/calendars/primary/events`);
+  u.searchParams.set("timeMin", timeMin);
+  u.searchParams.set("timeMax", timeMax);
+  u.searchParams.set("singleEvents", "true");
+  u.searchParams.set("orderBy", "startTime");
+  u.searchParams.set("maxResults", String(max));
+  const res = await gfetch(u.toString(), p.access_token);
+  const data = (await res.json()) as {
+    items?: { summary?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string }; description?: string }[];
+  };
+  const lines: string[] = ["Google Calendar snapshot (next 14 days, primary calendar)", ""];
+  for (const ev of data.items ?? []) {
+    const start = ev.start?.dateTime ?? ev.start?.date ?? "";
+    const end = ev.end?.dateTime ?? ev.end?.date ?? "";
+    lines.push(`• ${ev.summary ?? "(no title)"} — ${start}${end && end !== start ? ` → ${end}` : ""}`);
+    if (ev.description?.trim()) lines.push(`  ${ev.description.trim().split("\n").join(" ").slice(0, 400)}`);
+  }
+  const text = lines.join("\n");
+  return {
+    name: "[Google Calendar] Upcoming events",
+    text,
+    mime_type: "text/plain",
+    size: text.length,
+    chars: text.length,
+    source: "google_drive",
+  };
+}
+
+/** Import a Sheet by ID from a share URL (no separate Drive file id). */
+export async function importSpreadsheetById(
+  payload: GoogleTokenPayload,
+  spreadsheetId: string,
+): Promise<ImportedDoc> {
+  const p = await ensureFreshAccessToken(payload);
+  const text = await sheetAsTsv(p.access_token, spreadsheetId);
+  const slice = text.length > 200_000 ? text.slice(0, 200_000) + "\n…[truncated]" : text;
+  return {
+    name: `[Google Sheet] ${spreadsheetId}`,
+    text: slice,
+    mime_type: "text/tab-separated-values",
+    size: slice.length,
+    chars: slice.length,
+    source: "google_drive",
+  };
+}
+
+export async function buildGmailSnapshot(payload: GoogleTokenPayload): Promise<ImportedDoc> {
+  const p = await ensureFreshAccessToken(payload);
+  const listUrl =
+    "https://gmail.googleapis.com/gmail/v1/users/me/messages?q=newer_than:7d&maxResults=15";
+  const res = await gfetch(listUrl, p.access_token);
+  const data = (await res.json()) as { messages?: { id: string }[] };
+  const ids = (data.messages ?? []).map((m) => m.id).filter(Boolean);
+  const lines: string[] = ["Gmail snapshot (recent messages, last 7 days)", ""];
+  for (const id of ids) {
+    const u = `https://gmail.googleapis.com/gmail/v1/users/me/messages/${encodeURIComponent(id)}?format=metadata&metadataHeaders=Subject&metadataHeaders=From`;
+    try {
+      const r = await gfetch(u, p.access_token);
+      const msg = (await r.json()) as {
+        snippet?: string;
+        payload?: { headers?: { name: string; value: string }[] };
+      };
+      const headers = msg.payload?.headers ?? [];
+      const sub = headers.find((h) => h.name.toLowerCase() === "subject")?.value ?? "(no subject)";
+      const from = headers.find((h) => h.name.toLowerCase() === "from")?.value ?? "";
+      lines.push(`• ${sub}${from ? ` — ${from}` : ""}`);
+      if (msg.snippet?.trim()) lines.push(`  ${msg.snippet.trim().slice(0, 280)}`);
+    } catch {
+      /* skip individual message */
+    }
+  }
+  const text = lines.join("\n");
+  return {
+    name: "[Gmail] Recent messages",
+    text,
+    mime_type: "text/plain",
+    size: text.length,
+    chars: text.length,
+    source: "google_drive",
+  };
+}
+
+export function extractSpreadsheetIdFromUrl(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    const m = u.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (m) return m[1] ?? null;
+  } catch {
+    /* fall through */
+  }
+  if (/^[a-zA-Z0-9-_]{30,}$/.test(s)) return s;
+  return null;
+}
