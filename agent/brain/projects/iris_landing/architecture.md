@@ -1,32 +1,24 @@
 ---
-id: projects.iris_landing.architecture
- type: project
- title: Project Architecture
- status: active
- importance: high
- updated: 2026-04-25
- links:
-   - projects/iris_landing/overview.md
-   - projects/iris_landing/timeline.md
- keywords:
-   - architecture
-   - components
-   - modularity
+id: architecture
+type: document
+title: Project Architecture
+status: draft
+importance: high
+updated: 2026-04-25
 links:
-  - projects/iris_landing/overview.md
+  - projects/iris_landing/data_flow.md
   - projects/iris_landing/timeline.md
   - index.md
   - map.md
-  - summaries/project_summary.md
+  - summaries/project_summary.md- projects/iris_landing/data_flow.md
+  - projects/iris_landing/timeline.md
+keywords: [architecture, components, project]
 ---
 
 # Project Architecture
 
-The architecture of the Iris Landing Page is designed for modularity and efficiency. The application is structured with components that allow for easy maintenance and scalability.
-
-## Key Features
-- **Client-Side Rendering**: The application utilizes a client-side rendering approach, enhancing user experience by providing faster interactions.
+The architecture of the project consists of a structured approach with a frontend and backend. The application is structured with a Next.js frontend and a FastAPI backend. Key components include services, API routes, and data models.
 
 ## Source Evidence
-- The application is structured with components for modularity.
-- It uses a client-side rendering approach.
+- The application is structured with a Next.js frontend and a FastAPI backend.
+- Key components include services, API routes, and data models.

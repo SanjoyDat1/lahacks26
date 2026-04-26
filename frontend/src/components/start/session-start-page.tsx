@@ -5,20 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
-  Bot,
   Brain,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Cpu,
   FileText,
   Folder,
-  FolderOpen,
   GitBranch,
   Loader2,
-  Network,
 	Paperclip,
   Send,
-  Sparkles,
   X,
 } from "lucide-react";
 
@@ -652,7 +649,10 @@ export function SessionStartPage() {
   ]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-6 py-8">
+    <main className={cn(
+      "relative overflow-hidden",
+      buildMode ? "h-screen px-4 py-3" : "min-h-screen px-6 py-8",
+    )}>
       <input
         ref={inputRef}
         type="file"
@@ -726,164 +726,138 @@ export function SessionStartPage() {
 					) : null}
         </section>
       ) : (
-        <section className="mx-auto flex max-w-screen-2xl flex-col gap-5 pb-10">
-          <div className="rounded-[2rem] border border-white/80 bg-white/75 p-5 shadow-sm backdrop-blur-2xl">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-violet-100 ring-1 ring-violet-200/70">
-										<Brain
-											size={15}
-											className="text-violet-600"
-										/>
-                  </span>
+        <>
+          <div className="pointer-events-none absolute inset-0 canvas-dots opacity-[0.18]" />
+          <section className={cn(
+              "relative mx-auto flex max-w-screen-2xl flex-col gap-3",
+              isDone ? "h-[calc(100vh-112px)]" : "h-[calc(100vh-24px)]",
+            )}>
+            <ThinkingHeader
+              stageLabel={stageLabel}
+              stage={stage}
+              completed={completedStages}
+              isRunning={isRunning}
+              isDone={isDone}
+              thinking={thinking}
+              endRef={thinkingEndRef}
+              githubRestPipeline={githubRestPipeline}
+              restProgress={restProgress}
+            />
+
+            <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr_320px]">
+              {/* Left: file tree styled like the main brain map */}
+              <section className="glass min-h-0 overflow-hidden">
+                <BuildFileTreeView
+                  tree={tree}
+                  files={createdFiles}
+                />
+              </section>
+
+              {/* Center: construction graph */}
+              <section className="glass flex min-h-0 flex-col overflow-hidden">
+                <div className="flex items-center justify-between border-b border-black/10 px-4 py-3">
                   <div>
-										<p className="text-sm font-semibold text-slate-800">
-											{stageLabel}
-										</p>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {githubRestPipeline
-                        ? "GitHub run: the timeline and log advance while the API works; files pop onto the graph one by one when the response returns."
-                        : "Live WebSocket stream: logs, files, and graph update from the agent."}
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+                      Construction graph
+                    </p>
+                    <p className="text-[11px] text-black/70">
+                      {createdFiles.length > 0
+                        ? `${createdFiles.length} node${createdFiles.length === 1 ? "" : "s"} forming`
+                        : "Waiting for first files"}
                     </p>
                   </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-								<Metric
-									label="Sources in"
-									value={sourceCount.toString()}
-								/>
-								<Metric
-									label="Chars"
-									value={formatCompact(totalChars)}
-								/>
-								<Metric
-									label="Brain files"
-									value={createdFiles.length.toString()}
-								/>
-              </div>
-            </div>
-						<BootstrapTimeline
-							current={stage}
-							completed={completedStages}
-							restPulse={githubRestPipeline}
-						/>
-            {githubRestPipeline && (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-50/90 via-white/80 to-sky-50/70 p-4 shadow-sm">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
-                      <GitBranch size={15} />
-                    </span>
-                    <div>
-											<p className="text-xs font-semibold text-slate-800">
-												GitHub → brain
-											</p>
-											<p className="text-[10px] text-slate-500">
-												Clone, scan, distill—then we
-												paint each markdown node
-											</p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-white/90 px-2.5 py-1 font-mono text-[11px] font-bold tabular-nums text-violet-700 ring-1 ring-violet-200/80">
-										{Math.min(
-											100,
-											Math.round(restProgress),
-										)}
-										%
-                  </span>
-                </div>
-                <div className="relative h-2.5 overflow-hidden rounded-full bg-white/90 ring-1 ring-violet-100">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-sky-500 transition-[width] duration-700 ease-out"
-										style={{
-											width: `${Math.min(100, restProgress)}%`,
-										}}
-                  />
-                </div>
-                <p className="mt-3 text-[11px] leading-relaxed text-slate-600">
-									<span className="font-semibold text-violet-800">
-										{stageLabel}
-									</span>
-                  <span className="text-slate-400"> · </span>
-									Watch the stage cards above and the agent
-									log on the right—nothing is frozen, even
-									during a long POST.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="grid gap-5">
-            <div className="min-h-[640px] rounded-[2.25rem] border border-white/80 bg-white/80 p-5 shadow-2xl shadow-violet-200/30 backdrop-blur-2xl">
-              <div className="flex h-full min-h-0 flex-col">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-										<Network
-											size={15}
-											className="text-violet-500"
-										/>
-                    <div>
-											<h2 className="text-sm font-semibold text-slate-900">
-												Construction Graph
-											</h2>
-											<p className="text-xs text-slate-500">
-												Directories, markdown nodes, and
-												retrieval links appear as the
-												agent builds them
-											</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-										<div
-											className={cn(
-                      "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold",
-                      isDone
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-violet-200 bg-violet-50 text-violet-700",
-											)}
-										>
-											{isDone ? (
-												<CheckCircle2 size={12} />
-											) : (
-												<Loader2
-													size={12}
-													className="animate-spin"
-												/>
-											)}
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                        isDone
+                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70"
+                          : "bg-black/[0.06] text-black/70",
+                      )}
+                    >
+                      {isDone ? (
+                        <CheckCircle2 size={11} />
+                      ) : (
+                        <Loader2 size={11} className="animate-spin" />
+                      )}
                       {isDone ? "Ready" : "Building"}
-                    </div>
+                    </span>
                     {isDone && (
                       <Link
                         href="/brain"
-                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-black px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-black/85"
                       >
-                        <Brain size={12} />
-                        View brain map
+                        <Brain size={11} />
+                        Open brain map
                       </Link>
                     )}
                   </div>
                 </div>
-								<BootstrapLiveGraph
-									files={createdFiles}
-									isRunning={isRunning}
-								/>
-              </div>
+                <div className="relative min-h-0 flex-1">
+                  <BootstrapLiveGraph
+                    files={createdFiles}
+                    isRunning={isRunning}
+                  />
+                </div>
+              </section>
+
+              {/* Right: stages + metrics */}
+              <section className="glass flex min-h-0 flex-col overflow-hidden">
+                <div className="border-b border-black/10 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+                    Pipeline
+                  </p>
+                  <p className="text-[11px] text-black/70">
+                    {completedStages}/{STAGES.length} stages complete
+                  </p>
+                </div>
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+                  <VerticalBootstrapTimeline
+                    current={stage}
+                    completed={completedStages}
+                  />
+                  {githubRestPipeline && (
+                    <div className="rounded-2xl border border-black/10 bg-white/70 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-black/70">
+                          <GitBranch size={11} />
+                          GitHub → brain
+                        </span>
+                        <span className="font-mono text-[10px] font-bold tabular-nums text-black/65">
+                          {Math.min(100, Math.round(restProgress))}%
+                        </span>
+                      </div>
+                      <div className="relative h-1.5 overflow-hidden rounded-full bg-black/[0.07]">
+                        <div
+                          className="h-full rounded-full bg-[color:var(--accent-600)] transition-[width] duration-700 ease-out"
+                          style={{
+                            width: `${Math.min(100, restProgress)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <Metric
+                      label="Sources"
+                      value={sourceCount.toString()}
+                    />
+                    <Metric
+                      label="Chars"
+                      value={formatCompact(totalChars)}
+                    />
+                    <Metric
+                      label="Files"
+                      value={createdFiles.length.toString()}
+                    />
+                  </div>
+                </div>
+              </section>
             </div>
 
-            <div className="grid min-h-[420px] gap-5 lg:grid-cols-[1fr_1.05fr]">
-							<BrainDirectoryTree
-								tree={tree}
-								files={createdFiles}
-							/>
-							<AgentThinkingStream
-								thinking={thinking}
-								endRef={thinkingEndRef}
-							/>
-            </div>
-          </div>
-        </section>
+            {error ? <ErrorBanner message={error} /> : null}
+          </section>
+        </>
       )}
 
       {isDone && (
@@ -1074,71 +1048,207 @@ function AttachmentPill({
   );
 }
 
-function BootstrapTimeline({
+function ThinkingHeader({
+  stageLabel,
+  stage,
+  completed,
+  isRunning,
+  isDone,
+  thinking,
+  endRef,
+  githubRestPipeline,
+  restProgress,
+}: {
+  stageLabel: string;
+  stage: StageId;
+  completed: number;
+  isRunning: boolean;
+  isDone: boolean;
+  thinking: string[];
+  endRef: React.RefObject<HTMLDivElement | null>;
+  githubRestPipeline: boolean;
+  restProgress: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const stageIndex = STAGES.findIndex((s) => s.id === stage);
+  const totalStages = STAGES.length;
+  const progressPct = githubRestPipeline
+    ? Math.min(100, restProgress)
+    : isDone
+      ? 100
+      : Math.round(((completed + (isRunning ? 0.5 : 0)) / totalStages) * 100);
+  const latest = thinking[thinking.length - 1] ?? "";
+  const summary = isDone
+    ? "Done thinking"
+    : isRunning
+      ? `Thinking · ${stageLabel}${stageIndex >= 0 ? ` (${stageIndex + 1}/${totalStages})` : ""}`
+      : stageLabel;
+
+  return (
+    <div className="glass overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-black/[0.02]"
+      >
+        <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-black/[0.06]">
+          {isDone ? (
+            <CheckCircle2 size={14} className="text-emerald-600" />
+          ) : (
+            <>
+              <span className="absolute inset-0 animate-ping rounded-full bg-[color:var(--accent-400)]/30" />
+              <Brain size={14} className="relative text-[color:var(--accent-700)]" />
+            </>
+          )}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[13px] font-semibold text-black/90">
+              {summary}
+            </p>
+            {!isDone && isRunning ? (
+              <ShimmerDots />
+            ) : null}
+          </div>
+          {!expanded && latest ? (
+            <p className="mt-0.5 truncate text-[11px] text-black/55">
+              {latest}
+            </p>
+          ) : null}
+        </div>
+
+        <span className="hidden items-center gap-2 sm:flex">
+          <div className="h-1 w-28 overflow-hidden rounded-full bg-black/[0.06]">
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width] duration-700 ease-out",
+                isDone
+                  ? "bg-emerald-500"
+                  : "bg-[color:var(--accent-600)]",
+              )}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <span className="font-mono text-[10px] tabular-nums text-black/55">
+            {progressPct}%
+          </span>
+        </span>
+
+        <span className="ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-black/55 transition hover:bg-black/[0.05] hover:text-black/80">
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </span>
+      </button>
+
+      {expanded ? (
+        <div className="border-t border-black/10">
+          <div className="max-h-56 space-y-1 overflow-y-auto px-4 py-3">
+            {thinking.map((line, index) => {
+              const isLast = index === thinking.length - 1;
+              return (
+                <div
+                  key={`${index}-${line.slice(0, 24)}`}
+                  className="flex gap-2 text-[12px] leading-5 text-black/70"
+                >
+                  <span
+                    className={cn(
+                      "mt-1.5 flex h-1.5 w-1.5 flex-shrink-0 rounded-full",
+                      isLast && isRunning && !isDone
+                        ? "bg-[color:var(--accent-500)] ring-2 ring-[color:var(--accent-200)]"
+                        : "bg-black/30",
+                    )}
+                  />
+                  <p className="min-w-0 flex-1">{line}</p>
+                </div>
+              );
+            })}
+            <div ref={endRef} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ShimmerDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-hidden>
+      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:0ms]" />
+      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:150ms]" />
+      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:300ms]" />
+    </span>
+  );
+}
+
+function VerticalBootstrapTimeline({
   current,
   completed,
-  restPulse = false,
 }: {
   current: StageId;
   completed: number;
-  restPulse?: boolean;
 }) {
   return (
-    <div className="grid gap-2 md:grid-cols-6">
+    <ol className="relative space-y-1.5">
       {STAGES.map((step, index) => {
         const active = current === step.id;
         const done = current === "done" || index < completed;
+        const isLast = index === STAGES.length - 1;
         return (
-          <div key={step.id} className="relative">
-            {index < STAGES.length - 1 && (
-							<ChevronRight
-								size={13}
-								className="absolute -right-2 top-5 hidden text-slate-300 md:block"
-							/>
-            )}
-						<div
-							className={cn(
-              "h-full rounded-2xl border p-3 transition-all duration-500",
-              done
-                ? "border-emerald-200/70 bg-emerald-50/80 text-emerald-700"
-                : active
-                ? "border-violet-200/70 bg-violet-50/80 text-violet-700 shadow-sm"
-                : "border-slate-200/60 bg-white/70 text-slate-400",
-								restPulse &&
-									active &&
-									!done &&
-									"ring-2 ring-violet-400/60 ring-offset-2 ring-offset-violet-50/80 shadow-[0_0_20px_rgba(139,92,246,0.2)]",
-							)}
-						>
-              <div className="flex items-center gap-2">
-								<span
-									className={cn(
-                  "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
-										done
-											? "bg-emerald-100"
-											: active
-												? "bg-violet-100"
-												: "bg-slate-100",
-									)}
-								>
-									{done ? (
-										<CheckCircle2 size={11} />
-									) : (
-										index + 1
-									)}
-                </span>
-								<p className="text-xs font-semibold">
-									{step.label}
-								</p>
-              </div>
-							<p className="mt-1 text-[10px] opacity-70">
-								{step.desc}
-							</p>
+          <li key={step.id} className="relative pl-7">
+            {!isLast ? (
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute left-[11px] top-6 h-[calc(100%-12px)] w-px",
+                  done ? "bg-emerald-300/70" : "bg-black/10",
+                )}
+              />
+            ) : null}
+            <span
+              className={cn(
+                "absolute left-0 top-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[10px] font-bold transition",
+                done
+                  ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/70"
+                  : active
+                    ? "bg-[color:var(--accent-100)] text-[color:var(--accent-700)] ring-1 ring-[color:var(--accent-300)]"
+                    : "bg-black/[0.06] text-black/55",
+              )}
+            >
+              {done ? <CheckCircle2 size={11} /> : index + 1}
+            </span>
+            <div
+              className={cn(
+                "rounded-xl px-2.5 py-1.5 transition",
+                active && !done
+                  ? "bg-[color:var(--accent-50)] ring-1 ring-[color:var(--accent-200)]"
+                  : "",
+              )}
+            >
+              <p
+                className={cn(
+                  "text-[12px] font-semibold",
+                  done
+                    ? "text-emerald-700"
+                    : active
+                      ? "text-[color:var(--accent-800)]"
+                      : "text-black/75",
+                )}
+              >
+                {step.label}
+                {active && !done ? (
+                  <span className="ml-1.5 inline-flex">
+                    <ShimmerDots />
+                  </span>
+                ) : null}
+              </p>
+              <p className="text-[10px] leading-4 text-black/50">
+                {step.desc}
+              </p>
             </div>
-          </div>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }
 
@@ -1674,62 +1784,60 @@ function pathsToVirtualTree(paths: string[]): BrainTreeNode[] {
   return rootChildren;
 }
 
-function BrainDirectoryTree({
-	tree,
-	files,
+function BuildFileTreeView({
+  tree,
+  files,
 }: {
-	tree: BrainTreeNode[];
-	files: CreatedFile[];
+  tree: BrainTreeNode[];
+  files: CreatedFile[];
 }) {
-	const virtualTree = useMemo(
-		() => pathsToVirtualTree(files.map((f) => f.path)),
-		[files],
-	);
+  const virtualTree = useMemo(
+    () => pathsToVirtualTree(files.map((f) => f.path)),
+    [files],
+  );
   const displayTree = tree.length > 0 ? tree : virtualTree;
-	const fileByPath = useMemo(
-		() => new Map(files.map((f) => [f.path, f])),
-		[files],
-	);
-	const fileCount = files.filter(
-		(f) => f.path && !f.path.endsWith("/"),
-	).length;
+  const fileByPath = useMemo(
+    () => new Map(files.map((f) => [f.path, f])),
+    [files],
+  );
+  const fileCount = files.filter(
+    (f) => f.path && !f.path.endsWith("/"),
+  ).length;
 
   return (
-    <div className="flex min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FolderOpen size={15} className="text-emerald-500" />
-          <div>
-						<h2 className="text-sm font-semibold text-slate-800">
-							Brain Directory
-						</h2>
-            <p className="text-xs text-slate-400">
-							{tree.length > 0
-								? "Live snapshot from the agent"
-								: "Built live from paths on the canvas (preview + real)"}
-            </p>
-          </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between border-b border-black/10 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+            Files
+          </p>
+          <p className="text-[11px] text-black/70">
+            {fileCount === 0
+              ? "Waiting for first files"
+              : `${fileCount} node${fileCount === 1 ? "" : "s"} forming`}
+          </p>
         </div>
-        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-          {fileCount} files
+        <span className="rounded-full bg-black/[0.06] px-2.5 py-1 font-mono text-[10px] text-black/70">
+          brain/
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/60 bg-slate-50/70 p-3">
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {displayTree.length ? (
-					displayTree.map((node) => (
-						<TreeNode
-							key={node.path}
-							node={node}
-							depth={0}
-							fileByPath={fileByPath}
-						/>
-					))
+          displayTree.map((node) => (
+            <BuildTreeNode
+              key={node.path}
+              node={node}
+              depth={0}
+              fileByPath={fileByPath}
+            />
+          ))
         ) : (
-          <div className="flex flex-col items-center justify-center py-10 text-center text-slate-400">
-            <Folder size={24} className="mb-2 opacity-40" />
-						<p className="text-xs font-medium">
-							Waiting for generated brain files
-						</p>
+          <div className="flex flex-col items-center justify-center py-10 text-center text-black/40">
+            <Folder size={20} className="mb-2 opacity-50" />
+            <p className="text-[11px] font-medium">
+              Files appear here as the agent writes them
+            </p>
           </div>
         )}
       </div>
@@ -1737,7 +1845,7 @@ function BrainDirectoryTree({
   );
 }
 
-function TreeNode({
+function BuildTreeNode({
   node,
   depth,
   fileByPath,
@@ -1746,112 +1854,105 @@ function TreeNode({
   depth: number;
   fileByPath: Map<string, CreatedFile>;
 }) {
+  const [open, setOpen] = useState(true);
   const hint = node.type === "file" ? fileByPath.get(node.path) : undefined;
   const ghost = hint?.isGhost === true;
   const writing = hint?.status === "writing";
+  const done = hint?.status === "done";
+
+  if (node.type === "directory") {
+    const childCount = node.children?.length ?? 0;
+    return (
+      <div className="mb-0.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-1 rounded-lg px-2 py-1.5 text-left transition hover:bg-black/[0.05]"
+          style={{ paddingLeft: 8 + depth * 14 }}
+        >
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center text-black/55">
+            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </span>
+          <Folder size={13} className="flex-shrink-0 text-black/65" />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-black/80">
+            {node.name}
+          </span>
+          <span className="flex-shrink-0 rounded-md bg-black/[0.06] px-1.5 py-0.5 text-[9px] font-semibold tabular-nums text-black/60">
+            {childCount}
+          </span>
+        </button>
+        {open ? (
+          <div className="space-y-0.5">
+            {node.children?.map((child) => (
+              <BuildTreeNode
+                key={child.path}
+                node={child}
+                depth={depth + 1}
+                fileByPath={fileByPath}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <div
+    <div
+      className={cn(
+        "flex items-start gap-2 rounded-xl px-2 py-1.5 transition",
+        writing
+          ? "bg-[color:var(--accent-50)] ring-1 ring-[color:var(--accent-200)]"
+          : "hover:bg-black/[0.04]",
+        ghost && "opacity-80",
+      )}
+      style={{ paddingLeft: 8 + depth * 14 }}
+    >
+      <FileText
+        size={13}
         className={cn(
-          "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition",
-					node.type === "directory"
-						? "bg-amber-50/60"
-						: "hover:bg-white/80",
-					ghost &&
-						"border border-dashed border-violet-200/90 bg-violet-50/40",
-          writing && "ring-1 ring-violet-400/50",
+          "mt-0.5 flex-shrink-0",
+          done
+            ? "text-emerald-600"
+            : writing
+              ? "text-[color:var(--accent-700)]"
+              : ghost
+                ? "text-[color:var(--accent-500)]"
+                : "text-black/65",
         )}
-        style={{ paddingLeft: 8 + depth * 16 }}
-      >
-				{node.type === "directory" ? (
-					<Folder size={13} className="text-amber-500" />
-				) : (
-					<FileText
-						size={13}
-						className={
-							ghost ? "text-violet-500" : "text-emerald-500"
-						}
-					/>
-				)}
-				<span
-					className={
-						node.type === "directory"
-							? "font-semibold text-slate-700"
-							: "font-mono text-slate-600"
-					}
-				>
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-mono text-[11px] leading-tight text-black/80">
           {node.name}
         </span>
-        {node.type === "file" && ghost && (
-					<span className="ml-auto rounded px-1 text-[9px] font-bold uppercase tracking-wide text-violet-600">
-						preview
-					</span>
-        )}
-				{node.type === "file" && !ghost && (
-					<span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400" />
-				)}
-      </div>
-			{node.children?.map((child) => (
-				<TreeNode
-					key={child.path}
-					node={child}
-					depth={depth + 1}
-					fileByPath={fileByPath}
-				/>
-			))}
-    </div>
-  );
-}
-
-function AgentThinkingStream({
-	thinking,
-	endRef,
-}: {
-	thinking: string[];
-	endRef: React.RefObject<HTMLDivElement | null>;
-}) {
-  return (
-    <div className="flex min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
-      <div className="mb-3 flex items-center gap-2">
-        <Bot size={15} className="text-violet-500" />
-        <div>
-					<h2 className="text-sm font-semibold text-slate-800">
-						Agent Logs
-					</h2>
-					<p className="text-xs text-slate-400">
-						Every initialization step streamed live
-					</p>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-2xl border border-violet-100/70 bg-violet-50/40 p-3">
-        {thinking.map((line, index) => (
-					<div
-						key={`${line}-${index}`}
-						className="flex gap-2 rounded-xl bg-white/70 px-3 py-2 text-[12px] leading-5 text-slate-600"
-					>
-						<Sparkles
-							size={11}
-							className="mt-1 flex-shrink-0 text-violet-400"
-						/>
-            <p>{line}</p>
-          </div>
-        ))}
-        <div ref={endRef} />
-      </div>
+      </span>
+      {writing ? (
+        <Loader2
+          size={11}
+          className="ml-1 mt-0.5 flex-shrink-0 animate-spin text-[color:var(--accent-600)]"
+        />
+      ) : ghost ? (
+        <span className="ml-1 mt-0.5 rounded bg-[color:var(--accent-100)] px-1 text-[8px] font-bold uppercase tracking-wider text-[color:var(--accent-700)]">
+          preview
+        </span>
+      ) : done ? (
+        <span className="ml-1 mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
+      ) : (
+        <span className="ml-1 mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-black/25" />
+      )}
     </div>
   );
 }
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-[1.5rem] border border-red-200/60 bg-red-50/80 p-4 text-red-700 shadow-sm backdrop-blur-xl">
-      <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
-      <div>
-        <p className="text-xs font-semibold">Session failed</p>
-				<p className="mt-1 whitespace-pre-line text-[11px] leading-4">
-					{message}
-				</p>
+    <div className="flex items-start gap-3 rounded-2xl border border-red-200/70 bg-red-50/80 px-4 py-3 text-red-700 shadow-sm backdrop-blur-xl">
+      <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold">Session failed</p>
+        <p className="mt-0.5 whitespace-pre-line text-[11px] leading-4">
+          {message}
+        </p>
       </div>
     </div>
   );
@@ -1907,13 +2008,13 @@ function CompletionBar({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white/70 p-3">
-			<p className="text-2xl font-bold tabular-nums text-slate-800">
-				{value}
-			</p>
-			<p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-				{label}
-			</p>
+    <div className="rounded-xl border border-black/10 bg-white/60 px-2 py-2">
+      <p className="text-base font-bold tabular-nums leading-tight text-black/85">
+        {value}
+      </p>
+      <p className="text-[9px] font-semibold uppercase tracking-widest text-black/45">
+        {label}
+      </p>
     </div>
   );
 }

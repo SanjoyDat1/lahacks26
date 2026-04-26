@@ -1,31 +1,22 @@
 ---
-id: projects.iris_landing.timeline
- type: project
- title: Project Timeline
- status: active
- importance: high
- updated: 2026-04-25
- links:
-   - projects/iris_landing/overview.md
-   - projects/iris_landing/open_questions.md
- keywords:
-   - timeline
-   - milestones
+id: timeline
+type: document
+title: Project Timeline
+status: draft
+importance: medium
+updated: 2026-04-25
 links:
-  - projects/iris_landing/overview.md
   - projects/iris_landing/open_questions.md
   - index.md
   - map.md
-  - summaries/project_summary.md
+  - summaries/project_summary.md- projects/iris_landing/open_questions.md
+keywords: [timeline, milestones, deadlines]
 ---
 
 # Project Timeline
 
-This document outlines the key milestones and timelines for the Iris Landing Page project. The project is currently in the development phase, focusing on gathering user feedback to refine features and functionality.
-
-## Upcoming Milestones
-- **Deployment**: The application is planned to be deployed on Vercel, ensuring a smooth launch and scalability.
+This document outlines the milestones and deadlines for the project. The project aims to launch the landing page by Q2 2024. Key milestones include design completion and user testing phases.
 
 ## Source Evidence
-- The project is in the development phase with a focus on user feedback.
-- Deployment is planned on Vercel.
+- The project aims to launch the landing page by Q2 2024.
+- Key milestones include design completion and user testing phases.

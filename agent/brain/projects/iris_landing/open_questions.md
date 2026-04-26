@@ -1,31 +1,27 @@
 ---
-id: projects.iris_landing.open_questions
- type: project
- title: Open Questions
- status: active
- importance: high
- updated: 2026-04-25
- links:
-   - projects/iris_landing/overview.md
-   - summaries/project_summary.md
- keywords:
-   - questions
-   - unresolved
+id: open_questions
+type: document
+title: Open Questions
+status: draft
+importance: low
+updated: 2026-04-25
 links:
   - projects/iris_landing/overview.md
-  - summaries/project_summary.md
+  - projects/iris_landing/timeline.md
   - index.md
   - map.md
+  - summaries/project_summary.md- projects/iris_landing/overview.md
+  - projects/iris_landing/timeline.md
+keywords: [open questions, unresolved issues]
 ---
 
 # Open Questions
 
-This document lists unresolved questions regarding the Iris Landing Page project that need to be addressed to move forward effectively.
+This document lists unresolved issues and considerations for the project. 
 
-## Key Questions
-- Should the app support multiple separate landing pages for different campaigns?
-- What features should be prioritized for the initial launch?
+- Should the landing page support multiple languages?
+- What analytics tools should be integrated for user tracking?
 
 ## Source Evidence
-- Should the app support multiple separate landing pages for different campaigns?
-- What features should be prioritized for the initial launch?
+- Should the landing page support multiple languages?
+- What analytics tools should be integrated for user tracking?
