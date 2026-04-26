@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Form, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from ...services import agent_runner
@@ -27,13 +27,38 @@ def _build_source(event: dict, team_id: str = "", channel: str = "") -> dict:
     }
 
 
+def _process_slack_event(text: str, event: dict, team_id: str) -> None:
+    """Run reconciliation in the background after 200ing Slack.
+
+    Slack's Events API retries any request that doesn't get a 2xx within
+    3 seconds. The deterministic reconciler can take 3-5s on cold start
+    (BGE encoder load, retrieval, reconcile), which would trigger duplicate
+    deliveries. We acknowledge instantly and do the work here.
+    """
+    source = _build_source(event, team_id=team_id, channel=event.get("channel", ""))
+    try:
+        out = agent_runner.update(
+            text,
+            update_mode="deterministic",
+            apply=False,
+            source=source,
+        )
+    except Exception as exc:  # noqa: BLE001 - background task must not raise
+        logger.exception("background reconcile failed: %s", exc)
+        return
+    plan = out.get("plan")
+    op_count = len(plan.operations) if hasattr(plan, "operations") else 0
+    logger.info("ingested slack message: %s ops proposed", op_count)
+
+
 @router.post("/slack/events")
-async def slack_events(request: Request):
+async def slack_events(request: Request, background_tasks: BackgroundTasks):
     """Slack Events API webhook.
 
     Handles:
     - URL verification challenge (one-time when configuring Event Subscriptions)
-    - ``message.channels`` events (passive ingestion)
+    - ``message.channels`` events (queued for async ingestion so we always
+      ack Slack within its 3-second timeout and avoid retry-driven duplicates)
     """
     body = await request.body()
     timestamp = request.headers.get("x-slack-request-timestamp", "")
@@ -61,34 +86,21 @@ async def slack_events(request: Request):
             return JSONResponse({"ok": True, "skipped": "bot author"})
 
         text = (event.get("text") or "").strip()
-        channel = event.get("channel", "")
         significant, reason = is_significant(text)
 
         if not significant:
             logger.info("slack message skipped: %s", reason)
             return JSONResponse({"ok": True, "skipped": reason})
 
-        source = _build_source(event, team_id=team_id, channel=channel)
-
-        # Reconcile but DO NOT auto-apply by default — Slack is low-authority.
-        # The governance gate (if merged on this branch) will queue these for
-        # review.
-        try:
-            out = agent_runner.update(
-                text,
-                update_mode="deterministic",
-                apply=False,
-                source=source,
-            )
-        except Exception as exc:  # noqa: BLE001 - always 200 to Slack
-            logger.exception("reconcile failed for slack message: %s", exc)
-            # Always 200 to Slack to avoid retry storms.
-            return JSONResponse({"ok": True, "ingested": False, "error": str(exc)[:200]})
-
-        plan = out.get("plan")
-        op_count = len(plan.operations) if hasattr(plan, "operations") else 0
-        logger.info("ingested slack message: %s ops proposed", op_count)
-        return JSONResponse({"ok": True, "ingested": True, "ops": op_count})
+        # Queue the heavy reconcile work; 200 to Slack instantly so its
+        # 3-second retry timer never fires.
+        background_tasks.add_task(
+            _process_slack_event,
+            text=text,
+            event=event,
+            team_id=team_id,
+        )
+        return JSONResponse({"ok": True, "queued": True})
 
     return JSONResponse({"ok": True, "type": payload.get("type", "unknown")})
 
