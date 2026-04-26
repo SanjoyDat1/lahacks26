@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import ReactMarkdown, { type Components } from "react-markdown";
+import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   ArrowDownLeft,
@@ -22,8 +22,7 @@ import {
   resolveBrainLinkHref,
 } from "@/lib/brian/resolve-markdown-link";
 import { cn } from "@/lib/utils";
-
-type Answer = { markdown: string; sources: string[] };
+import { mdComponents, useExpandedModal } from "./markdown-components";
 
 type ConnectedPage = {
   file: BrianFile;
@@ -327,50 +326,20 @@ const markdownComponentsBase: Omit<Components, "a"> = {
 
 export function PreviewPane({
   file,
-  lastAnswer,
   onSelectSource,
   accentForPath,
   allFiles = [],
 }: {
   file: BrianFile | null;
-  lastAnswer: Answer | null;
   onSelectSource: (titleOrPath: string) => void;
   accentForPath: (path: string) => string;
   allFiles?: BrianFile[];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [mounted, setMounted] = useState(false);
-  const [visible, setVisible] = useState(false);
+  const close = useMemo(() => () => setExpanded(false), []);
+  const { mounted, visible } = useExpandedModal(expanded, close);
 
-  useEffect(() => {
-    if (expanded) {
-      setMounted(true);
-      const id = requestAnimationFrame(() => {
-        requestAnimationFrame(() => setVisible(true));
-      });
-      return () => cancelAnimationFrame(id);
-    }
-    setVisible(false);
-    if (!mounted) return;
-    const t = window.setTimeout(() => setMounted(false), 220);
-    return () => window.clearTimeout(t);
-  }, [expanded, mounted]);
-
-  useEffect(() => {
-    if (!expanded) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setExpanded(false);
-    };
-    window.addEventListener("keydown", onKey);
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
-    };
-  }, [expanded]);
-
-  const hasContent = !!file || !!lastAnswer;
+  const hasContent = !!file;
 
   const cleanedContent = useMemo(() => {
     if (!file) return "";
@@ -489,10 +458,6 @@ export function PreviewPane({
     <div className={cn("min-h-0 flex-1 overflow-y-auto", sized === "expanded" ? "px-10 py-8" : "px-5 py-5")}>
       {file ? (
         <div className="max-w-none space-y-8">
-          {answerBlock ? (
-            <div className="rounded-xl border border-black/10 bg-white/60 p-4 shadow-sm">{answerBlock}</div>
-          ) : null}
-
           <div>
             {displayTitle ? (
               <h1 className="mt-0 mb-3 text-2xl font-semibold tracking-tight text-black">
@@ -511,8 +476,6 @@ export function PreviewPane({
             </ReactMarkdown>
           </div>
         </div>
-      ) : lastAnswer ? (
-        answerBlock
       ) : (
         <div className="flex h-full items-center justify-center text-center text-black/55">
           <div>

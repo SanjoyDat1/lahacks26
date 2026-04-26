@@ -1,6 +1,7 @@
 "use client";
 
 import type { GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
+import type { Relevance } from "@/lib/brian/scenarios";
 import { BrainGraph } from "@/components/brain-graph";
 
 export function GraphCanvas({
@@ -8,6 +9,7 @@ export function GraphCanvas({
   selectedId,
   selectedEdge,
   flashEdge,
+  highlightMap,
   onSelectFile,
   onEdgeSelect,
   onEdgeDelete,
@@ -19,6 +21,7 @@ export function GraphCanvas({
   selectedId?: string;
   selectedEdge?: GraphLink | null;
   flashEdge?: GraphLink | null;
+  highlightMap?: Map<string, Relevance>;
   onSelectFile: (filePathOrId: string) => void;
   onEdgeSelect?: (edge: GraphLink | null) => void;
   onEdgeDelete?: (edge: GraphLink) => void;
@@ -33,6 +36,7 @@ export function GraphCanvas({
         selectedId={selectedId}
         selectedEdge={selectedEdge ?? null}
         flashEdge={flashEdge ?? null}
+        highlightMap={highlightMap}
         onNodeSelect={(node: GraphNode | null) => {
           onEdgeSelect?.(null);
           if (!node) return;

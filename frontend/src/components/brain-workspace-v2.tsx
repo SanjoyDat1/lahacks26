@@ -782,7 +782,15 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
               onDone={handleUpdateDone}
             />
           ) : rightMode === "ai" ? (
-            <BrainChat contextHint={selectedFile ? `Selected brain file: ${selectedFile.path}\nTitle: ${selectedFile.frontmatter.title ?? selectedFile.path}\nContent:\n${selectedFile.content}` : undefined} />
+            <BrainChat
+              contextHint={selectedFile ? `Selected brain file: ${selectedFile.path}\nTitle: ${selectedFile.frontmatter.title ?? selectedFile.path}\nContent:\n${selectedFile.content}` : undefined}
+              files={files}
+              onOpenSource={(file) => {
+                setSelectedFile(file);
+                setSelectedEdge(null);
+                setRightMode("inspector");
+              }}
+            />
           ) : activeTab === "agent" ? (
             <AgentLegend hasHighlight={!!highlightMap?.size} />
           ) : selectedEdge ? (

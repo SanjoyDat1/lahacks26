@@ -26,14 +26,19 @@ export function PromptBar({
   status,
   onStatusChange,
   onAnswer,
+  onActiveSources,
   files,
   onSelectFile,
+  attached = false,
 }: {
   status: "idle" | "classifying" | "chatting" | "updating" | "done" | "error";
   onStatusChange: (s: "idle" | "classifying" | "chatting" | "updating" | "done" | "error") => void;
   onAnswer: (a: Answer | null) => void;
+  /** Live set of brain file paths the agent has read while deriving the in-flight answer. */
+  onActiveSources?: (sources: string[] | null) => void;
   files: BrianFile[];
   onSelectFile: (file: BrianFile) => void;
+  attached?: boolean;
 }) {
   const [text, setText] = useState("");
   const [showResults, setShowResults] = useState(true);
@@ -122,6 +127,7 @@ export function PromptBar({
 
     onStatusChange("chatting");
     setStreaming(true);
+    onActiveSources?.([]);
 
     const nextMessages: Message[] = [...messages, { role: "user", content: instruction }];
     setMessages(nextMessages);
@@ -146,6 +152,7 @@ export function PromptBar({
         const md = data.content ?? "";
         out = md;
         localSources = data.sources ?? [];
+        onActiveSources?.(localSources);
         setMessages([...nextMessages, { role: "assistant", content: out }]);
         onAnswer({ markdown: out, sources: localSources });
         onStatusChange("done");
@@ -176,6 +183,7 @@ export function PromptBar({
           const msg = JSON.parse(payload) as { delta?: string; sources?: string[] };
           if (msg.sources?.length) {
             localSources = msg.sources;
+            onActiveSources?.(localSources);
           }
           if (msg.delta) {
             out += msg.delta;
@@ -192,8 +200,9 @@ export function PromptBar({
       onStatusChange("error");
     } finally {
       setStreaming(false);
+      onActiveSources?.(null);
     }
-  }, [messages, onAnswer, onStatusChange, text]);
+  }, [messages, onActiveSources, onAnswer, onStatusChange, text]);
 
   const applyPending = useCallback(async () => {
     if (!pendingUpdate) return;
@@ -263,7 +272,10 @@ export function PromptBar({
 
       <div
         className={cn(
-          "flex min-w-0 items-end gap-2 rounded-2xl border border-black/10 bg-white/85 py-2 pl-4 pr-2 shadow-lg backdrop-blur-md transition",
+          "flex min-w-0 items-end gap-2 border border-black/10 bg-white/85 py-2 pl-4 pr-2 backdrop-blur-md transition",
+          attached
+            ? "rounded-t-none rounded-b-2xl shadow-none"
+            : "rounded-2xl shadow-lg",
           "focus-within:border-black/25 focus-within:bg-white/95",
         )}
       >
