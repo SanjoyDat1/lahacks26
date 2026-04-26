@@ -79,12 +79,15 @@ export function ContextMapRebuildNotifier({
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "running" | "done" | "error">("idle");
   const [lastMessage, setLastMessage] = useState<string>("Waiting for rebuild events…");
+  const [runLabel, setRunLabel] = useState("Context map");
 
   const wsRef = useRef<WebSocket | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  const runLabelRef = useRef(runLabel);
   /** Avoid putting `onRebuildDone` in the WS effect deps: parents often pass inline lambdas and re-render frequently. */
   const onRebuildDoneRef = useRef<typeof onRebuildDone>(onRebuildDone);
   onRebuildDoneRef.current = onRebuildDone;
+  runLabelRef.current = runLabel;
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -132,9 +135,16 @@ export function ContextMapRebuildNotifier({
       }
 
       if (evt.type === "rebuild_started") {
+        const meta = (evt as { meta?: { mode?: string; label?: string } }).meta ?? {};
+        const nextRunLabel =
+          meta.mode === "agent_update" || meta.label === "brain-command-apply"
+            ? "Brian update"
+            : "Context map";
+        runLabelRef.current = nextRunLabel;
+        setRunLabel(nextRunLabel);
         setActiveRunId(String(evt.run_id ?? ""));
         setStatus("running");
-        setLastMessage("Context map is updating…");
+        setLastMessage(`${nextRunLabel} is running…`);
         setOpen(true);
         return;
       }
@@ -200,7 +210,7 @@ export function ContextMapRebuildNotifier({
         }
         setStatus("done");
         setOpen(true);
-        setLastMessage("Context map updated.");
+        setLastMessage(`${runLabelRef.current} updated.`);
         const rid =
           "run_id" in evt && evt.run_id != null ? String(evt.run_id) : "";
         const cb = onRebuildDoneRef.current;
@@ -211,7 +221,7 @@ export function ContextMapRebuildNotifier({
       if (evt.type === "done") {
         setStatus("done");
         setOpen(true);
-        setLastMessage("Context map updated.");
+        setLastMessage(`${runLabelRef.current} updated.`);
         const rid =
           "run_id" in evt && evt.run_id != null ? String(evt.run_id) : "";
         const cb = onRebuildDoneRef.current;
@@ -306,10 +316,10 @@ export function ContextMapRebuildNotifier({
             <div className="min-w-0 flex-1">
               <p className="text-[11px] font-semibold text-black/80">
                 {status === "running"
-                  ? "Context map updating"
+                  ? `${runLabel} running`
                   : status === "error"
-                    ? "Context map update failed"
-                    : "Context map updated"}
+                    ? `${runLabel} failed`
+                    : `${runLabel} updated`}
               </p>
               <p className="mt-0.5 truncate text-[10px] text-black/50">
                 {stageLabel ? `${stageLabel} · ` : ""}{lastMessage}
@@ -338,7 +348,7 @@ export function ContextMapRebuildNotifier({
                 <CheckCircle2 size={14} className="text-emerald-600" />
               )}
               <p className="text-[11px] font-semibold text-black/80">
-                Context-map rebuild logs
+                {runLabel} logs
               </p>
               {activeRunId ? (
                 <span className="rounded-full bg-black/[0.05] px-2 py-0.5 font-mono text-[9px] text-black/50">
@@ -383,7 +393,7 @@ export function ContextMapRebuildNotifier({
           </div>
 
           <div className="border-t border-black/10 px-4 py-3 text-[10px] text-black/50">
-            Click the small popup to reopen logs while a rebuild is running.
+            Click the small popup to reopen logs while this run is active.
           </div>
         </div>
       )}

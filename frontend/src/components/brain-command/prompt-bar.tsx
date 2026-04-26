@@ -216,31 +216,30 @@ export function PromptBar({
     if (!pendingUpdate || status === "updating") return;
     onStatusChange("updating");
     try {
-      const res = await fetch("/api/brian/ai-edit", {
+      const res = await fetch("/api/agent/update-trigger", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           instruction: pendingUpdate.instruction,
-          apply: true,
           file: pendingUpdate.file,
           newContent: pendingUpdate.newContent,
           summary: pendingUpdate.summary,
         }),
       });
-      const data = (await res.json()) as { summary?: string; file?: string; error?: string };
+      const data = (await res.json()) as { run_id?: string; error?: string };
       if (!res.ok) {
-        onAnswer({ markdown: `Apply failed.\n\n${String(data.error ?? "Unknown error")}`, sources: [] });
+        onAnswer({ markdown: `Update trigger failed.\n\n${String(data.error ?? "Unknown error")}`, sources: [] });
         onStatusChange("error");
         return;
       }
       onAnswer({
-        markdown: `**Applied update**\n\n- File: \`${String(data.file ?? pendingUpdate.file)}\`\n- Summary: ${String(data.summary ?? pendingUpdate.summary)}`,
-        sources: [String(data.file ?? pendingUpdate.file)],
+        markdown: `**Update started**\n\n- File: \`${pendingUpdate.file}\`\n- Summary: ${pendingUpdate.summary}\n- Run: \`${String(data.run_id ?? "started")}\`\n\nOpen the top-right notification to follow the backend logs. Brian will refresh when the run completes.`,
+        sources: [pendingUpdate.file],
       });
       setPendingUpdate(null);
       onStatusChange("done");
     } catch (e) {
-      onAnswer({ markdown: `Apply failed: ${e instanceof Error ? e.message : "Unknown error"}`, sources: [] });
+      onAnswer({ markdown: `Update trigger failed: ${e instanceof Error ? e.message : "Unknown error"}`, sources: [] });
       onStatusChange("error");
     }
   }, [onAnswer, onStatusChange, pendingUpdate, status]);
