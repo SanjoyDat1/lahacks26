@@ -7,6 +7,7 @@ import {
   Copy,
   ExternalLink,
   FileSpreadsheet,
+  Folder,
   Loader2,
   Lock,
   Mail,
@@ -32,6 +33,8 @@ type GoogleStatus = {
 };
 
 type DriveFile = { id: string; name: string; mimeType: string; modifiedTime?: string };
+
+const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 function meetingsWebhookFromEnv(): string {
   const base = (process.env.NEXT_PUBLIC_APP_URL ?? "").replace(/\/+$/, "");
@@ -61,6 +64,7 @@ export function SessionIntegrationSources({
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [importBusy, setImportBusy] = useState(false);
   const [sheetUrl, setSheetUrl] = useState("");
+  const [folderUrl, setFolderUrl] = useState("");
   const [includeCal, setIncludeCal] = useState(false);
   const [includeGmail, setIncludeGmail] = useState(false);
   const [copied, setCopied] = useState<string | null>(null);
@@ -94,7 +98,7 @@ export function SessionIntegrationSources({
       if (!res.ok) throw new Error("Could not list Drive files");
       const data = (await res.json()) as { files?: DriveFile[] };
       setDriveFiles(data.files ?? []);
-      onLog(`Loaded ${(data.files ?? []).length} recent Drive files.`);
+      onLog(`Loaded ${(data.files ?? []).length} recent Drive items (files + folders).`);
     } catch (e) {
       onLog(e instanceof Error ? e.message : "Drive list failed");
     } finally {
@@ -119,28 +123,50 @@ export function SessionIntegrationSources({
     if (importBusy || disabled) return;
     setImportBusy(true);
     try {
+      const fileIds: string[] = [];
+      const folderIds: string[] = [];
+      for (const id of selected) {
+        const row = driveFiles.find((f) => f.id === id);
+        if (row?.mimeType === FOLDER_MIME) folderIds.push(id);
+        else fileIds.push(id);
+      }
+
       const res = await fetch("/api/integrations/google/import", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          fileIds: [...selected],
+          fileIds,
+          folderIds,
+          folderUrl: folderUrl.trim() || undefined,
           spreadsheetUrl: sheetUrl.trim() || undefined,
           includeCalendar: includeCal,
           includeGmail: includeGmail,
         }),
       });
-      const data = (await res.json()) as { documents?: IntegrationDocBatch[]; error?: string };
+      const rawText = await res.text();
+      let data: { documents?: IntegrationDocBatch[]; error?: string };
+      try {
+        data = JSON.parse(rawText) as { documents?: IntegrationDocBatch[]; error?: string };
+      } catch {
+        onLog(
+          `Google import: bad response (${res.status}). ${rawText.slice(0, 200)}${rawText.length > 200 ? "…" : ""}`,
+        );
+        return;
+      }
       if (!res.ok) throw new Error(data.error ?? "Import failed");
       const docs = data.documents ?? [];
       if (!docs.length) {
-        onLog("Nothing imported—select Drive files, Sheet URL, calendar, and/or Gmail recap.");
+        onLog(
+          "Nothing imported — select Drive files or folders, paste a valid folder link / Sheet URL, or enable Calendar / Gmail. (Empty folder or unsupported file types return no documents.)",
+        );
         return;
       }
       onImported(docs);
       onLog(
-        `Imported ${docs.length} Workspace source${docs.length === 1 ? "" : "s"} (${docs.reduce((s, d) => s + d.chars, 0).toLocaleString()} chars).`,
+        `Google API: fetched ${docs.length} document(s), ${docs.reduce((s, d) => s + d.chars, 0).toLocaleString()} chars — merging into session…`,
       );
       setSelected(new Set());
+      setFolderUrl("");
       setIncludeCal(false);
       setIncludeGmail(false);
     } catch (e) {
@@ -218,11 +244,18 @@ export function SessionIntegrationSources({
                 </p>
               ) : !google.configured ? (
                 <p className="text-[11px] leading-relaxed text-amber-800">
-                  Add <span className="font-mono">GOOGLE_CLIENT_ID</span>,{" "}
+                  Set <span className="font-mono">GOOGLE_CLIENT_ID</span>,{" "}
                   <span className="font-mono">GOOGLE_CLIENT_SECRET</span>, and{" "}
-                  <span className="font-mono">GOOGLE_COOKIE_SECRET</span> (16+ chars) to{" "}
-                  <span className="font-mono">.env.local</span>. Redirect URI:{" "}
-                  <span className="font-mono text-[10px]">/api/integrations/google/callback</span>
+                  <span className="font-mono">GOOGLE_COOKIE_SECRET</span> (16+ characters, no quotes) in{" "}
+                  <span className="font-mono">.env</span> at the <strong>repo root</strong> and/or{" "}
+                  <span className="font-mono">frontend/.env</span> (not <span className="font-mono">.env.local</span>
+                  ), then restart <span className="font-mono">npm run dev</span>. In Google Cloud, the authorized redirect
+                  URI must be{" "}
+                  <span className="font-mono text-[10px] break-all">
+                    {(process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000").replace(/\/+$/, "")}
+                    /api/integrations/google/callback
+                  </span>
+                  .
                 </p>
               ) : !google.connected ? (
                 <a
@@ -265,35 +298,66 @@ export function SessionIntegrationSources({
 
             {google?.connected ? (
               <div className="mt-4 space-y-3 rounded-2xl border border-violet-100/90 bg-white/80 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Recent Drive files</p>
-                <div className="max-h-40 space-y-1 overflow-y-auto pr-1">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Recent Drive (files & folders)</p>
+                <p className="text-[10px] leading-relaxed text-slate-500">
+                  Select one or more <strong>folders</strong> to pull every readable file inside (nested subfolders included,
+                  up to a cap). Mix with individual files if you like.
+                </p>
+                <div className="max-h-48 space-y-1 overflow-y-auto pr-1">
                   {driveFiles.length === 0 && !driveLoading ? (
-                    <p className="text-[11px] text-slate-400">No files listed yet.</p>
+                    <p className="text-[11px] text-slate-400">No items listed yet.</p>
                   ) : (
-                    driveFiles.map((f) => (
-                      <button
-                        key={f.id}
-                        type="button"
-                        disabled={disabled}
-                        onClick={() => toggleSel(f.id)}
-                        className={cn(
-                          "flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-[11px] transition",
-                          selected.has(f.id) ? "bg-violet-100 text-violet-900" : "hover:bg-slate-50 text-slate-700",
-                        )}
-                      >
-                        <span
+                    driveFiles.map((f) => {
+                      const isFolder = f.mimeType === FOLDER_MIME;
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          disabled={disabled}
+                          onClick={() => toggleSel(f.id)}
                           className={cn(
-                            "flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border",
-                            selected.has(f.id) ? "border-violet-500 bg-violet-500 text-white" : "border-slate-300",
+                            "flex w-full items-center gap-2 rounded-xl px-2 py-1.5 text-left text-[11px] transition",
+                            selected.has(f.id) ? "bg-violet-100 text-violet-900" : "hover:bg-slate-50 text-slate-700",
                           )}
                         >
-                          {selected.has(f.id) ? <Check size={10} strokeWidth={3} /> : null}
-                        </span>
-                        <span className="min-w-0 flex-1 truncate font-medium">{f.name}</span>
-                      </button>
-                    ))
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border",
+                              selected.has(f.id) ? "border-violet-500 bg-violet-500 text-white" : "border-slate-300",
+                            )}
+                          >
+                            {selected.has(f.id) ? <Check size={10} strokeWidth={3} /> : null}
+                          </span>
+                          {isFolder ? (
+                            <Folder size={14} className="flex-shrink-0 text-amber-600" aria-hidden />
+                          ) : null}
+                          <span className="min-w-0 flex-1 truncate font-medium">
+                            {isFolder ? <span className="text-amber-900/90">{f.name}</span> : f.name}
+                          </span>
+                          {isFolder ? (
+                            <span className="flex-shrink-0 text-[9px] font-bold uppercase tracking-wide text-amber-700/90">
+                              Folder
+                            </span>
+                          ) : null}
+                        </button>
+                      );
+                    })
                   )}
                 </div>
+
+                <label className="block">
+                  <span className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <Folder size={11} className="text-amber-600" />
+                    Drive folder link (optional)
+                  </span>
+                  <input
+                    value={folderUrl}
+                    disabled={disabled}
+                    onChange={(e) => setFolderUrl(e.target.value)}
+                    placeholder="https://drive.google.com/drive/folders/…"
+                    className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-xs text-slate-800 outline-none focus:ring-2 focus:ring-violet-500/30"
+                  />
+                </label>
 
                 <label className="block">
                   <span className="mb-1 flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -338,14 +402,22 @@ export function SessionIntegrationSources({
                   disabled={
                     disabled ||
                     importBusy ||
-                    (!selected.size && !sheetUrl.trim() && !includeCal && !includeGmail)
+                    (!selected.size &&
+                      !folderUrl.trim() &&
+                      !sheetUrl.trim() &&
+                      !includeCal &&
+                      !includeGmail)
                   }
                   onClick={() => void runImport()}
                   className={cn(
                     "flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold transition",
                     disabled ||
                       importBusy ||
-                      (!selected.size && !sheetUrl.trim() && !includeCal && !includeGmail)
+                      (!selected.size &&
+                        !folderUrl.trim() &&
+                        !sheetUrl.trim() &&
+                        !includeCal &&
+                        !includeGmail)
                       ? "bg-slate-100 text-slate-400"
                       : "bg-violet-600 text-white shadow-md shadow-violet-300/35 hover:bg-violet-700",
                   )}

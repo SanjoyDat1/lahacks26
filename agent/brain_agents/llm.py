@@ -55,16 +55,19 @@ def _usage_summary(response: object) -> str:
     return ", ".join(parts) if parts else f"usage={usage}"
 
 
-def make_chat_model(settings: Settings):
+def make_chat_model(settings: Settings, *, max_tokens: int | None = None):
     """Return the configured OpenAI LangChain chat model."""
     from langchain_openai import ChatOpenAI
 
-    return ChatOpenAI(
-        model=settings.openai_model,
-        api_key=settings.openai_api_key,  # type: ignore[arg-type]
-        temperature=0,
-        streaming=True,
-    )
+    kwargs: dict[str, Any] = {
+        "model": settings.openai_model,
+        "api_key": settings.openai_api_key,  # type: ignore[arg-type]
+        "temperature": 0,
+        "streaming": True,
+    }
+    if max_tokens is not None:
+        kwargs["max_tokens"] = max_tokens
+    return ChatOpenAI(**kwargs)
 
 
 def _extract_thinking_blocks(content: object) -> list[str]:

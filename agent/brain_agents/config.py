@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     # Empty string => fail-open in dev (no signature check). Set in production
     # to enforce HMAC-SHA256 verification on every Events API request.
     slack_signing_secret: str = Field(default="", validation_alias="SLACK_SIGNING_SECRET")
+    # When true, ``/slack/events`` and ``/slack/command`` pass ``apply=True`` so
+    # reconciliation mutates the working brain (deterministic mode). When false,
+    # only a plan is produced (legacy plan-only Events behavior).
+    slack_apply_updates: bool = Field(default=False, validation_alias="SLACK_APPLY_UPDATES")
+    # When true, Slack ingests use ``require_approval=True``: high-confidence plans
+    # auto-apply; others go to pending review (see ``review_pending.py``).
+    # Implies apply for auto-approved plans; takes precedence over slack_apply_updates alone.
+    slack_governance: bool = Field(default=False, validation_alias="SLACK_GOVERNANCE")
+    # Uvicorn and process log level: debug, info, warning, error.
+    brain_api_log_level: str = Field(default="info", validation_alias="BRAIN_API_LOG_LEVEL")
 
     @field_validator("brian_reference_dir", mode="before")
     @classmethod

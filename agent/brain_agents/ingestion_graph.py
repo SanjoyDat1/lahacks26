@@ -6,6 +6,7 @@ import json
 import logging
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Iterator, Literal, cast
@@ -20,7 +21,7 @@ from .builder import (
     create_brain_from_documents_streaming,
     normalize_documents,
 )
-from .builder import _source_digest
+from .builder import MAX_SOURCE_CHARS, _source_digest
 from .config import Settings
 from .ingestion_state import IngestionState
 from .llm import invoke_chat_model, make_chat_model
@@ -92,6 +93,164 @@ def _strip_json_fence(text: str) -> str:
     return t.strip()
 
 
+def _response_content_str(resp: object) -> str:
+    text = cast(str, getattr(resp, "content", resp) or "")
+    if isinstance(text, list):
+        text = "".join(
+            str(p.get("text", p)) if isinstance(p, dict) else str(p) for p in text
+        )
+    return str(text)
+
+
+# Bootstrap (initialize) synthesis: map–reduce so large Google / multi-doc imports stay token-efficient.
+_BOOTSTRAP_SINGLE_MAX_TOTAL_CHARS = 32_000
+_BOOTSTRAP_SINGLE_MAX_DOCS = 14
+_BOOTSTRAP_MAP_PER_DOC_CHARS = 14_000
+_BOOTSTRAP_MAX_MAP_DOCS = 28
+_BOOTSTRAP_MAP_WORKERS = 4
+_BOOTSTRAP_MAP_MAX_TOKENS = 700
+_BOOTSTRAP_REDUCE_MAX_TOKENS = 4500
+_BOOTSTRAP_SINGLE_MAX_TOKENS = 4500
+
+
+def _parse_json_text_field(raw_model_text: str, *field_names: str) -> str | None:
+    cleaned = _strip_json_fence(raw_model_text)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    for key in field_names:
+        val = data.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _map_one_document_for_bootstrap(model: object, doc: SourceDocument) -> str:
+    excerpt = (doc.text or "").strip()[:_BOOTSTRAP_MAP_PER_DOC_CHARS]
+    if not excerpt:
+        return ""
+    system = SystemMessage(
+        content=(
+            "Extract durable facts for a team knowledge brain from ONE source. "
+            "Keep proper nouns, numbers, dates, URLs, technical terms, explicit decisions, owners, constraints. "
+            "Skip greetings, signatures, boilerplate, and repeated lines. "
+            "Return ONLY valid JSON: {\"bullets\": string} where the string is markdown bullet lines (- item), "
+            "at most ~40 lines, no introduction or closing."
+        )
+    )
+    user = HumanMessage(content=f"SOURCE_LABEL: {doc.name}\n\n---\n{excerpt}\n")
+    try:
+        resp = invoke_chat_model(model, [system, user], label="bootstrap map source")
+        parsed = _parse_json_text_field(_response_content_str(resp), "bullets", "distilled_text")
+        if parsed:
+            return parsed
+    except (OSError, TypeError, ValueError, RuntimeError) as exc:
+        _log_graph(f"bootstrap map fallback for {doc.name!r}: {exc}")
+    return excerpt[:1400] + ("\n…[truncated; map fallback]" if len(excerpt) > 1400 else "")
+
+
+def _reduce_bootstrap_notes(model: object, merged: str) -> str | None:
+    merged_in = merged.strip()[:52_000]
+    if not merged_in:
+        return None
+    system = SystemMessage(
+        content=(
+            "Merge per-source extractions into ONE dense briefing for planning a Markdown knowledge brain. "
+            "Deduplicate aggressively. Organize with markdown ## headings, for example: "
+            "Overview, Domains, Key facts, Decisions, Constraints & risks, People, Open questions, Timeline, References. "
+            "Use - bullets under sections only. Preserve specifics (names, numbers, URLs). "
+            "Return ONLY valid JSON: {\"distilled_text\": string}. "
+            "Keep the string under ~17000 characters."
+        )
+    )
+    user = HumanMessage(content=f"PER-SOURCE NOTES:\n\n{merged_in}")
+    try:
+        resp = invoke_chat_model(model, [system, user], label="bootstrap reduce notes")
+        return _parse_json_text_field(_response_content_str(resp), "distilled_text", "bullets")
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
+        _log_graph(f"bootstrap reduce failed: {exc}")
+        return None
+
+
+def _single_pass_bootstrap_distill(model: object, raw_digest: str) -> str | None:
+    body = raw_digest.strip()[:52_000]
+    if not body:
+        return None
+    system = SystemMessage(
+        content=(
+            "Compress heterogeneous workspace material into ONE dense markdown briefing for an AI knowledge brain. "
+            "Sources may include Google Docs/Sheets, calendar snapshots, Gmail digests, PDFs, and plain text. "
+            "Preserve concrete names, metrics, dates, URLs, technical terms, decisions, owners, constraints, risks. "
+            "Strip chit-chat, duplicates, and layout noise. "
+            "Use ## sections and - bullets. "
+            "Return ONLY valid JSON: {\"distilled_text\": string} under ~16000 characters."
+        )
+    )
+    user = HumanMessage(content=f"SOURCE MATERIAL:\n\n{body}")
+    try:
+        resp = invoke_chat_model(model, [system, user], label="bootstrap single-pass distill")
+        return _parse_json_text_field(_response_content_str(resp), "distilled_text", "bullets")
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as exc:
+        _log_graph(f"bootstrap single-pass failed: {exc}")
+        return None
+
+
+def _synthesize_initialize_context(docs: list[SourceDocument], settings: Settings) -> str:
+    """Return dense text for planning + generation; falls back to capped raw digest."""
+    total = sum(len(d.text or "") for d in docs)
+    raw_digest = _source_digest(docs, max_chars=min(120_000, max(total + 500, 50_000)))
+
+    try:
+        if total <= _BOOTSTRAP_SINGLE_MAX_TOTAL_CHARS and len(docs) <= _BOOTSTRAP_SINGLE_MAX_DOCS:
+            model = make_chat_model(settings, max_tokens=_BOOTSTRAP_SINGLE_MAX_TOKENS)
+            out = _single_pass_bootstrap_distill(model, raw_digest)
+            if out and len(out) >= 64:
+                return out[:24_000]
+
+        to_map = [d for d in docs if (d.text or "").strip()]
+        if len(to_map) > _BOOTSTRAP_MAX_MAP_DOCS:
+            head = to_map[:_BOOTSTRAP_MAX_MAP_DOCS]
+            tail = to_map[_BOOTSTRAP_MAX_MAP_DOCS :]
+            tail_blob = "\n\n".join(f"### {d.name}\n{(d.text or '')[:650]}" for d in tail[:60])
+            if len(tail) > 60:
+                tail_blob += f"\n\n… and {len(tail) - 60} more sources not fully expanded."
+            to_map = head + [
+                SourceDocument(
+                    name="__additional_sources_excerpts__",
+                    text=tail_blob[:12_000],
+                )
+            ]
+
+        def map_job(index: int, doc: SourceDocument) -> tuple[int, str, str]:
+            local = make_chat_model(settings, max_tokens=_BOOTSTRAP_MAP_MAX_TOKENS)
+            body = _map_one_document_for_bootstrap(local, doc)
+            return index, doc.name, body
+
+        indexed_results: list[tuple[int, str, str]] = []
+        with ThreadPoolExecutor(max_workers=_BOOTSTRAP_MAP_WORKERS) as pool:
+            futures = [pool.submit(map_job, i, d) for i, d in enumerate(to_map)]
+            for fut in as_completed(futures):
+                indexed_results.append(fut.result())
+        indexed_results.sort(key=lambda t: t[0])
+        merged = "\n\n".join(
+            f"### {name}\n{body}" for _, name, body in indexed_results if body.strip()
+        )
+        if not merged.strip():
+            return raw_digest[:MAX_SOURCE_CHARS]
+
+        reduce_model = make_chat_model(settings, max_tokens=_BOOTSTRAP_REDUCE_MAX_TOKENS)
+        reduced = _reduce_bootstrap_notes(reduce_model, merged)
+        if reduced and len(reduced.strip()) >= 64:
+            return reduced[:24_000]
+        return merged[:24_000]
+    except (OSError, TypeError, ValueError, RuntimeError) as exc:
+        _log_graph(f"bootstrap synthesis error, using digest: {exc}")
+        return raw_digest[:MAX_SOURCE_CHARS]
+
+
 def _distill_node(state: IngestionState) -> dict[str, Any]:
     if state.get("error"):
         _log_graph(f"distill SKIP prior_error={state.get('error')}")
@@ -109,8 +268,24 @@ def _distill_node(state: IngestionState) -> dict[str, Any]:
     flow = state.get("flow_mode", "update")
 
     if flow == "initialize":
-        _log_graph(f"distill END initialize raw context preserved raw_chars={len(raw)}")
-        return {"cleaned_context": raw, "source_digest": raw}
+        raw_digest = _source_digest(docs, max_chars=120_000)
+        api_key = (getattr(s, "openai_api_key", "") or "").strip()
+        if not api_key:
+            _log_graph(f"distill END initialize no API key raw_chars={len(raw_digest)}")
+            cleaned = raw_digest[:MAX_SOURCE_CHARS]
+            return {"cleaned_context": cleaned, "source_digest": raw_digest}
+        try:
+            synthesized = _synthesize_initialize_context(docs, s)
+        except Exception as exc:  # noqa: BLE001
+            _log_graph(f"distill initialize synthesis exception: {exc}")
+            synthesized = raw_digest[:MAX_SOURCE_CHARS]
+        if not synthesized.strip():
+            synthesized = raw_digest[:MAX_SOURCE_CHARS]
+        _log_graph(
+            f"distill END initialize synthesized_chars={len(synthesized)} "
+            f"raw_digest_chars={len(raw_digest)}"
+        )
+        return {"cleaned_context": synthesized, "source_digest": raw_digest}
 
     if flow == "update" and state.get("update_mode") == "deterministic":
         _log_graph(f"distill END deterministic update bypass raw_chars={len(raw)}")
@@ -516,7 +691,13 @@ def run_initialize_streaming(
     yield _event("stage_start", stage="distill", label="Distilling durable context")
     yield _event("graph_node", id="distill", label="Distill facts", status="active")
     yield _event("graph_edge", from_="normalize", to="distill", status="active")
-    yield _event("thinking", content="Now I am separating durable product context from noise: decisions, constraints, goals, owners, and open questions.\n")
+    yield _event(
+        "thinking",
+        content=(
+            "Now I am synthesizing durable context from all sources (map–reduce when large): "
+            "decisions, constraints, entities, open questions—dense briefing for planning without token-heavy raw dumps.\n"
+        ),
+    )
     distilled = _distill_node(st)
     st.update(distilled)
     if st.get("error"):

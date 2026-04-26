@@ -9,7 +9,7 @@ import {
   googleRedirectUri,
 } from "@/lib/integrations/google/config";
 import { exchangeGoogleCode, fetchGoogleUserEmail } from "@/lib/integrations/google/oauth";
-import { writeGoogleSessionCookie } from "@/lib/integrations/google/session-cookie";
+import { readGoogleSessionCookie, writeGoogleSessionCookie } from "@/lib/integrations/google/session-cookie";
 
 export async function GET(request: NextRequest) {
   if (!googleIntegrationConfigured()) {
@@ -42,11 +42,12 @@ export async function GET(request: NextRequest) {
   try {
     const tokens = await exchangeGoogleCode(code, redirectUri);
     const email = await fetchGoogleUserEmail(tokens.access_token);
+    const previous = await readGoogleSessionCookie();
     await writeGoogleSessionCookie({
       access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      refresh_token: tokens.refresh_token ?? previous?.refresh_token,
       expires_at: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-      email,
+      email: email ?? previous?.email,
     });
     return NextResponse.redirect(new URL(`${nextPath}?google=connected`, request.url));
   } catch (e) {

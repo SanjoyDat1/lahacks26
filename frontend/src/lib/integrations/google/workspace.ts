@@ -24,6 +24,7 @@ export type ImportedDoc = {
 
 const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
+const SLIDE_MIME = "application/vnd.google-apps.presentation";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
 async function gfetch(path: string, accessToken: string, init?: RequestInit) {
@@ -41,12 +42,13 @@ async function gfetch(path: string, accessToken: string, init?: RequestInit) {
   return res;
 }
 
+/** Recent files and folders (folders can be selected to import entire trees — see `expandDriveFoldersToFileIds`). */
 export async function listRecentDriveFiles(
   payload: GoogleTokenPayload,
   opts?: { query?: string; pageSize?: number },
 ): Promise<DriveListItem[]> {
   const p = await ensureFreshAccessToken(payload);
-  const qParts = ["trashed = false", `mimeType != '${FOLDER_MIME}'`];
+  const qParts = ["trashed = false"];
   const rawQ = opts?.query?.trim();
   if (rawQ) {
     const safe = rawQ.replace(/[^a-zA-Z0-9 _.-]/g, "").slice(0, 80);
@@ -57,6 +59,9 @@ export async function listRecentDriveFiles(
   u.searchParams.set("pageSize", String(opts?.pageSize ?? 25));
   u.searchParams.set("q", q);
   u.searchParams.set("orderBy", "modifiedTime desc");
+  u.searchParams.set("corpora", "allDrives");
+  u.searchParams.set("includeItemsFromAllDrives", "true");
+  u.searchParams.set("supportsAllDrives", "true");
   u.searchParams.set(
     "fields",
     "files(id,name,mimeType,modifiedTime)",
@@ -66,22 +71,103 @@ export async function listRecentDriveFiles(
   return data.files ?? [];
 }
 
+function driveIdInQuery(id: string): string {
+  return id.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function listFolderChildrenPage(
+  accessToken: string,
+  folderId: string,
+  pageToken?: string,
+): Promise<{ files: DriveListItem[]; nextPageToken?: string }> {
+  const q = `'${driveIdInQuery(folderId)}' in parents and trashed = false`;
+  const u = new URL(`${DRIVE_BASE}/files`);
+  u.searchParams.set("q", q);
+  u.searchParams.set("pageSize", "100");
+  u.searchParams.set("supportsAllDrives", "true");
+  u.searchParams.set("includeItemsFromAllDrives", "true");
+  u.searchParams.set("corpora", "allDrives");
+  u.searchParams.set("fields", "nextPageToken, files(id,name,mimeType)");
+  if (pageToken) u.searchParams.set("pageToken", pageToken);
+  const res = await gfetch(u.toString(), accessToken);
+  const data = (await res.json()) as {
+    files?: DriveListItem[];
+    nextPageToken?: string;
+  };
+  return { files: data.files ?? [], nextPageToken: data.nextPageToken };
+}
+
+/**
+ * Breadth-first walk of selected folders; collects non-folder file ids only.
+ * Capped to protect session size and API quotas.
+ */
+export async function expandDriveFoldersToFileIds(
+  payload: GoogleTokenPayload,
+  folderIds: string[],
+  opts?: { maxFiles?: number; maxDepth?: number },
+): Promise<string[]> {
+  const maxFiles = Math.min(Math.max(1, opts?.maxFiles ?? 80), 200);
+  const maxDepth = Math.min(Math.max(1, opts?.maxDepth ?? 12), 24);
+  const p = await ensureFreshAccessToken(payload);
+  const fileIds: string[] = [];
+  const seenFiles = new Set<string>();
+  const enqueuedFolders = new Set<string>();
+  const queue: { id: string; depth: number }[] = [];
+
+  for (const id of folderIds) {
+    if (id && !enqueuedFolders.has(id)) {
+      enqueuedFolders.add(id);
+      queue.push({ id, depth: 0 });
+    }
+  }
+
+  while (queue.length > 0 && fileIds.length < maxFiles) {
+    const { id: folderId, depth } = queue.shift()!;
+    if (depth > maxDepth) continue;
+
+    let pageToken: string | undefined;
+    do {
+      const { files, nextPageToken } = await listFolderChildrenPage(p.access_token, folderId, pageToken);
+      for (const f of files) {
+        if (fileIds.length >= maxFiles) break;
+        if (f.mimeType === FOLDER_MIME) {
+          if (depth + 1 <= maxDepth && !enqueuedFolders.has(f.id)) {
+            enqueuedFolders.add(f.id);
+            queue.push({ id: f.id, depth: depth + 1 });
+          }
+        } else if (!seenFiles.has(f.id)) {
+          seenFiles.add(f.id);
+          fileIds.push(f.id);
+        }
+      }
+      pageToken = nextPageToken;
+    } while (pageToken && fileIds.length < maxFiles);
+  }
+
+  return fileIds;
+}
+
 async function getFileMeta(accessToken: string, fileId: string) {
   const u = new URL(`${DRIVE_BASE}/files/${encodeURIComponent(fileId)}`);
   u.searchParams.set("fields", "id,name,mimeType,size");
+  u.searchParams.set("supportsAllDrives", "true");
   const res = await gfetch(u.toString(), accessToken);
   return (await res.json()) as { id: string; name: string; mimeType: string; size?: string };
 }
 
 async function exportFile(accessToken: string, fileId: string, mime: string) {
-  const u = `${DRIVE_BASE}/files/${encodeURIComponent(fileId)}/export?mimeType=${encodeURIComponent(mime)}`;
-  const res = await gfetch(u, accessToken);
+  const u = new URL(`${DRIVE_BASE}/files/${encodeURIComponent(fileId)}/export`);
+  u.searchParams.set("mimeType", mime);
+  u.searchParams.set("supportsAllDrives", "true");
+  const res = await gfetch(u.toString(), accessToken);
   return res.text();
 }
 
 async function downloadMedia(accessToken: string, fileId: string) {
-  const u = `${DRIVE_BASE}/files/${encodeURIComponent(fileId)}?alt=media`;
-  const res = await gfetch(u, accessToken);
+  const u = new URL(`${DRIVE_BASE}/files/${encodeURIComponent(fileId)}`);
+  u.searchParams.set("alt", "media");
+  u.searchParams.set("supportsAllDrives", "true");
+  const res = await gfetch(u.toString(), accessToken);
   const buf = Buffer.from(await res.arrayBuffer());
   return buf;
 }
@@ -109,14 +195,23 @@ export async function importDriveFiles(
   const maxTotal = 400_000;
   let total = 0;
 
-  for (const fileId of fileIds) {
+  const uniqueIds: string[] = [];
+  const seen = new Set<string>();
+  for (const id of fileIds) {
+    if (id && !seen.has(id)) {
+      seen.add(id);
+      uniqueIds.push(id);
+    }
+  }
+
+  for (const fileId of uniqueIds) {
     if (total >= maxTotal) break;
     const meta = await getFileMeta(p.access_token, fileId);
     let text: string | undefined;
     let content_base64: string | undefined;
     let mimeOut = meta.mimeType;
 
-    if (meta.mimeType === DOC_MIME) {
+    if (meta.mimeType === DOC_MIME || meta.mimeType === SLIDE_MIME) {
       text = await exportFile(p.access_token, fileId, "text/plain");
     } else if (meta.mimeType === SHEET_MIME) {
       text = await sheetAsTsv(p.access_token, fileId);
@@ -269,13 +364,36 @@ export async function buildGmailSnapshot(payload: GoogleTokenPayload): Promise<I
   };
 }
 
+/** Google Drive folder URL → folder id (for “import this folder”). */
+export function extractDriveFolderIdFromUrl(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  try {
+    const u = new URL(s);
+    const m = u.pathname.match(/\/folders\/([a-zA-Z0-9_-]+)/);
+    if (m?.[1]) return m[1];
+  } catch {
+    /* fall through */
+  }
+  if (/^[a-zA-Z0-9_-]{20,}$/.test(s)) return s;
+  return null;
+}
+
 export function extractSpreadsheetIdFromUrl(raw: string): string | null {
   const s = raw.trim();
   if (!s) return null;
   try {
     const u = new URL(s);
     const m = u.pathname.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-    if (m) return m[1] ?? null;
+    if (m?.[1]) return m[1];
+    const openId = u.searchParams.get("id");
+    if (
+      (u.hostname === "docs.google.com" || u.hostname.endsWith(".docs.google.com")) &&
+      openId &&
+      /^[a-zA-Z0-9-_]{30,}$/.test(openId)
+    ) {
+      return openId;
+    }
   } catch {
     /* fall through */
   }

@@ -15,6 +15,32 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _slack_update_kwargs() -> dict:
+    """Resolve apply / governance for Slack ingestion from settings (no API key validation)."""
+    from ...config import load_settings
+
+    s = load_settings(validate=False)
+    if s.slack_governance:
+        return {"apply": True, "require_approval": True}
+    return {"apply": s.slack_apply_updates, "require_approval": False}
+
+
+def _log_slack_http_response(payload: dict) -> None:
+    """Log the JSON body Slack (or curl) sees — look for challenge, queued, or skipped."""
+    if "challenge" in payload:
+        ch = payload.get("challenge")
+        n = len(ch) if isinstance(ch, str) else 0
+        logger.info("slack /slack/events response: url_verification (challenge length=%s)", n)
+        return
+    if payload.get("queued") is True:
+        logger.info("slack /slack/events response: %s", payload)
+        return
+    if "skipped" in payload:
+        logger.info("slack /slack/events response: %s", payload)
+        return
+    logger.info("slack /slack/events response: %s", payload)
+
+
 def _build_source(event: dict, team_id: str = "", channel: str = "") -> dict:
     """Build the ``source`` dict the reconciler expects for Slack messages."""
     return {
@@ -36,19 +62,26 @@ def _process_slack_event(text: str, event: dict, team_id: str) -> None:
     deliveries. We acknowledge instantly and do the work here.
     """
     source = _build_source(event, team_id=team_id, channel=event.get("channel", ""))
+    kw = _slack_update_kwargs()
     try:
         out = agent_runner.update(
             text,
             update_mode="deterministic",
-            apply=False,
             source=source,
+            **kw,
         )
     except Exception as exc:  # noqa: BLE001 - background task must not raise
         logger.exception("background reconcile failed: %s", exc)
         return
     plan = out.get("plan")
     op_count = len(plan.operations) if hasattr(plan, "operations") else 0
-    logger.info("ingested slack message: %s ops proposed", op_count)
+    logger.info(
+        "slack background ingest: ops=%s applied=%s status=%s kwargs=%s",
+        op_count,
+        out.get("applied"),
+        out.get("status"),
+        kw,
+    )
 
 
 @router.post("/slack/events")
@@ -72,7 +105,9 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
 
     # 1. URL verification handshake (Slack does this once when you configure the URL).
     if payload.get("type") == "url_verification":
-        return {"challenge": payload.get("challenge", "")}
+        body = {"challenge": payload.get("challenge", "")}
+        _log_slack_http_response(body)
+        return body
 
     # 2. Real event.
     if payload.get("type") == "event_callback":
@@ -81,16 +116,22 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
 
         # Ignore bot messages (including our own replies) and edits/deletes.
         if event.get("subtype") in {"bot_message", "message_changed", "message_deleted"}:
-            return JSONResponse({"ok": True, "skipped": "non-user event"})
+            skip_body = {"ok": True, "skipped": "non-user event"}
+            _log_slack_http_response(skip_body)
+            return JSONResponse(skip_body)
         if event.get("bot_id"):
-            return JSONResponse({"ok": True, "skipped": "bot author"})
+            skip_body = {"ok": True, "skipped": "bot author"}
+            _log_slack_http_response(skip_body)
+            return JSONResponse(skip_body)
 
         text = (event.get("text") or "").strip()
         significant, reason = is_significant(text)
 
         if not significant:
             logger.info("slack message skipped: %s", reason)
-            return JSONResponse({"ok": True, "skipped": reason})
+            skip_body = {"ok": True, "skipped": reason}
+            _log_slack_http_response(skip_body)
+            return JSONResponse(skip_body)
 
         # Queue the heavy reconcile work; 200 to Slack instantly so its
         # 3-second retry timer never fires.
@@ -100,9 +141,13 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
             event=event,
             team_id=team_id,
         )
-        return JSONResponse({"ok": True, "queued": True})
+        queued_body = {"ok": True, "queued": True}
+        _log_slack_http_response(queued_body)
+        return JSONResponse(queued_body)
 
-    return JSONResponse({"ok": True, "type": payload.get("type", "unknown")})
+    fallback = {"ok": True, "type": payload.get("type", "unknown")}
+    _log_slack_http_response(fallback)
+    return JSONResponse(fallback)
 
 
 @router.post("/slack/command")
@@ -140,12 +185,13 @@ async def slack_command(
         "via": "slash_command",
     }
 
+    kw = _slack_update_kwargs()
     try:
         out = agent_runner.update(
             text,
             update_mode="deterministic",
-            apply=False,
             source=source,
+            **kw,
         )
     except Exception as exc:  # noqa: BLE001 - surface error to user
         return {
@@ -158,7 +204,16 @@ async def slack_command(
     rationale = (
         plan.rationale[:200] if hasattr(plan, "rationale") else "ingested"
     )
+    applied = out.get("applied")
+    status = out.get("status")
+    extra = ""
+    if applied is True:
+        extra = " Applied to brain."
+    elif applied is False and status:
+        extra = f" Status: {status}."
     return {
         "response_type": "in_channel",
-        "text": f"🧠 Ingested into the brain. {op_count} operations proposed.\n> {rationale}",
+        "text": (
+            f"🧠 Ingested into the brain. {op_count} operations proposed.{extra}\n> {rationale}"
+        ),
     }

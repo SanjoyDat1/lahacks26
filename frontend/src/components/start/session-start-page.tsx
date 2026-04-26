@@ -30,6 +30,7 @@ import {
   parseRepoSlugFromUrl,
 } from "@/lib/brain/bootstrap-scaffold";
 import { githubReposForApi, type GithubRepoFormRow } from "@/lib/brain/github-ingest";
+import { env } from "@/lib/env";
 import {
   SessionIntegrationSources,
   type IntegrationDocBatch,
@@ -273,7 +274,26 @@ export function SessionStartPage() {
   }, []);
 
   const appendFromIntegration = useCallback((items: IntegrationDocBatch[]) => {
-    const nextDocs: UploadDoc[] = items.map((item) => ({
+    const valid = items.filter(
+      (item) =>
+        (item.text && item.text.trim().length > 0) ||
+        (item.content_base64 && item.content_base64.trim().length > 0),
+    );
+    if (valid.length === 0) {
+      setThinking((prev) => [
+        ...prev,
+        "Google import returned no readable documents (every item was empty). Try different files or check server logs.",
+      ]);
+      return;
+    }
+    if (valid.length < items.length) {
+      setThinking((prev) => [
+        ...prev,
+        `Skipped ${items.length - valid.length} empty item(s) from the import response.`,
+      ]);
+    }
+    const charSum = valid.reduce((s, d) => s + (d.chars || 0), 0);
+    const nextDocs: UploadDoc[] = valid.map((item) => ({
       id: `int-${item.name}-${item.chars}-${Math.random().toString(36).slice(2, 9)}`,
       name: item.name,
       text: item.text,
@@ -284,6 +304,10 @@ export function SessionStartPage() {
       status: "ready",
     }));
     setDocs((prev) => [...prev, ...nextDocs]);
+    setThinking((prev) => [
+      ...prev,
+      `Workspace: added ${valid.length} document(s) (${charSum.toLocaleString()} chars) to this session. They appear in “Extra files” above — click **Create Brain** to send everything to the agent.`,
+    ]);
   }, []);
 
   const resetRun = useCallback(() => {
@@ -842,6 +866,14 @@ export function SessionStartPage() {
             />
           </div>
 
+          <div className="mt-6 max-h-[min(420px,50vh)] min-h-[200px]">
+            <AgentThinkingStream
+              thinking={thinking}
+              endRef={thinkingEndRef}
+              subtitle="Imports, uploads, and bootstrap steps (visible while you set up — not only after Create Brain)."
+            />
+          </div>
+
           <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <AgentStatus online={agentOnline} compact />
             <button
@@ -956,7 +988,11 @@ export function SessionStartPage() {
 
             <div className="grid min-h-[420px] gap-5 lg:grid-cols-[1fr_1.05fr]">
               <BrainDirectoryTree tree={tree} files={createdFiles} />
-              <AgentThinkingStream thinking={thinking} endRef={thinkingEndRef} />
+              <AgentThinkingStream
+                thinking={thinking}
+                endRef={thinkingEndRef}
+                subtitle="Every initialization step streamed live"
+              />
             </div>
           </div>
         </section>
@@ -1562,14 +1598,22 @@ function TreeNode({
   );
 }
 
-function AgentThinkingStream({ thinking, endRef }: { thinking: string[]; endRef: React.RefObject<HTMLDivElement | null> }) {
+function AgentThinkingStream({
+  thinking,
+  endRef,
+  subtitle = "Every initialization step streamed live",
+}: {
+  thinking: string[];
+  endRef: React.RefObject<HTMLDivElement | null>;
+  subtitle?: string;
+}) {
   return (
-    <div className="flex min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
+    <div className="flex h-full min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
       <div className="mb-3 flex items-center gap-2">
         <Bot size={15} className="text-violet-500" />
         <div>
-          <h2 className="text-sm font-semibold text-slate-800">Agent Logs</h2>
-          <p className="text-xs text-slate-400">Every initialization step streamed live</p>
+          <h2 className="text-sm font-semibold text-slate-800">Session log</h2>
+          <p className="text-xs text-slate-400">{subtitle}</p>
         </div>
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-2xl border border-violet-100/70 bg-violet-50/40 p-3">
@@ -1759,6 +1803,16 @@ function readFileAsDataUrl(file: File) {
 
 function resolveBootstrapWsUrl() {
   if (process.env.NEXT_PUBLIC_AGENT_WS_URL) return process.env.NEXT_PUBLIC_AGENT_WS_URL;
+  const base = env.agentApiUrlPublic;
+  if (base) {
+    try {
+      const u = new URL(base);
+      const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
+      return `${wsProto}//${u.host}/bootstrap/ws`;
+    } catch {
+      /* fall through */
+    }
+  }
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
   return `${protocol}://${window.location.hostname}:8000/bootstrap/ws`;
 }

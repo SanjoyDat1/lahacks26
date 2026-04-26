@@ -8,6 +8,7 @@ updated: '2026-04-25'
 links:
   - architecture.runtime_flow
   - integrations.github
+  - integrations.google_workspace
   - integrations.slack
   - integrations.meetings
   - brian.index
