@@ -675,7 +675,7 @@ export function SessionStartPage() {
   ]);
 
   return (
-    <main className="relative min-h-[calc(100vh-57px)] overflow-hidden px-6 py-8">
+    <main className="relative min-h-screen overflow-hidden px-6 py-8">
       <div className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute left-1/2 top-12 h-72 w-72 -translate-x-1/2 rounded-full bg-violet-300/20 blur-3xl" />
         <div className="absolute bottom-8 right-10 h-72 w-72 rounded-full bg-sky-300/20 blur-3xl" />
@@ -1076,14 +1076,14 @@ function BootstrapLiveGraph({
 }) {
   const arrivalRef = useRef<Map<string, number>>(new Map());
   const startRef = useRef<number>(0);
-
-  if (files.length > 0 && startRef.current === 0) startRef.current = Date.now();
-
-  for (const f of files) {
-    if (!arrivalRef.current.has(f.path)) {
-      arrivalRef.current.set(f.path, Date.now());
+  useEffect(() => {
+    if (files.length > 0 && startRef.current === 0) startRef.current = Date.now();
+    for (const f of files) {
+      if (!arrivalRef.current.has(f.path)) {
+        arrivalRef.current.set(f.path, Date.now());
+      }
     }
-  }
+  }, [files]);
 
   const visible = files.slice(0, 28);
   const doneCount = visible.filter((f) => f.status === "done" && !f.isGhost).length;

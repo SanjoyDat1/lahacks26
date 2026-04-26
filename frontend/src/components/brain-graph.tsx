@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Minus, Plus, RotateCcw, Search, X } from "lucide-react";
 
 import type { GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
@@ -36,9 +36,12 @@ type SimNode = GraphNode & { x: number; y: number; vx: number; vy: number };
 type SimLink = { source: SimNode; target: SimNode };
 
 function initNodes(nodes: GraphNode[]): SimNode[] {
+  // Seed on a wider ring so the simulation expands outward to fill space
+  // rather than starting tightly bunched around the origin.
+  const baseR = 240 + Math.min(180, nodes.length * 6);
   return nodes.map((n, i) => {
     const angle = (2 * Math.PI * i) / nodes.length;
-    const r = 150 + Math.random() * 40;
+    const r = baseR + Math.random() * 60;
     return { ...n, x: r * Math.cos(angle), y: r * Math.sin(angle), vx: 0, vy: 0 };
   });
 }
@@ -52,11 +55,12 @@ function buildLinks(simNodes: SimNode[], raw: GraphData["links"]): SimLink[] {
   });
 }
 
-const REPULSION = 7500;
-const IDEAL_LEN = 140;
-const SPRING = 0.018;
-const GRAVITY = 0.008;
-const DAMP = 0.78;
+const REPULSION = 14000;
+const IDEAL_LEN = 220;
+const SPRING = 0.010;
+const GRAVITY = 0.0035;
+const DAMP = 0.55;
+const MAX_VEL = 6;
 
 function tick(nodes: SimNode[], links: SimLink[], alpha: number) {
   for (let i = 0; i < nodes.length; i++) {
@@ -80,6 +84,9 @@ function tick(nodes: SimNode[], links: SimLink[], alpha: number) {
     n.vx -= n.x * GRAVITY * alpha;
     n.vy -= n.y * GRAVITY * alpha;
     n.vx *= DAMP; n.vy *= DAMP;
+    // Cap per-frame velocity so a single big force can't fling a node
+    if (n.vx > MAX_VEL) n.vx = MAX_VEL; else if (n.vx < -MAX_VEL) n.vx = -MAX_VEL;
+    if (n.vy > MAX_VEL) n.vy = MAX_VEL; else if (n.vy < -MAX_VEL) n.vy = -MAX_VEL;
     n.x += n.vx; n.y += n.vy;
   }
 }
@@ -105,6 +112,14 @@ interface Props {
   selectedEdge?: GraphLink | null;
   highlightMap?: Map<string, Relevance>;
   updateVisu?: UpdateVisuState;
+  visibleFilter?: (node: GraphNode) => boolean;
+  colorOverride?: (node: GraphNode) => string;
+  theme?: "light" | "dark";
+  /**
+   * Minimal chrome mode: hides labels, legend, zoom controls, and tooltip.
+   * Nodes are dimmed by default and only brighten on hover/selection.
+   */
+  minimal?: boolean;
 }
 
 export function BrainGraph({
@@ -116,6 +131,10 @@ export function BrainGraph({
   selectedEdge,
   highlightMap,
   updateVisu,
+  visibleFilter,
+  colorOverride,
+  theme = "light",
+  minimal = false,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -123,6 +142,7 @@ export function BrainGraph({
 
   const [size, setSize] = useState({ w: 800, h: 600 });
   const sizeRef = useRef({ w: 800, h: 600 });
+  const dprRef = useRef(1);
 
   // Search & filter state
   const [searchQuery, setSearchQuery] = useState("");
@@ -158,6 +178,21 @@ export function BrainGraph({
   const updateVisuRef = useRef<UpdateVisuState | undefined>(updateVisu);
   const panTargetRef = useRef<{ x: number; y: number } | null>(null);
 
+  const isDark = theme === "dark";
+
+  // Zoom bounds — tighter floor in minimal mode so the graph can't be shrunk
+  // into a tiny blob behind the side panels.
+  const MIN_ZOOM = minimal ? 0.55 : 0.1;
+  const MAX_ZOOM = 5;
+
+  const filteredGraph = useMemo(() => {
+    if (!visibleFilter) return graphData;
+    const nodes = graphData.nodes.filter((n) => visibleFilter(n));
+    const keep = new Set(nodes.map((n) => n.id));
+    const links = graphData.links.filter((l) => keep.has(l.source) && keep.has(l.target));
+    return { nodes, links };
+  }, [graphData, visibleFilter]);
+
   useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
   useEffect(() => { selectedEdgeRef.current = selectedEdge; }, [selectedEdge]);
   useEffect(() => {
@@ -182,13 +217,29 @@ export function BrainGraph({
   useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
-    const ob = new ResizeObserver(() => {
-      const w = el.offsetWidth, h = el.offsetHeight;
+    function applySize() {
+      const w = el!.offsetWidth, h = el!.offsetHeight;
+      const dpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
       sizeRef.current = { w, h };
+      dprRef.current = dpr;
+      const canvas = canvasRef.current;
+      if (canvas) {
+        canvas.width = Math.round(w * dpr);
+        canvas.height = Math.round(h * dpr);
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+      }
       setSize({ w, h });
-    });
+    }
+    const ob = new ResizeObserver(applySize);
     ob.observe(el);
-    return () => ob.disconnect();
+    applySize();
+    const onDprChange = () => applySize();
+    window.addEventListener("resize", onDprChange);
+    return () => {
+      ob.disconnect();
+      window.removeEventListener("resize", onDprChange);
+    };
   }, []);
 
   const drawFrame = useCallback(() => {
@@ -197,6 +248,7 @@ export function BrainGraph({
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const { w, h } = sizeRef.current;
+    const dpr = dprRef.current;
     const { ox, oy, k } = viewRef.current;
     const hovId = hoverIdRef.current;
     const selId = selectedIdRef.current;
@@ -218,6 +270,7 @@ export function BrainGraph({
     const pulse = Math.sin(t / 420) * 0.5 + 0.5;
     const pulseFast = Math.sin(t / 240) * 0.5 + 0.5;
 
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     ctx.save();
     ctx.translate(w / 2 + ox, h / 2 + oy);
@@ -292,13 +345,15 @@ export function BrainGraph({
         }
       } else if (bothHighlighted) {
         const bright = sRel === "primary" && tRel === "primary";
-        lineColor = nodeColor(s.type) + (bright ? "CC" : "77");
+        const base = colorOverride ? colorOverride(s) : nodeColor(s.type);
+        lineColor = base + (bright ? "CC" : "77");
         lineWidth = (bright ? 2 : 1.2) / k;
-        arrowColor = nodeColor(s.type) + (bright ? "AA" : "55");
+        arrowColor = base + (bright ? "AA" : "55");
       } else if (inHoverMode && isLinkedToHov) {
-        lineColor = nodeColor(s.type) + "CC";
+        const base = colorOverride ? colorOverride(s) : nodeColor(s.type);
+        lineColor = base + "CC";
         lineWidth = 2 / k;
-        arrowColor = nodeColor(s.type) + "99";
+        arrowColor = base + "99";
       } else if (inHoverMode && !isLinkedToHov) {
         lineColor = `rgba(100,116,139,0.04)`;
         lineWidth = 0.4 / k;
@@ -308,15 +363,25 @@ export function BrainGraph({
         lineWidth = 0.4 / k;
         arrowColor = `rgba(100,116,139,0.03)`;
       } else if (!inHighlightMode && (isLinkedToSel)) {
-        lineColor = nodeColor(s.type) + "99";
+        const base = colorOverride ? colorOverride(s) : nodeColor(s.type);
+        lineColor = base + "99";
         lineWidth = 1.4 / k;
-        arrowColor = nodeColor(s.type) + "66";
+        arrowColor = base + "66";
       } else {
         const dimFactor = 1 - hl * 0.82;
-        const a = Math.round(0.13 * dimFactor * 255).toString(16).padStart(2, "0");
-        lineColor = `#64748b${a}`;
-        lineWidth = 0.8 / k;
-        arrowColor = `#64748b${a}`;
+        if (minimal) {
+          // Subtle idle links/arrows against dark canvas — readable but not loud
+          const lineA = Math.round(0.18 * dimFactor * 255).toString(16).padStart(2, "0");
+          const arrowA = Math.round(0.28 * dimFactor * 255).toString(16).padStart(2, "0");
+          lineColor = `#a78bfa${lineA}`;
+          arrowColor = `#a78bfa${arrowA}`;
+          lineWidth = 0.7 / k;
+        } else {
+          const a = Math.round(0.13 * dimFactor * 255).toString(16).padStart(2, "0");
+          lineColor = `#64748b${a}`;
+          lineWidth = 0.8 / k;
+          arrowColor = `#64748b${a}`;
+        }
       }
 
       ctx.beginPath();
@@ -341,7 +406,7 @@ export function BrainGraph({
       const endX = target?.x ?? pending.x;
       const endY = target?.y ?? pending.y;
       const midX = (pending.source.x + endX) / 2;
-      const sourceColor = nodeColor(pending.source.type);
+      const sourceColor = colorOverride ? colorOverride(pending.source) : nodeColor(pending.source.type);
       ctx.beginPath();
       ctx.moveTo(pending.source.x, pending.source.y);
       ctx.bezierCurveTo(midX, pending.source.y - 45 / k, midX, endY + 45 / k, endX, endY);
@@ -369,7 +434,7 @@ export function BrainGraph({
     // ── nodes ────────────────────────────────────────────────────────────────
     for (const n of nodesRef.current) {
       const r = nodeRadius(n.val);
-      const c = nodeColor(n.type);
+      const c = colorOverride ? colorOverride(n) : nodeColor(n.type);
       const isHov = hovId === n.id;
       const isSel = selId === n.id;
       const isConnectTarget = connectTarget?.id === n.id;
@@ -388,6 +453,8 @@ export function BrainGraph({
         opacity = 0.1;
       } else if (inHoverMode && !isHov && !isConnectedToHov) {
         opacity = 0.3;
+      } else if (minimal && !isHov && !isSel && !isConnectedToHov) {
+        opacity = isDark ? 0.32 : 0.6;
       } else {
         opacity = 1;
       }
@@ -527,6 +594,15 @@ export function BrainGraph({
         let labelOpacity: number;
         if (inUpdateMode) {
           labelOpacity = updState === "active" ? 1 : updState === "done" ? 0.9 : updState === "queued" ? 0.5 : 0.05;
+        } else if (minimal) {
+          // In minimal mode keep idle labels very subtle so the canvas reads as
+          // a graph of nodes, not a wall of text. Selected / hovered / connected
+          // labels pop at full opacity.
+          labelOpacity = isSel ? 1
+            : isHov ? 0.95
+            : isConnectedToHov ? 0.7
+            : inHoverMode ? 0.12
+            : 0.42;
         } else {
           labelOpacity = inHighlightMode
             ? relevance === "primary" ? 1 : relevance === "secondary" ? 0.8 : relevance === "referenced" ? 0.55 : opacity
@@ -535,17 +611,27 @@ export function BrainGraph({
             : (isHov || isSel ? 1 : 0.75);
         }
         ctx.globalAlpha = labelOpacity;
-        const isBold = inUpdateMode ? updState === "active" : (relevance === "primary" || isHov || isSel);
-        ctx.font = `${isBold ? "600 " : ""}11px -apple-system,BlinkMacSystemFont,sans-serif`;
+        const isFocused = isSel || isHov;
+        const isBold = inUpdateMode ? updState === "active" : (relevance === "primary" || isFocused);
+        // Smaller idle text in minimal mode, larger when focused.
+        const fontPx = minimal
+          ? (isSel ? 13 : isHov ? 12 : 9)
+          : 11;
+        ctx.font = `${isBold ? "600 " : ""}${fontPx}px -apple-system,BlinkMacSystemFont,sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         if (inUpdateMode) {
           ctx.fillStyle = updState === "active" ? "#f59e0b" : updState === "done" ? "#059669" : "#64748b";
+        } else if (minimal) {
+          ctx.fillStyle = isDark
+            ? (isFocused ? "#f8fafc" : "#cbd5e1")
+            : (isFocused ? "#0f172a" : "#475569");
         } else {
-          ctx.fillStyle = isHov || relevance === "primary" || isSel ? "#0f172a" : "#64748b";
+          ctx.fillStyle = isFocused || relevance === "primary" ? "#0f172a" : "#64748b";
         }
-        const lbl = n.label.length > 22 ? n.label.slice(0, 20) + "…" : n.label;
-        ctx.fillText(lbl, n.x, n.y + r + 3 / k);
+        const maxLen = minimal && !isFocused ? 18 : 22;
+        const lbl = n.label.length > maxLen ? n.label.slice(0, maxLen - 1) + "…" : n.label;
+        ctx.fillText(lbl, n.x, n.y + r + 4 / k);
         ctx.globalAlpha = 1;
       }
     }
@@ -567,16 +653,16 @@ export function BrainGraph({
 
   // ── init & animation loop ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!graphData.nodes.length) return;
-    nodesRef.current = initNodes(graphData.nodes);
-    linksRef.current = buildLinks(nodesRef.current, graphData.links);
+    if (!filteredGraph.nodes.length) return;
+    nodesRef.current = initNodes(filteredGraph.nodes);
+    linksRef.current = buildLinks(nodesRef.current, filteredGraph.links);
     alphaRef.current = 1;
     viewRef.current = { ox: 0, oy: 0, k: 1 };
     cancelAnimationFrame(rafRef.current);
 
     function frame() {
       if (alphaRef.current > 0.004) {
-        alphaRef.current *= 0.97;
+        alphaRef.current *= 0.94;
         tick(nodesRef.current, linksRef.current, alphaRef.current);
       }
       // Smooth camera pan to active update node
@@ -596,7 +682,7 @@ export function BrainGraph({
     }
     rafRef.current = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [graphData, drawFrame]);
+  }, [filteredGraph, drawFrame]);
 
   // ── coordinate helpers ─────────────────────────────────────────────────────
   function toSim(cx: number, cy: number) {
@@ -736,17 +822,26 @@ export function BrainGraph({
     onEdgeSelect?.(null);
   }
 
-  function onWheel(e: React.WheelEvent<HTMLCanvasElement>) {
-    e.preventDefault();
-    const factor = e.deltaY > 0 ? 1.12 : 0.88;
-    const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
-    const { w, h } = sizeRef.current;
-    const { ox, oy, k } = viewRef.current;
-    const simX = (cx - w / 2 - ox) / k;
-    const simY = (cy - h / 2 - oy) / k;
-    const newK = Math.max(0.1, Math.min(5, k * factor));
-    viewRef.current = { k: newK, ox: cx - w / 2 - simX * newK, oy: cy - h / 2 - simY * newK };
-  }
+  // Native non-passive wheel listener so we can actually preventDefault the
+  // browser's pinch-zoom / Ctrl+wheel gesture and route it into the graph
+  // zoom instead. (React's synthetic onWheel is registered as passive.)
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const handler = (e: WheelEvent) => {
+      e.preventDefault();
+      const factor = e.deltaY > 0 ? 1.12 : 0.88;
+      const cx = e.offsetX, cy = e.offsetY;
+      const { w, h } = sizeRef.current;
+      const { ox, oy, k } = viewRef.current;
+      const simX = (cx - w / 2 - ox) / k;
+      const simY = (cy - h / 2 - oy) / k;
+      const newK = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, k * factor));
+      viewRef.current = { k: newK, ox: cx - w / 2 - simX * newK, oy: cy - h / 2 - simY * newK };
+    };
+    canvas.addEventListener("wheel", handler, { passive: false });
+    return () => canvas.removeEventListener("wheel", handler);
+  }, [MIN_ZOOM, MAX_ZOOM]);
 
   function zoomBy(factor: number) {
     const { w, h } = sizeRef.current;
@@ -754,7 +849,7 @@ export function BrainGraph({
     const cx = w / 2, cy = h / 2;
     const simX = (cx - w / 2 - ox) / k;
     const simY = (cy - h / 2 - oy) / k;
-    const newK = Math.max(0.1, Math.min(5, k * factor));
+    const newK = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, k * factor));
     viewRef.current = { k: newK, ox: cx - w / 2 - simX * newK, oy: cy - h / 2 - simY * newK };
   }
 
@@ -762,16 +857,27 @@ export function BrainGraph({
     viewRef.current = { ox: 0, oy: 0, k: 1 };
   }
 
-  const uniqueTypes = [...new Set(graphData.nodes.map((n) => n.type))];
+  const uniqueTypes = [...new Set(filteredGraph.nodes.map((n) => n.type))];
 
   return (
     <div ref={containerRef} className="relative h-full w-full overflow-hidden">
       <canvas
         ref={canvasRef}
-        width={size.w}
-        height={size.h}
-        className={cn("block", isConnecting ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing")}
-        style={{ background: "radial-gradient(ellipse at 50% 25%, #dbeafe 0%, #eff6ff 55%, #f5f3ff 100%)" }}
+        className={cn(
+          "block h-full w-full",
+          isConnecting
+            ? "cursor-crosshair"
+            : tooltipNode
+              ? "cursor-pointer"
+              : "cursor-grab active:cursor-grabbing",
+        )}
+        style={{
+          background: minimal
+            ? "transparent"
+            : isDark
+              ? "transparent"
+              : "radial-gradient(ellipse at 50% 25%, #dbeafe 0%, #eff6ff 55%, #f5f3ff 100%)",
+        }}
         suppressHydrationWarning
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
@@ -790,29 +896,42 @@ export function BrainGraph({
           setTooltipNode(null);
         }}
         onClick={onClick}
-        onWheel={onWheel}
       />
 
       {/* ── Search bar ────────────────────────────────────────────────────── */}
       <div className="absolute left-4 top-4 flex items-center gap-2">
         {showSearch ? (
-          <div className="flex items-center gap-2 rounded-2xl border border-white/80 bg-white/90 px-3 py-2 shadow-md backdrop-blur-2xl">
-            <Search size={13} className="flex-shrink-0 text-slate-400" />
+          <div
+            className={cn(
+              "flex items-center gap-2 rounded-2xl border px-3 py-2 shadow-md backdrop-blur-2xl",
+              isDark ? "border-white/10 bg-white/[0.04]" : "border-white/80 bg-white/90",
+            )}
+          >
+            <Search size={13} className={cn("flex-shrink-0", isDark ? "text-white/55" : "text-slate-400")} />
             <input
               autoFocus
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search nodes…"
-              className="w-44 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400"
+              className={cn(
+                "w-44 bg-transparent text-sm outline-none",
+                isDark ? "text-white/85 placeholder:text-white/35" : "text-slate-700 placeholder:text-slate-400",
+              )}
             />
             {searchQuery && (
-              <button onClick={() => setSearchQuery("")} className="text-slate-400 hover:text-slate-600">
+              <button
+                onClick={() => setSearchQuery("")}
+                className={cn(isDark ? "text-white/45 hover:text-white/70" : "text-slate-400 hover:text-slate-600")}
+              >
                 <X size={12} />
               </button>
             )}
             <button
               onClick={() => { setSearchQuery(""); setShowSearch(false); }}
-              className="ml-1 rounded-lg p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition"
+              className={cn(
+                "ml-1 rounded-lg p-0.5 transition",
+                isDark ? "text-white/45 hover:bg-white/[0.06] hover:text-white/75" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
+              )}
             >
               <X size={13} />
             </button>
@@ -820,7 +939,12 @@ export function BrainGraph({
         ) : (
           <button
             onClick={() => setShowSearch(true)}
-            className="flex items-center gap-1.5 rounded-2xl border border-white/80 bg-white/80 px-3 py-2 text-xs text-slate-500 shadow-sm backdrop-blur-2xl transition hover:bg-white/95 hover:text-slate-700"
+            className={cn(
+              "flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs shadow-sm backdrop-blur-2xl transition",
+              isDark
+                ? "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.06] hover:text-white/80"
+                : "border-white/80 bg-white/80 text-slate-500 hover:bg-white/95 hover:text-slate-700",
+            )}
           >
             <Search size={13} />
             Search
@@ -838,6 +962,7 @@ export function BrainGraph({
       </div>
 
       {/* ── Legend (clickable type filter) ────────────────────────────────── */}
+      {!minimal && (
       <div className="absolute bottom-5 left-5 rounded-2xl border border-white/80 bg-white/85 px-3 py-3 shadow-md backdrop-blur-2xl">
         <p className="mb-2 text-[9px] font-semibold uppercase tracking-widest text-slate-400">
           {filterType ? "Filtered by type — click to clear" : "Click type to filter"}
@@ -864,13 +989,16 @@ export function BrainGraph({
           ))}
         </div>
       </div>
+      )}
 
       {/* ── Zoom controls ─────────────────────────────────────────────────── */}
+      {!minimal && (
       <div className="absolute bottom-5 right-5 flex flex-col gap-1 rounded-2xl border border-white/80 bg-white/85 p-1.5 shadow-md backdrop-blur-2xl">
         <ZoomBtn onClick={() => zoomBy(1.3)} title="Zoom in"><Plus size={13} /></ZoomBtn>
         <ZoomBtn onClick={resetView} title="Reset view"><RotateCcw size={12} /></ZoomBtn>
         <ZoomBtn onClick={() => zoomBy(0.77)} title="Zoom out"><Minus size={13} /></ZoomBtn>
       </div>
+      )}
 
       {/* ── Connect drag help ─────────────────────────────────────────────── */}
       <div
@@ -953,7 +1081,7 @@ export function BrainGraph({
       )}
 
       {/* ── Hover tip ─────────────────────────────────────────────────────── */}
-      {!tooltipNode && (
+      {!minimal && !tooltipNode && (
         <div className="pointer-events-none absolute bottom-20 right-5 rounded-xl border border-white/70 bg-white/70 px-3 py-1.5 backdrop-blur-xl">
           <p className="text-[10px] text-slate-400">Scroll to zoom · Drag node to link · Click node to inspect · Click edge to edit</p>
         </div>
@@ -962,15 +1090,12 @@ export function BrainGraph({
       {/* ── Tooltip ───────────────────────────────────────────────────────── */}
       <div
         ref={tooltipRef}
-        className="pointer-events-none absolute z-20 max-w-[240px] rounded-2xl border border-slate-200/80 bg-white/95 px-3.5 py-3 text-xs shadow-xl backdrop-blur-2xl transition-opacity duration-100"
+        className="pointer-events-none absolute z-[25] max-w-[240px] rounded-2xl border border-slate-200/80 bg-white/95 px-3.5 py-3 text-xs shadow-xl backdrop-blur-2xl transition-opacity duration-100"
         style={{ opacity: tooltipNode ? 1 : 0 }}
       >
         {tooltipNode && (
           <>
-            <div className="flex items-center gap-2 mb-1.5">
-              <div className="h-2.5 w-2.5 flex-shrink-0 rounded-full" style={{ backgroundColor: nodeColor(tooltipNode.type) }} />
-              <p className="font-semibold text-slate-800">{tooltipNode.label}</p>
-            </div>
+            <p className="mb-1.5 font-semibold text-slate-800">{tooltipNode.label}</p>
             <div className="flex flex-wrap gap-1 mb-1.5">
               <span className="rounded-full border border-slate-200/60 bg-slate-50 px-2 py-0.5 text-[9px] capitalize text-slate-500">
                 {tooltipNode.type.replace(/_/g, " ")}
