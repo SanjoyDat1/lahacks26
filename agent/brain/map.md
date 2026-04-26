@@ -9,7 +9,6 @@ links:
   - index.md
   - summaries/project_summary.md- brian.index
   - summaries.project_summary
-  - projects/team_task_board/overview.md
 keywords:
   - graph
   - map
@@ -23,12 +22,8 @@ This file is the visual navigation layer for the brain. Humans can use it to und
 ```mermaid
 flowchart LR
   Index["index.md"] --> ProjectSummary["summaries/project_summary.md"]
-  Index --> TeamTaskBoardOverview["projects/team_task_board/overview.md"]
 ```
 
 ## Map Rules
 
 - Every important file should be reachable from `index.md` or this map.
-- New architecture files should link back to [System Overview](architecture/system_overview.md).
-- New durable decisions should link from [Decision Log](decisions/decision_log.md).
-- Integration files should link back to [Ingestion Pipeline](architecture/ingestion_pipeline.md).

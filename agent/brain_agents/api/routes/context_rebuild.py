@@ -10,9 +10,15 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
 from ...builder import SourceDocument
 from ...config import load_settings
+from ...graph import run_task_streaming
 from ...ingestion_graph import run_update_streaming
 from ..rebuild_events import rebuild_event_hub
-from ..schemas import ContextMapRebuildRequest, ContextMapRebuildResponse
+from ..schemas import (
+    ContextMapRebuildAgentRequest,
+    ContextMapRebuildAgentResponse,
+    ContextMapRebuildRequest,
+    ContextMapRebuildResponse,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -118,4 +124,58 @@ async def trigger_context_map_rebuild(req: ContextMapRebuildRequest) -> ContextM
     thread.start()
 
     return ContextMapRebuildResponse(ok=True, run_id=run_id)
+
+
+@router.post(
+    "/context-map/rebuild-agent",
+    response_model=ContextMapRebuildAgentResponse,
+    status_code=202,
+)
+async def trigger_context_map_rebuild_agent(
+    req: ContextMapRebuildAgentRequest,
+) -> ContextMapRebuildAgentResponse:
+    """Run the full LLM agent UPDATE flow and broadcast its logs to `/context-map/ws`."""
+    run_id = f"ctxmap-agent-{int(time.time() * 1000)}-{id(req):x}"
+    logger.info(
+        "context-map rebuild-agent trigger run_id=%s label=%s prompt_chars=%s",
+        run_id,
+        req.label,
+        len(req.prompt or ""),
+    )
+
+    await rebuild_event_hub.start_run(
+        run_id,
+        meta={
+            "source": req.source,
+            "label": req.label,
+            "mode": "agent_update",
+        },
+    )
+
+    async def _run() -> None:
+        try:
+            settings = load_settings(validate=True)
+            async for evt in run_task_streaming(req.prompt, task="update", settings=settings):
+                payload = dict(evt)
+                payload.setdefault("run_id", run_id)
+                if payload.get("type") not in {"token", "thinking"}:
+                    logger.info(
+                        "context-map rebuild-agent emit run_id=%s type=%s agent=%s tool=%s",
+                        run_id,
+                        payload.get("type"),
+                        payload.get("agent"),
+                        payload.get("tool"),
+                    )
+                await rebuild_event_hub.emit(payload)
+
+            await rebuild_event_hub.end_run(run_id, status="ok", summary={"message": "agent update complete"})
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("context-map rebuild-agent failed run_id=%s", run_id)
+            await rebuild_event_hub.emit(
+                {"type": "error", "run_id": run_id, "message": str(exc), "ts_ms": int(time.time() * 1000)}
+            )
+            await rebuild_event_hub.end_run(run_id, status="error", summary={"message": str(exc)[:400]})
+
+    asyncio.create_task(_run())
+    return ContextMapRebuildAgentResponse(ok=True, run_id=run_id)
 

@@ -18,15 +18,51 @@ type RebuildEvent =
   | { type: "connected"; message: string; active_run_id?: string | null }
   | { type: "rebuild_started"; run_id: string; ts_ms?: number; meta?: any; replay?: boolean }
   | { type: "stage_start"; run_id?: string; stage: string; label?: string; replay?: boolean }
-  | { type: "thinking"; run_id?: string; content: string; replay?: boolean }
+  | { type: "graph_step"; phase: string; edge: string; node: string; label: string; run_id?: string; replay?: boolean }
+  | { type: "agent_start"; agent: string; run_id?: string; replay?: boolean }
+  | { type: "agent_end"; agent: string; text: string; run_id?: string; replay?: boolean }
+  | { type: "tool_call"; agent: string; tool: string; input?: Record<string, unknown>; summary?: string; run_id?: string; replay?: boolean }
+  | { type: "tool_result"; agent: string; tool: string; output: string; run_id?: string; replay?: boolean }
+  | { type: "token"; agent: string; content: string; run_id?: string; replay?: boolean }
+  | { type: "thinking"; run_id?: string; content: string; agent?: string; replay?: boolean }
   | { type: "document"; run_id?: string; name: string; chars: number; status: string; replay?: boolean }
   | { type: "op_planned"; run_id?: string; op: { kind: string; target_file: string; reason: string }; replay?: boolean }
   | { type: "op_applied"; run_id?: string; path: string; change_type: string; success: boolean; replay?: boolean }
   | { type: "index_invalidate" | "index_invalidated"; run_id?: string; label?: string; replay?: boolean }
-  | { type: "done"; run_id: string; ops_applied?: number; files_touched?: string[]; rationale?: string; replay?: boolean }
+  | { type: "done"; run_id?: string; result?: string; ops_applied?: number; files_touched?: string[]; rationale?: string; replay?: boolean }
   | { type: "error"; run_id?: string; message: string; replay?: boolean }
   | { type: "rebuild_end"; run_id: string; status: string; summary?: any; replay?: boolean }
   | { type: string; run_id?: string; replay?: boolean; [k: string]: any };
+
+type DisplayRow =
+  | { kind: "event"; evt: RebuildEvent }
+  | { kind: "tokens"; agent: string; text: string };
+
+function reduceTokensForDisplay(events: RebuildEvent[]): DisplayRow[] {
+  const out: DisplayRow[] = [];
+  let buf = "";
+  let bufAgent = "";
+  const flush = () => {
+    if (!buf) return;
+    out.push({ kind: "tokens", agent: bufAgent || "?", text: buf });
+    buf = "";
+    bufAgent = "";
+  };
+  for (const evt of events) {
+    if (evt.type === "token") {
+      const agent = String((evt as { agent?: string }).agent ?? "?");
+      const content = String((evt as { content?: string }).content ?? "");
+      if (buf && bufAgent !== agent) flush();
+      bufAgent = agent;
+      buf += content;
+    } else {
+      flush();
+      out.push({ kind: "event", evt });
+    }
+  }
+  flush();
+  return out;
+}
 
 function isTerminal(evt: RebuildEvent) {
   return evt.type === "done" || evt.type === "error" || evt.type === "rebuild_end";
@@ -100,6 +136,35 @@ export function ContextMapRebuildNotifier({
         return;
       }
 
+      if (evt.type === "graph_step") {
+        const arrow = evt.edge === "enter" ? "→" : "←";
+        setLastMessage(`${arrow} [${evt.phase}] ${evt.label}`.slice(0, 160));
+        return;
+      }
+
+      if (evt.type === "agent_start") {
+        setLastMessage(`${evt.agent} agent starting…`);
+        return;
+      }
+
+      if (evt.type === "agent_end") {
+        const preview = evt.text.replace(/\s+/g, " ").trim().slice(0, 120);
+        setLastMessage(`${evt.agent} finished: ${preview}${evt.text.length > 120 ? "…" : ""}`);
+        return;
+      }
+
+      if (evt.type === "tool_call") {
+        const s = evt.summary?.trim();
+        setLastMessage(`⚙ ${evt.agent} · ${evt.tool}${s ? ` — ${s}` : ""}`.slice(0, 160));
+        return;
+      }
+
+      if (evt.type === "tool_result") {
+        const n = evt.output?.length ?? 0;
+        setLastMessage(`✓ ${evt.agent} · ${evt.tool} (${n} chars)`.slice(0, 160));
+        return;
+      }
+
       if (evt.type === "error") {
         setStatus("error");
         setOpen(true);
@@ -111,8 +176,9 @@ export function ContextMapRebuildNotifier({
         setStatus("done");
         setOpen(true);
         setLastMessage("Context map updated.");
-        const rid = evt.type === "done" ? evt.run_id : evt.run_id;
-        if (typeof onRebuildDone === "function") onRebuildDone(String(rid ?? ""));
+        const rid =
+          "run_id" in evt && evt.run_id != null ? String(evt.run_id) : "";
+        if (typeof onRebuildDone === "function") onRebuildDone(rid);
         return;
       }
     };
@@ -136,7 +202,7 @@ export function ContextMapRebuildNotifier({
       }
       wsRef.current = null;
     };
-  }, []);
+  }, [onRebuildDone]);
 
   const stageLabel = useMemo(() => {
     const lastStage = [...events].reverse().find((e) => e.type === "stage_start") as
@@ -145,6 +211,20 @@ export function ContextMapRebuildNotifier({
     if (!lastStage) return null;
     return lastStage.label ?? lastStage.stage;
   }, [events]);
+
+  const filteredEvents = useMemo(() => {
+    return events.filter(
+      (e) =>
+        !activeRunId ||
+        !("run_id" in e) ||
+        (e as { run_id?: string }).run_id === activeRunId,
+    );
+  }, [events, activeRunId]);
+
+  const displayRows = useMemo(
+    () => reduceTokensForDisplay(filteredEvents.slice(-400)),
+    [filteredEvents],
+  );
 
   const hasAnyRun = open && (status !== "idle" || events.length > 0);
   if (!hasAnyRun) return null;
@@ -252,12 +332,13 @@ export function ContextMapRebuildNotifier({
 
           <div className="max-h-[420px] overflow-y-auto px-4 py-3">
             <div className="space-y-1.5 font-mono text-[10px] leading-4 text-black/70">
-              {events
-                .filter((e) => !("run_id" in e) || !activeRunId || (e as { run_id?: string }).run_id === activeRunId)
-                .slice(-320)
-                .map((e, i) => (
-                  <LogLine key={i} evt={e} />
-                ))}
+              {displayRows.map((row, i) =>
+                row.kind === "tokens" ? (
+                  <TokenBlock key={`t-${i}`} agent={row.agent} text={row.text} />
+                ) : (
+                  <LogLine key={`e-${i}-${row.evt.type}`} evt={row.evt} />
+                ),
+              )}
               <div ref={logEndRef} />
             </div>
           </div>
@@ -267,6 +348,35 @@ export function ContextMapRebuildNotifier({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function TokenBlock({ agent, text }: { agent: string; text: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const collapsed = text.length > 280 && !expanded;
+  const shown = collapsed ? `${text.slice(0, 280)}…` : text;
+  return (
+    <div className="rounded-lg border border-violet-200/50 bg-violet-50/40 px-2 py-1.5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-1 text-left"
+      >
+        {expanded ? <ChevronDown size={10} className="text-violet-500" /> : <ChevronRight size={10} className="text-violet-500" />}
+        <span className="font-sans text-[9px] font-semibold uppercase tracking-wide text-violet-700">
+          Model stream · {agent}
+        </span>
+        <span className="text-[9px] text-black/40">({text.length} chars)</span>
+      </button>
+      <pre
+        className={cn(
+          "mt-1 whitespace-pre-wrap break-words text-[9px] leading-relaxed text-black/70",
+          expanded ? "max-h-56 overflow-y-auto" : "max-h-20 overflow-hidden",
+        )}
+      >
+        {shown}
+      </pre>
     </div>
   );
 }
@@ -283,7 +393,66 @@ function LogLine({ evt }: { evt: RebuildEvent }) {
   }
   if (evt.type === "thinking") {
     const line = evt.content.trim().split("\n").filter(Boolean).at(-1) ?? evt.content.trim();
-    return <div className="text-black/60">💭 {line}</div>;
+    const who = "agent" in evt && evt.agent ? `${evt.agent} · ` : "";
+    return <div className="text-black/60">💭 {who}{line}</div>;
+  }
+  if (evt.type === "graph_step") {
+    const arrow = evt.edge === "enter" ? "→" : "←";
+    const tone =
+      evt.phase === "writer" ? "border-amber-200/70 bg-amber-50/50" : "border-sky-200/70 bg-sky-50/50";
+    return (
+      <div className={cn("rounded-lg border px-2 py-1 font-sans text-[10px] text-black/80", tone)}>
+        <span className="font-semibold text-black/55">{arrow}</span>{" "}
+        <span className="font-mono text-[9px] uppercase text-black/45">{evt.phase}</span>{" "}
+        <span className="font-medium">{evt.label}</span>
+        <span className="ml-1 font-mono text-[9px] text-black/35">({evt.node})</span>
+      </div>
+    );
+  }
+  if (evt.type === "agent_start") {
+    return (
+      <div className="rounded-lg bg-black/[0.06] px-2 py-1 font-sans text-[10px] font-semibold text-black/75">
+        ▶ {evt.agent} agent
+      </div>
+    );
+  }
+  if (evt.type === "agent_end") {
+    const t = evt.text.replace(/\s+/g, " ").trim();
+    return (
+      <div className="rounded-lg border border-black/10 bg-white/60 px-2 py-1.5">
+        <p className="font-sans text-[9px] font-semibold text-black/60">■ {evt.agent} agent</p>
+        {t ? (
+          <p className="mt-0.5 text-[9px] leading-relaxed text-black/65">{t.slice(0, 500)}{t.length > 500 ? "…" : ""}</p>
+        ) : null}
+      </div>
+    );
+  }
+  if (evt.type === "tool_call") {
+    const summary = evt.summary?.trim();
+    return (
+      <div className="rounded-lg border border-amber-200/60 bg-amber-50/60 px-2 py-1">
+        <p className="font-sans text-[9px] font-semibold text-amber-900">
+          ⚙ {evt.agent} · <span className="font-mono">{evt.tool}</span>
+        </p>
+        {summary ? <p className="mt-0.5 font-mono text-[9px] text-amber-800/90">{summary}</p> : null}
+      </div>
+    );
+  }
+  if (evt.type === "tool_result") {
+    const out = evt.output?.slice(0, 600) ?? "";
+    const more = (evt.output?.length ?? 0) > 600;
+    return (
+      <div className="rounded-lg border border-emerald-200/50 bg-emerald-50/40 px-2 py-1">
+        <p className="font-sans text-[9px] font-semibold text-emerald-900">
+          ✓ {evt.agent} · <span className="font-mono">{evt.tool}</span>
+        </p>
+        {out ? (
+          <pre className="mt-1 max-h-24 overflow-y-auto whitespace-pre-wrap break-words text-[9px] text-emerald-900/80">
+            {out}{more ? "…" : ""}
+          </pre>
+        ) : null}
+      </div>
+    );
   }
   if (evt.type === "op_planned") {
     return <div className="text-black/65">📝 plan {evt.op.kind} → {evt.op.target_file}</div>;
@@ -299,7 +468,19 @@ function LogLine({ evt }: { evt: RebuildEvent }) {
     return <div className="text-violet-700/70">↻ {evt.type}</div>;
   }
   if (evt.type === "done") {
-    return <div className="text-emerald-700/80">✓ done</div>;
+    const result = typeof (evt as { result?: string }).result === "string" ? (evt as { result: string }).result : null;
+    const ops = (evt as { ops_applied?: number }).ops_applied;
+    return (
+      <div className="rounded-lg border border-emerald-200/60 bg-emerald-50/50 px-2 py-1.5 text-emerald-900">
+        <p className="font-sans text-[10px] font-semibold">✓ done</p>
+        {ops != null ? <p className="mt-0.5 text-[9px]">Operations applied: {ops}</p> : null}
+        {result ? (
+          <pre className="mt-1 max-h-28 overflow-y-auto whitespace-pre-wrap text-[9px] text-emerald-900/85">
+            {result.slice(0, 1200)}{result.length > 1200 ? "…" : ""}
+          </pre>
+        ) : null}
+      </div>
+    );
   }
   if (evt.type === "error") {
     return <div className="text-red-700/80">✗ error: {evt.message}</div>;
@@ -309,6 +490,10 @@ function LogLine({ evt }: { evt: RebuildEvent }) {
   }
   if (evt.type === "rebuild_end") {
     return <div className="text-emerald-700/80">■ rebuild end ({evt.status})</div>;
+  }
+
+  if (evt.type === "connected") {
+    return <div className="text-black/50">● {evt.message}</div>;
   }
 
   if (isTerminal(evt)) return <div className="text-black/60">{evt.type}</div>;

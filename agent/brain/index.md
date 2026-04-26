@@ -9,7 +9,6 @@ links:
   - map.md
   - summaries/project_summary.md- map.md
   - summaries/project_summary.md
-  - projects/team_task_board/overview.md
 keywords:
   - source of truth
   - project memory
@@ -25,17 +24,17 @@ Treat this file as the required entry point. Every generated working brain shoul
 ## Read Order For Agents
 
 1. Read [Project Summary](summaries/project_summary.md) for the shortest useful context.
-2. Read [Team Task Board Overview](projects/team_task_board/overview.md) for understanding the task board API.
+2. Read [Brain Map](map.md) to understand the project shape.
 
 ## Important Links
 
 - [Brain Map](map.md)
 - [Project Summary](summaries/project_summary.md)
-- [Team Task Board Overview](projects/team_task_board/overview.md)
 
 ## Generated Brain Files
 
-- [projects/team_task_board/data_model.md](projects/team_task_board/data_model.md)
-- [projects/team_task_board/entry_points.md](projects/team_task_board/entry_points.md)
-- [projects/team_task_board/open_questions.md](projects/team_task_board/open_questions.md)
-- [projects/team_task_board/risks_constraints.md](projects/team_task_board/risks_constraints.md)
+- [projects/team_task_board_api/overview.md](projects/team_task_board_api/overview.md)
+- [projects/team_task_board_api/data_model.md](projects/team_task_board_api/data_model.md)
+- [projects/team_task_board_api/configuration.md](projects/team_task_board_api/configuration.md)
+- [projects/team_task_board_api/open_questions.md](projects/team_task_board_api/open_questions.md)
+- [projects/team_task_board_api/testing.md](projects/team_task_board_api/testing.md)

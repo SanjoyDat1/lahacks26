@@ -299,3 +299,20 @@ class ContextMapRebuildResponse(BaseModel):
     ok: bool = True
     run_id: str
 
+
+class ContextMapRebuildAgentRequest(BaseModel):
+    """Trigger a rebuild by running the full LLM agent update flow.
+
+    This is heavier than the deterministic reconciliation stream and is intended
+    when you want 'thinking', tool calls, and writer actions.
+    """
+
+    prompt: str = Field(min_length=1, description="Instruction for the agent update flow.")
+    source: dict[str, Any] = Field(default_factory=dict)
+    label: str | None = None
+
+
+class ContextMapRebuildAgentResponse(BaseModel):
+    ok: bool = True
+    run_id: str
+
