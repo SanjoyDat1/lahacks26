@@ -7,6 +7,7 @@ from .routes import (
     bootstrap,
     bootstrap_stream,
     compat,
+    context_rebuild,
     files,
     github,
     health,
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
     app.include_router(retrieval.router)
     app.include_router(stream.router)
     app.include_router(update_stream.router)
+    app.include_router(context_rebuild.router)
     return app
 
 

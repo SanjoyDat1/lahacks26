@@ -276,3 +276,26 @@ class RetrievalReloadResponse(BaseModel):
     backend_label: str
     num_sections: int
 
+
+class ContextMapRebuildRequest(BaseModel):
+    """Request to rebuild / refresh context map after an external trigger."""
+
+    text: str = Field(min_length=1, description="Raw text describing the external change/event.")
+    source: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional metadata about the trigger (e.g. kind/url/actor).",
+    )
+    label: str | None = Field(
+        default=None,
+        description="Short label for UIs/logs (e.g. 'github-webhook').",
+    )
+    update_mode: UpdateMode = Field(
+        default="deterministic",
+        description="Prefer deterministic updates for unattended triggers.",
+    )
+
+
+class ContextMapRebuildResponse(BaseModel):
+    ok: bool = True
+    run_id: str
+

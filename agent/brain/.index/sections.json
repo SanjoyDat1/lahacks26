@@ -1,0 +1,517 @@
+{
+  "version": 1,
+  "file_mtimes": {
+    "index.md": 1777186098.0640378,
+    "map.md": 1777186098.064405,
+    "projects/team_task_board/data_model.md": 1777186093.6390622,
+    "projects/team_task_board/entry_points.md": 1777186093.6395938,
+    "projects/team_task_board/open_questions.md": 1777186093.6399164,
+    "projects/team_task_board/overview.md": 1777186098.065513,
+    "projects/team_task_board/risks_constraints.md": 1777186093.640257,
+    "summaries/project_summary.md": 1777186098.064948
+  },
+  "sections": [
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#_intro",
+      "heading": "Intro",
+      "content": "# Brain Index\n\nThis folder is an example of a structured project brain for the AI Brain application. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.\n\nTreat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through [Brain Map](map.md).",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brain Index",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "map.md",
+          "summaries/project_summary.md- map.md",
+          "summaries/project_summary.md",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#read-order-for-agents",
+      "heading": "Read Order For Agents",
+      "content": "1. Read [Project Summary](summaries/project_summary.md) for the shortest useful context.\n2. Read [Team Task Board Overview](projects/team_task_board/overview.md) for understanding the task board API.",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brain Index",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "map.md",
+          "summaries/project_summary.md- map.md",
+          "summaries/project_summary.md",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#important-links",
+      "heading": "Important Links",
+      "content": "- [Brain Map](map.md)\n- [Project Summary](summaries/project_summary.md)\n- [Team Task Board Overview](projects/team_task_board/overview.md)",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brain Index",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "map.md",
+          "summaries/project_summary.md- map.md",
+          "summaries/project_summary.md",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "index.md",
+      "section_id": "index.md#generated-brain-files",
+      "heading": "Generated Brain Files",
+      "content": "- [projects/team_task_board/data_model.md](projects/team_task_board/data_model.md)\n- [projects/team_task_board/entry_points.md](projects/team_task_board/entry_points.md)\n- [projects/team_task_board/open_questions.md](projects/team_task_board/open_questions.md)\n- [projects/team_task_board/risks_constraints.md](projects/team_task_board/risks_constraints.md)",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brain Index",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "map.md",
+          "summaries/project_summary.md- map.md",
+          "summaries/project_summary.md",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "map.md",
+      "section_id": "map.md#_intro",
+      "heading": "Intro",
+      "content": "# Brain Map\n\nThis file is the visual navigation layer for the brain. Humans can use it to understand the project shape. Agents can use it to decide which files to read next.\n\n```mermaid\nflowchart LR\n  Index[\"index.md\"] --> ProjectSummary[\"summaries/project_summary.md\"]\n  Index --> TeamTaskBoardOverview[\"projects/team_task_board/overview.md\"]\n```",
+      "frontmatter": {
+        "id": "brian.map",
+        "type": "map",
+        "title": "Brain Map",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md- brian.index",
+          "summaries.project_summary",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "graph",
+          "map",
+          "backlinks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "map.md",
+      "section_id": "map.md#map-rules",
+      "heading": "Map Rules",
+      "content": "- Every important file should be reachable from `index.md` or this map.\n- New architecture files should link back to [System Overview](architecture/system_overview.md).\n- New durable decisions should link from [Decision Log](decisions/decision_log.md).\n- Integration files should link back to [Ingestion Pipeline](architecture/ingestion_pipeline.md).",
+      "frontmatter": {
+        "id": "brian.map",
+        "type": "map",
+        "title": "Brain Map",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "summaries/project_summary.md- brian.index",
+          "summaries.project_summary",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "graph",
+          "map",
+          "backlinks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/data_model.md",
+      "section_id": "projects/team_task_board/data_model.md#_intro",
+      "heading": "Intro",
+      "content": "# Data Model",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/data_model.md",
+      "section_id": "projects/team_task_board/data_model.md#description-of-data-structures",
+      "heading": "Description of data structures",
+      "content": "The primary data structure used in the Team Task Board API is the `Task` model, which includes the following fields:\n- `id`: Unique identifier for the task.\n- `title`: Title of the task.\n- `description`: Detailed description of the task.\n- `assignee`: User assigned to the task.\n- `priority`: Priority level of the task.\n- `status`: Current status of the task.",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/data_model.md",
+      "section_id": "projects/team_task_board/data_model.md#source-evidence",
+      "heading": "Source Evidence",
+      "content": "- Task: Represents a task with fields like id, title, description, assignee, priority, and status.",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/entry_points.md",
+      "section_id": "projects/team_task_board/entry_points.md#_intro",
+      "heading": "Intro",
+      "content": "# API Entry Points",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/entry_points.md",
+      "section_id": "projects/team_task_board/entry_points.md#list-of-api-routes",
+      "heading": "List of API routes",
+      "content": "The following API routes are available in the Team Task Board API:\n- `GET /health`: Health check endpoint to verify the service is running.\n- `GET /tasks`: Retrieve a list of tasks.\n- `POST /tasks`: Create a new task.\n- `PATCH /tasks/{task_id}`: Update an existing task's status or assignee.\n- `GET /summary`: Get a summary of tasks for dashboard metrics.",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/entry_points.md",
+      "section_id": "projects/team_task_board/entry_points.md#source-evidence",
+      "heading": "Source Evidence",
+      "content": "- Application Bootstrap: uvicorn app.main:app --reload\n- API Routes: GET /health, GET /tasks, POST /tasks, PATCH /tasks/{task_id}, GET /summary",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/open_questions.md",
+      "section_id": "projects/team_task_board/open_questions.md#_intro",
+      "heading": "Intro",
+      "content": "# Open Questions",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/open_questions.md",
+      "section_id": "projects/team_task_board/open_questions.md#list-of-unresolved-issues",
+      "heading": "List of unresolved issues",
+      "content": "There are several open questions regarding the implementation of the Team Task Board API:\n- The code does not specify persistent storage; it uses in-memory storage which will be lost on server restart.",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/open_questions.md",
+      "section_id": "projects/team_task_board/open_questions.md#source-evidence",
+      "heading": "Source Evidence",
+      "content": "- The code does not specify persistent storage; it uses in-memory storage which will be lost on server restart.",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/overview.md",
+      "section_id": "projects/team_task_board/overview.md#_intro",
+      "heading": "Intro",
+      "content": "# Project Overview\n\nThe Team Task Board API is a FastAPI backend for a team task board demo app, exposing a simple in-memory REST API for task management.",
+      "frontmatter": {
+        "id": "projects.team_task_board.overview",
+        "type": "overview",
+        "title": "Project Overview",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md"
+        ],
+        "keywords": [
+          "team task board",
+          "API",
+          "FastAPI"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/overview.md",
+      "section_id": "projects/team_task_board/overview.md#user-facing-capabilities",
+      "heading": "User-facing Capabilities",
+      "content": "- Health check endpoint\n- List tasks\n- Create tasks\n- Update task status and assignee\n- Summary endpoint for dashboard metrics",
+      "frontmatter": {
+        "id": "projects.team_task_board.overview",
+        "type": "overview",
+        "title": "Project Overview",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md"
+        ],
+        "keywords": [
+          "team task board",
+          "API",
+          "FastAPI"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/overview.md",
+      "section_id": "projects/team_task_board/overview.md#technical-stack",
+      "heading": "Technical Stack",
+      "content": "- **Programming Language**: Python 3.11+\n- **Frameworks**: FastAPI, Uvicorn",
+      "frontmatter": {
+        "id": "projects.team_task_board.overview",
+        "type": "overview",
+        "title": "Project Overview",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md"
+        ],
+        "keywords": [
+          "team task board",
+          "API",
+          "FastAPI"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/overview.md",
+      "section_id": "projects/team_task_board/overview.md#entry-points",
+      "heading": "Entry Points",
+      "content": "- **Application Bootstrap**: `uvicorn app.main:app --reload`\n- **API Routes**:\n  - `GET /health`\n  - `GET /tasks`\n  - `POST /tasks`\n  - `PATCH /tasks/{task_id}`\n  - `GET /summary`",
+      "frontmatter": {
+        "id": "projects.team_task_board.overview",
+        "type": "overview",
+        "title": "Project Overview",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md"
+        ],
+        "keywords": [
+          "team task board",
+          "API",
+          "FastAPI"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/overview.md",
+      "section_id": "projects/team_task_board/overview.md#source-evidence",
+      "heading": "Source Evidence",
+      "content": "- Project Name: Team Task Board API\n- Purpose: A FastAPI backend for a team task board demo app.",
+      "frontmatter": {
+        "id": "projects.team_task_board.overview",
+        "type": "overview",
+        "title": "Project Overview",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board/data_model.md",
+          "projects/team_task_board/entry_points.md",
+          "projects/team_task_board/open_questions.md"
+        ],
+        "keywords": [
+          "team task board",
+          "API",
+          "FastAPI"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/risks_constraints.md",
+      "section_id": "projects/team_task_board/risks_constraints.md#_intro",
+      "heading": "Intro",
+      "content": "# Risks and Constraints",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/risks_constraints.md",
+      "section_id": "projects/team_task_board/risks_constraints.md#document-potential-risks-and-constraints",
+      "heading": "Document potential risks and constraints",
+      "content": "The following risks and constraints have been identified for the Team Task Board API:\n- CORS is enabled for local frontend development, which may need adjustments for production to ensure security and proper functionality.",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board/risks_constraints.md",
+      "section_id": "projects/team_task_board/risks_constraints.md#source-evidence",
+      "heading": "Source Evidence",
+      "content": "- CORS is enabled for local frontend development, which may need adjustments for production.",
+      "frontmatter": {},
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#_intro",
+      "heading": "Intro",
+      "content": "# Project Summary\n\nAI Brain is a full-stack product that keeps human project context synchronized with LLM coding agents.\n\nIt ingests engineering conversations and artifacts from various sources. Incoming events are normalized into one event shape, embedded for semantic search, and passed through a distiller that decides whether the event changes product goals, architecture, constraints, risks, or open questions.\n\nIf the event is significant, the app updates Markdown brain files. In production, those updates are committed for an audit trail. In local demo mode, the same flow works in memory so the product can be tested without credentials.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "map.md- brian.index",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#what-works-right-now",
+      "heading": "What Works Right Now",
+      "content": "- Next.js app with dashboard, brain editor, events page, integrations page, and semantic search page.\n- API endpoints for various integrations and brain files.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "map.md- brian.index",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#agent-guidance",
+      "heading": "Agent Guidance",
+      "content": "Before changing code, read this file, then read the specific architecture or decision files linked from the task.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "map.md- brian.index",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "summaries/project_summary.md",
+      "section_id": "summaries/project_summary.md#source-evidence",
+      "heading": "Source Evidence",
+      "content": "- AI Brain is a full-stack product that keeps human project context synchronized with LLM coding agents.\n- It ingests engineering conversations and artifacts from various sources.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "index.md",
+          "map.md- brian.index",
+          "projects/team_task_board/overview.md"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    }
+  ]
+}
