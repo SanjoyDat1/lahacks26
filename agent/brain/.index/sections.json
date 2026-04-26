@@ -1,11 +1,11 @@
 {
   "version": 1,
   "file_mtimes": {
-    "projects/team_task_board_api/data_model.md": 1777187207.7412422,
-    "projects/team_task_board_api/entry_points.md": 1777187207.741576,
-    "projects/team_task_board_api/open_questions.md": 1777187207.7421098,
-    "projects/team_task_board_api/risks_constraints.md": 1777187201.2395158,
-    "projects/team_task_board_api/testing.md": 1777187207.7418222
+    "projects/team_task_board_api/data_model.md": 1777188364.5822597,
+    "projects/team_task_board_api/entry_points.md": 1777188364.582496,
+    "projects/team_task_board_api/open_questions.md": 1777188364.582723,
+    "projects/team_task_board_api/risks_constraints.md": 1777188364.5830705,
+    "projects/team_task_board_api/testing.md": 1777188364.5833147
   },
   "sections": [
     {
@@ -201,7 +201,7 @@
       "file_path": "projects/team_task_board_api/entry_points.md",
       "section_id": "projects/team_task_board_api/entry_points.md#api-routes",
       "heading": "API Routes",
-      "content": "- `GET /health`: Health check endpoint.\n- `GET /tasks`: Retrieve a list of tasks.\n- `POST /tasks`: Create a new task.\n- `PATCH /tasks/{task_id}`: Update an existing task's status or assignee.\n- `GET /summary`: Retrieve summary metrics for the dashboard.",
+      "content": "- `GET /health`: Health check endpoint.\n- `GET /tasks`: Retrieve a list of tasks.\n- `POST /tasks`: Create a new task.\n- `PATCH /tasks/{task_id}`: Update an existing task's status or assignee.\n- `GET /summary`: Retrieve summary metrics for the dashboard.\n- `GET /bar`: Updated endpoint replacing /foo with new response schema.",
       "frontmatter": {
         "id": "entry_points",
         "status": "draft",
