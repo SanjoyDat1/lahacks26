@@ -76,7 +76,17 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
   /** Brain file paths the agent has read while deriving the in-flight answer. */
   const [activeSources, setActiveSources] = useState<string[] | null>(null);
   const [linkBusy, setLinkBusy] = useState(false);
+  const [previewPanelWide, setPreviewPanelWide] = useState(false);
+  const [reduceMotionGrid, setReduceMotionGrid] = useState(false);
   const flashEdgeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setReduceMotionGrid(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -291,7 +301,17 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
       </div>
 
       {/* Layout grid — passes pointer events through so the graph below stays interactive */}
-      <div className="pointer-events-none relative z-10 grid h-full grid-cols-[280px_1fr_340px] gap-4 px-4 pb-24 pt-16">
+      <div
+        className="pointer-events-none relative z-10 grid h-full gap-4 px-4 pb-24 pt-16"
+        style={{
+          gridTemplateColumns: previewPanelWide
+            ? "280px minmax(0, 1fr) max(340px, min(520px, calc(100vw - 300px)))"
+            : "280px minmax(0, 1fr) 340px",
+          transition: reduceMotionGrid
+            ? undefined
+            : "grid-template-columns 520ms cubic-bezier(0.22, 1, 0.36, 1)",
+        }}
+      >
         {/* Left: file tree */}
         <section ref={leftPanelRef} className="glass pointer-events-auto min-h-0 overflow-hidden">
           <FileTree
@@ -309,10 +329,19 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
         <section />
 
         {/* Right: preview */}
-        <section ref={rightPanelRef} className="glass pointer-events-auto min-h-0 overflow-hidden">
+        <section
+          ref={rightPanelRef}
+          className={cn(
+            "glass pointer-events-auto min-h-0 min-w-0 overflow-hidden transition-[box-shadow,transform] duration-500 ease-out",
+            previewPanelWide &&
+              "shadow-[0_20px_70px_-20px_rgba(15,23,42,0.14)] ring-1 ring-black/[0.07]",
+          )}
+        >
           <PreviewPane
             file={selectedFile}
             allFiles={files}
+            layoutWide={previewPanelWide}
+            onToggleLayoutWide={() => setPreviewPanelWide((w) => !w)}
             onSelectSource={(titleOrPath) => {
               const f =
                 files.find((x) => x.path === titleOrPath) ??

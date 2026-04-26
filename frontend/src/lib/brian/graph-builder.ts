@@ -261,7 +261,13 @@ function applyCompanyDivisionLayer(
     n.divisionKey = key;
     const hubPath = hubPathByKey.get(key);
     if (hubPath && f.path === hubPath) {
-      n.linkable = false;
+      // Hub is non-draggable for new links only when other members exist in the
+      // same division—otherwise the hub is the *only* node and would block link
+      // creation entirely (e.g. a lone company/*/overview.md).
+      const peerCount = files.filter(
+        (x) => divisionKeyForPath(x.path) === key && x.path !== hubPath,
+      ).length;
+      n.linkable = peerCount > 0 ? false : true;
       if (key === "q:org") {
         n.nodeRole = "company";
         n.type = "company";

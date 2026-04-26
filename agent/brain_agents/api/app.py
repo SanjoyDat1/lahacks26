@@ -11,6 +11,7 @@ from .routes import (
     files,
     github,
     health,
+    links,
     query,
     retrieval,
     slack,
@@ -34,6 +35,7 @@ def create_app() -> FastAPI:
     app.include_router(compat.router)
     app.include_router(health.router)
     app.include_router(files.router)
+    app.include_router(links.router)
     app.include_router(query.router)
     app.include_router(update.router)
     app.include_router(github.router)

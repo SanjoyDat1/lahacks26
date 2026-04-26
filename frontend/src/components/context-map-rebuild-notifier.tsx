@@ -114,6 +114,9 @@ export function ContextMapRebuildNotifier({
       const replay = "replay" in evt ? Boolean((evt as any).replay) : false;
       console.debug("[ctxmap] ws event", evt.type, rid, replay ? "(replay)" : "");
       setEvents((prev) => [...prev, evt!]);
+      // History replay is for the expanded log only — do not drive toast status
+      // (stale `error` / `done` from past runs was showing "failed" on every /brain load).
+      if (replay) return;
 
       if (evt.type === "connected") {
         setLastMessage(evt.message);
@@ -171,11 +174,38 @@ export function ContextMapRebuildNotifier({
       if (evt.type === "error") {
         setStatus("error");
         setOpen(true);
-        setLastMessage(evt.message.slice(0, 160));
+        const m =
+          typeof (evt as { message?: string }).message === "string"
+            ? (evt as { message: string }).message.trim()
+            : "";
+        setLastMessage((m || "Context map rebuild failed.").slice(0, 160));
         return;
       }
 
-      if (evt.type === "done" || evt.type === "rebuild_end") {
+      if (evt.type === "rebuild_end") {
+        const st = String((evt as { status?: string }).status ?? "");
+        if (st === "error") {
+          setStatus("error");
+          setOpen(true);
+          const summ = (evt as { summary?: { message?: string } }).summary;
+          const msg =
+            typeof summ?.message === "string" && summ.message.trim()
+              ? summ.message.trim()
+              : "Context map rebuild ended with an error.";
+          setLastMessage(msg.slice(0, 160));
+          return;
+        }
+        setStatus("done");
+        setOpen(true);
+        setLastMessage("Context map updated.");
+        const rid =
+          "run_id" in evt && evt.run_id != null ? String(evt.run_id) : "";
+        const cb = onRebuildDoneRef.current;
+        if (typeof cb === "function") cb(rid);
+        return;
+      }
+
+      if (evt.type === "done") {
         setStatus("done");
         setOpen(true);
         setLastMessage("Context map updated.");

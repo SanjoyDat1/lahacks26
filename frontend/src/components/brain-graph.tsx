@@ -381,6 +381,8 @@ export function BrainGraph({
   const panTargetRef = useRef<{ x: number; y: number } | null>(null);
   /** When the visible node id set is unchanged, preserve positions and camera (e.g. new edge only). */
   const visibleNodeSetRef = useRef<string>("");
+  const onLinkCreateRef = useRef(onLinkCreate);
+  onLinkCreateRef.current = onLinkCreate;
 
   const isDark = theme === "dark";
 
@@ -977,6 +979,36 @@ export function BrainGraph({
     return best;
   }
 
+  /** Commit or cancel in-flight link drag (canvas or global mouseup). */
+  function completeActiveLinkDrag(clientX: number, clientY: number) {
+    const drag = connectDragRef.current;
+    if (!drag) return;
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const r = canvas.getBoundingClientRect();
+      const cx = clientX - r.left;
+      const cy = clientY - r.top;
+      const target = connectTargetRef.current ?? findNode(cx, cy);
+      if (target && target.id !== drag.source.id) {
+        void onLinkCreateRef.current?.(drag.source.id, target.id);
+      }
+    }
+    connectDragRef.current = null;
+    connectTargetRef.current = null;
+    setIsConnecting(false);
+  }
+
+  useEffect(() => {
+    if (!isConnecting) return;
+    const onWindowMouseUp = (e: MouseEvent) => {
+      completeActiveLinkDrag(e.clientX, e.clientY);
+    };
+    window.addEventListener("mouseup", onWindowMouseUp, true);
+    return () => window.removeEventListener("mouseup", onWindowMouseUp, true);
+    // completeActiveLinkDrag reads refs + findNode; isConnecting gates subscription only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- avoid re-subscribing every render
+  }, [isConnecting]);
+
   // ── event handlers ─────────────────────────────────────────────────────────
   function onMouseDown(e: React.MouseEvent<HTMLCanvasElement>) {
     const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
@@ -1059,14 +1091,7 @@ export function BrainGraph({
 
   function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
     if (connectDragRef.current) {
-      const source = connectDragRef.current.source;
-      const target = connectTargetRef.current ?? findNode(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
-      if (target && target.id !== source.id) {
-        void onLinkCreate?.(source.id, target.id);
-      }
-      connectDragRef.current = null;
-      connectTargetRef.current = null;
-      setIsConnecting(false);
+      completeActiveLinkDrag(e.clientX, e.clientY);
     }
     connectAnchorRef.current = null;
     panRef.current = null;
@@ -1168,7 +1193,18 @@ export function BrainGraph({
         onMouseUp={onMouseUp}
         onMouseLeave={() => {
           draggingRef.current = null;
-          connectDragRef.current = null;
+          if (connectDragRef.current) {
+            // Link-drag often crosses panel gutters; keep drag alive until
+            // window mouseup (see useEffect) instead of aborting here.
+            setEdgeHovered(false);
+            hoveredEdgeRef.current = null;
+            hoverIdRef.current = null;
+            hoverNodeRef.current = null;
+            hovConnectedRef.current = new Set();
+            setHoverConnectionCount(0);
+            setTooltipNode(null);
+            return;
+          }
           connectAnchorRef.current = null;
           connectTargetRef.current = null;
           setIsConnecting(false);

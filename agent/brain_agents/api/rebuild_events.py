@@ -71,6 +71,10 @@ class RebuildEventHub:
             "ts_ms": int(time.time() * 1000),
         }
         await self.emit(evt)
+        async with self._lock:
+            if self._active_run_id == run_id:
+                self._active_run_id = None
+                self._active_started_at_ms = None
 
     async def emit(self, evt: dict[str, Any]) -> None:
         async with self._lock:

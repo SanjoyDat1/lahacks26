@@ -8,6 +8,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
   FileText,
   Maximize2,
@@ -99,11 +101,13 @@ function ConnectedPagesList({
   accentForPath,
   onSelect,
   labelByPath,
+  chipMaxWidthClass = "max-w-[160px]",
 }: {
   pages: ConnectedPage[];
   accentForPath: (path: string) => string;
   onSelect: (path: string) => void;
   labelByPath: Map<string, string>;
+  chipMaxWidthClass?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -203,7 +207,7 @@ function ConnectedPagesList({
               ) : (
                 <ArrowDownLeft size={10} className="text-black/45 group-hover:text-black/70" />
               )}
-              <span className="truncate max-w-[160px]">{label}</span>
+              <span className={cn("truncate", chipMaxWidthClass)}>{label}</span>
             </button>
           );
         })}
@@ -220,11 +224,16 @@ export function PreviewPane({
   onSelectSource,
   accentForPath,
   allFiles = [],
+  layoutWide = false,
+  onToggleLayoutWide,
 }: {
   file: BrianFile | null;
   onSelectSource: (titleOrPath: string) => void;
   accentForPath: (path: string) => string;
   allFiles?: BrianFile[];
+  /** Parent grid widens the preview column; tune typography and chips. */
+  layoutWide?: boolean;
+  onToggleLayoutWide?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const close = useMemo(() => () => setExpanded(false), []);
@@ -321,12 +330,31 @@ export function PreviewPane({
   );
 
   const body = (sized: "inline" | "expanded") => (
-    <div className={cn("min-h-0 flex-1 overflow-y-auto", sized === "expanded" ? "px-10 py-8" : "px-5 py-5")}>
+    <div
+      className={cn(
+        "min-h-0 flex-1 overflow-y-auto scroll-smooth",
+        sized === "expanded"
+          ? "px-10 py-8"
+          : layoutWide
+            ? "px-7 py-6"
+            : "px-5 py-5",
+      )}
+    >
       {file ? (
-        <div className="max-w-none space-y-8">
+        <div
+          className={cn(
+            "max-w-none space-y-8 transition-[font-size] duration-500 ease-out",
+            layoutWide && sized === "inline" && "text-[15px] leading-relaxed [&_.prose]:max-w-none",
+          )}
+        >
           <div>
             {displayTitle ? (
-              <h1 className="mt-0 mb-3 text-2xl font-semibold tracking-tight text-black">
+              <h1
+                className={cn(
+                  "mt-0 mb-3 font-semibold tracking-tight text-black transition-[font-size] duration-500 ease-out",
+                  sized === "expanded" ? "text-2xl" : layoutWide ? "text-[1.65rem]" : "text-2xl",
+                )}
+              >
                 {displayTitle}
               </h1>
             ) : null}
@@ -366,11 +394,19 @@ export function PreviewPane({
               accentForPath={accentForPath}
               onSelect={onSelectSource}
               labelByPath={labelByPath}
+              chipMaxWidthClass={layoutWide ? "max-w-[min(280px,100%)]" : "max-w-[160px]"}
             />
 
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewMarkdownComponents}>
-              {contentBody}
-            </ReactMarkdown>
+            <div
+              className={cn(
+                "[&_pre]:rounded-xl [&_pre]:border [&_pre]:border-black/10",
+                layoutWide && sized === "inline" && "[&_pre]:text-[13px] [&_table]:text-[14px]",
+              )}
+            >
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewMarkdownComponents}>
+                {contentBody}
+              </ReactMarkdown>
+            </div>
           </div>
         </div>
       ) : (
@@ -388,16 +424,40 @@ export function PreviewPane({
 
   const header = (variant: "inline" | "expanded") => (
     <div className="flex items-center justify-between gap-2 border-b border-black/10 px-4 py-3">
-      <div className="flex shrink-0 items-center gap-2">
-        <FileText size={14} className="text-black/70" />
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+      <div className="flex min-w-0 shrink-0 items-center gap-1.5">
+        <FileText size={14} className="shrink-0 text-black/70" aria-hidden />
+        <p className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
           Preview
         </p>
+        {variant === "inline" && onToggleLayoutWide ? (
+          <button
+            type="button"
+            onClick={onToggleLayoutWide}
+            className={cn(
+              "ml-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white/80 text-black/55",
+              "shadow-sm shadow-black/[0.03] transition-all duration-300 ease-out",
+              "hover:border-black/14 hover:bg-white hover:text-black hover:shadow-md hover:shadow-black/[0.06]",
+              "active:scale-[0.94]",
+            )}
+            title={layoutWide ? "Narrow preview panel" : "Widen preview panel"}
+            aria-label={layoutWide ? "Narrow preview panel" : "Widen preview panel"}
+            aria-pressed={layoutWide}
+          >
+            {layoutWide ? (
+              <ChevronRight size={17} strokeWidth={2.25} className="transition-transform duration-300" />
+            ) : (
+              <ChevronLeft size={17} strokeWidth={2.25} className="transition-transform duration-300" />
+            )}
+          </button>
+        ) : null}
       </div>
       <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
         {file?.path ? (
           <span
-            className="min-w-0 max-w-[240px] truncate rounded-full bg-black/[0.06] px-3 py-1 font-mono text-[10px] text-black/70"
+            className={cn(
+              "min-w-0 truncate rounded-full bg-black/[0.06] px-3 py-1 font-mono text-[10px] text-black/70 transition-[max-width] duration-500 ease-out",
+              variant === "inline" && layoutWide ? "max-w-[min(380px,50vw)]" : "max-w-[240px]",
+            )}
             title={file.path}
           >
             {file.path}
