@@ -366,11 +366,23 @@ export function SessionStartPage() {
     return Math.max(0, idx);
   }, [isDone, stage]);
 
+  const isMaterializingBrianGraph = stageLabel
+    .toLowerCase()
+    .includes("materializing brian");
   const progressPct = useMemo(() => {
-    if (githubRestPipeline) return Math.min(100, restProgress);
     if (isDone) return 100;
+    if (isMaterializingBrianGraph) return 99;
+    if (githubRestPipeline) return Math.min(100, restProgress);
     return Math.round(((completedStages + (isRunning ? 0.5 : 0)) / STAGES.length) * 100);
-  }, [githubRestPipeline, restProgress, isDone, completedStages, isRunning]);
+  }, [
+    githubRestPipeline,
+    restProgress,
+    isDone,
+    isMaterializingBrianGraph,
+    completedStages,
+    isRunning,
+  ]);
+  const progressLabel = `${Math.round(progressPct)}%`;
 
   useEffect(() => {
     if (isDone) {
@@ -737,6 +749,18 @@ export function SessionStartPage() {
         {
           t: 16800,
           stage: "verify",
+          label: "Checking generated cross-links…",
+          line: "Brian is validating links and file metadata before the workspace opens.",
+        },
+        {
+          t: 21000,
+          stage: "verify",
+          label: "Finalizing retrieval warmup…",
+          line: "Search-ready sections are being packed so the agent can answer against the new files.",
+        },
+        {
+          t: 25200,
+          stage: "verify",
           label: "Still working—large repos take longer…",
           line: "Hang tight; the server is still generating files. Progress below keeps moving until the response lands.",
         },
@@ -849,7 +873,7 @@ export function SessionStartPage() {
               prev.filter((f) => !f.isGhost || writtenSet.has(f.path)),
             );
           }
-          setRestProgress(96);
+          setRestProgress(99);
           setStage("write");
           setStageLabel("Materializing Brian files on the canvas…");
           setThinking((prev) => [
@@ -1183,7 +1207,7 @@ export function SessionStartPage() {
             />
           </div>
           <p className="font-mono text-[10px] tabular-nums text-slate-400">
-            {progressPct}%
+            {progressLabel}
           </p>
           {error ? (
             <div className="w-full">

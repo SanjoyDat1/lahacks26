@@ -16,12 +16,19 @@ type Message = {
   streaming?: boolean;
 };
 
+type BrianEdit = {
+  file: string;
+  original: string;
+  newContent: string;
+  summary: string;
+};
+
 type EditState =
   | { status: "idle" }
   | { status: "loading" }
-  | { status: "preview"; file: string; original: string; newContent: string; summary: string }
+  | { status: "preview"; edits: BrianEdit[]; summary: string }
   | { status: "applying" }
-  | { status: "applied"; file: string; summary: string }
+  | { status: "applied"; files: string[]; summary: string }
   | { status: "error"; message: string };
 
 const WELCOME: Message = {
@@ -157,18 +164,34 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
         body: JSON.stringify({ instruction }),
       });
       const data = (await res.json()) as {
+        edits?: BrianEdit[];
         file?: string; original?: string; newContent?: string; summary?: string; error?: string;
       };
       if (!res.ok || data.error) {
         setEditState({ status: "error", message: data.error ?? "Unknown error" });
         return;
       }
+      const edits =
+        data.edits && data.edits.length > 0
+          ? data.edits
+          : data.file && data.original != null && data.newContent
+            ? [
+                {
+                  file: data.file,
+                  original: data.original,
+                  newContent: data.newContent,
+                  summary: data.summary ?? "Updated file.",
+                },
+              ]
+            : [];
+      if (!edits.length) {
+        setEditState({ status: "error", message: "No edits were generated." });
+        return;
+      }
       setEditState({
         status: "preview",
-        file: data.file!,
-        original: data.original!,
-        newContent: data.newContent!,
-        summary: data.summary!,
+        edits,
+        summary: data.summary ?? (edits.length === 1 ? edits[0]!.summary : `Updated ${edits.length} files.`),
       });
     } catch (err) {
       setEditState({ status: "error", message: String(err) });
@@ -177,21 +200,21 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
 
   async function applyEdit() {
     if (editState.status !== "preview") return;
-    const { file, summary } = editState;
+    const { edits, summary } = editState;
     setEditState({ status: "applying" });
     try {
       const instruction = contextHint ? `${contextHint}\n\n${editInstruction.trim()}` : editInstruction.trim();
       const res = await fetch("/api/brian/ai-edit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instruction, apply: true }),
+        body: JSON.stringify({ instruction, apply: true, edits, summary }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok || data.error) {
         setEditState({ status: "error", message: data.error ?? "Apply failed" });
         return;
       }
-      setEditState({ status: "applied", file, summary });
+      setEditState({ status: "applied", files: edits.map((edit) => edit.file), summary });
       setEditInstruction("");
     } catch (err) {
       setEditState({ status: "error", message: String(err) });
@@ -380,7 +403,9 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-xs font-semibold text-slate-700">Proposed edit</p>
-                    <p className="mt-0.5 font-mono text-[10px] text-violet-600">{editState.file}</p>
+                    <p className="mt-0.5 font-mono text-[10px] text-violet-600">
+                      {editState.edits.map((edit) => edit.file).join(", ")}
+                    </p>
                   </div>
                   <button onClick={resetEdit} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition">
                     <X size={13} />
@@ -391,7 +416,13 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
 
               {/* Diff-style preview */}
               <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                <DiffView original={editState.original} newContent={editState.newContent} />
+                {editState.edits.map((edit) => (
+                  <div key={edit.file} className="space-y-1.5">
+                    <p className="font-mono text-[10px] font-semibold text-violet-600">{edit.file}</p>
+                    <p className="text-[10px] text-slate-500">{edit.summary}</p>
+                    <DiffView original={edit.original} newContent={edit.newContent} />
+                  </div>
+                ))}
               </div>
 
               {/* Apply bar */}
@@ -425,7 +456,7 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
               </div>
               <div>
                 <p className="text-base font-semibold text-slate-800">Brian updated!</p>
-                <p className="mt-1 font-mono text-xs text-violet-600">{editState.file}</p>
+                <p className="mt-1 font-mono text-xs text-violet-600">{editState.files.join(", ")}</p>
                 <p className="mt-2 text-sm text-slate-500">{editState.summary}</p>
               </div>
               <p className="text-xs text-slate-400">Reload the page to see the graph update.</p>
