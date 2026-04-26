@@ -149,7 +149,7 @@ function ElbowRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative pl-4">
+    <div className="relative pl-2">
       {/* Vertical segment of the elbow (extends only halfway if last) */}
       <span
         aria-hidden
@@ -161,7 +161,7 @@ function ElbowRow({
       {/* Horizontal stub of the elbow */}
       <span
         aria-hidden
-        className="pointer-events-none absolute left-0 top-[18px] h-px w-3 bg-black/15"
+        className="pointer-events-none absolute left-0 top-[18px] h-px w-1.5 bg-black/15"
       />
       {children}
     </div>
