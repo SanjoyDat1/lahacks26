@@ -7,32 +7,57 @@ type TriggerRequest = {
   file?: string;
   newContent?: string;
   summary?: string;
+  edits?: Array<{
+    file?: string;
+    newContent?: string;
+    summary?: string;
+  }>;
 };
 
 export async function POST(req: Request) {
-  const { instruction, file, newContent, summary } = (await req.json()) as TriggerRequest;
+  const { instruction, file, newContent, summary, edits } = (await req.json()) as TriggerRequest;
 
-  if (!instruction?.trim() || !file?.trim() || typeof newContent !== "string") {
+  const requestedEdits =
+    Array.isArray(edits) && edits.length > 0
+      ? edits
+      : file && typeof newContent === "string"
+        ? [{ file, newContent, summary }]
+        : [];
+
+  if (
+    !instruction?.trim() ||
+    requestedEdits.length === 0 ||
+    requestedEdits.some((edit) => !edit.file?.trim() || typeof edit.newContent !== "string")
+  ) {
     return NextResponse.json(
-      { error: "instruction, file, and newContent are required" },
+      { error: "instruction and at least one edit with file and newContent are required" },
       { status: 400 },
     );
   }
 
+  const files = requestedEdits.map((edit) => edit.file?.trim() ?? "");
+
   const prompt = [
-    "Apply this user-approved Brian update.",
+    "Apply these user-approved Brian updates.",
     "",
     `Original instruction: ${instruction.trim()}`,
-    `Target file: ${file.trim()}`,
+    `Target files: ${files.join(", ")}`,
     summary?.trim() ? `Summary: ${summary.trim()}` : null,
     "",
-    "Replace the target file with this complete Markdown content, preserving it exactly unless a required brain invariant would be violated:",
+    "For every target file below, replace that file with the matching complete Markdown content.",
+    "Preserve the content exactly unless a required brain invariant would be violated.",
     "",
-    "BEGIN TARGET FILE CONTENT",
-    newContent,
-    "END TARGET FILE CONTENT",
+    ...requestedEdits.flatMap((edit, index) => [
+      `BEGIN TARGET FILE ${index + 1}: ${edit.file?.trim()}`,
+      edit.summary?.trim() ? `File summary: ${edit.summary.trim()}` : "",
+      "BEGIN CONTENT",
+      edit.newContent ?? "",
+      "END CONTENT",
+      `END TARGET FILE ${index + 1}`,
+      "",
+    ]),
   ]
-    .filter((line): line is string => line !== null)
+    .filter((line): line is string => line !== null && line !== "")
     .join("\n");
 
   let upstream: Response;
@@ -46,7 +71,8 @@ export async function POST(req: Request) {
         source: {
           kind: "brain-command",
           action: "apply-update",
-          file,
+          file: files[0],
+          files,
           instruction,
           summary,
         },

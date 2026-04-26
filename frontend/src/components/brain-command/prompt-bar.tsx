@@ -14,6 +14,12 @@ type Message = {
   content: string;
 };
 
+type PendingEdit = {
+  file: string;
+  newContent: string;
+  summary: string;
+};
+
 const MAX_SEARCH_RESULTS = 6;
 
 export function PromptBar({
@@ -40,8 +46,7 @@ export function PromptBar({
   const [streaming, setStreaming] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<{
     instruction: string;
-    file: string;
-    newContent: string;
+    edits: PendingEdit[];
     summary: string;
   } | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
@@ -107,21 +112,34 @@ export function PromptBar({
         });
         const preview = (await previewRes.json()) as {
           summary?: string;
+          edits?: PendingEdit[];
           file?: string;
           newContent?: string;
           error?: string;
         };
 
+        const previewEdits =
+          preview.edits && preview.edits.length > 0
+            ? preview.edits
+            : preview.file && preview.newContent
+              ? [
+                  {
+                    file: preview.file,
+                    newContent: preview.newContent,
+                    summary: preview.summary ?? "Updated file.",
+                  },
+                ]
+              : [];
+        const fileList = previewEdits.map((edit) => `- File: \`${edit.file}\``).join("\n");
         const md = previewRes.ok
-          ? `**Proposed update**\n\n- File: \`${String(preview.file ?? "")}\`\n- Summary: ${String(preview.summary ?? "")}\n\nUse **Apply update** to write it to disk.`
+          ? `**Proposed update**\n\n${fileList}\n- Summary: ${String(preview.summary ?? "")}\n\nUse **Apply update** to write it to disk.`
           : `Could not generate an update preview.\n\n${String(preview.error ?? "Unknown error")}`;
 
-        onAnswer({ markdown: md, sources: preview.file ? [preview.file] : [] });
-        if (previewRes.ok && preview.file && preview.newContent && preview.summary) {
+        onAnswer({ markdown: md, sources: previewEdits.map((edit) => edit.file) });
+        if (previewRes.ok && previewEdits.length > 0 && preview.summary) {
           setPendingUpdate({
             instruction,
-            file: preview.file,
-            newContent: preview.newContent,
+            edits: previewEdits,
             summary: preview.summary,
           });
         }
@@ -221,8 +239,7 @@ export function PromptBar({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           instruction: pendingUpdate.instruction,
-          file: pendingUpdate.file,
-          newContent: pendingUpdate.newContent,
+          edits: pendingUpdate.edits,
           summary: pendingUpdate.summary,
         }),
       });
@@ -232,9 +249,11 @@ export function PromptBar({
         onStatusChange("error");
         return;
       }
+      const files = pendingUpdate.edits.map((edit) => edit.file);
+      const fileLines = files.map((file) => `- File: \`${file}\``).join("\n");
       onAnswer({
-        markdown: `**Update started**\n\n- File: \`${pendingUpdate.file}\`\n- Summary: ${pendingUpdate.summary}\n- Run: \`${String(data.run_id ?? "started")}\`\n\nOpen the top-right notification to follow the backend logs. Brian will refresh when the run completes.`,
-        sources: [pendingUpdate.file],
+        markdown: `**Update started**\n\n${fileLines}\n- Summary: ${pendingUpdate.summary}\n- Run: \`${String(data.run_id ?? "started")}\`\n\nOpen the top-right notification to follow the backend logs. Brian will refresh when the run completes.`,
+        sources: files,
       });
       setPendingUpdate(null);
       onStatusChange("done");
@@ -338,7 +357,7 @@ export function PromptBar({
                 ? "bg-black/[0.04] text-black/35"
                 : "bg-black/[0.06] text-black/80 hover:bg-black/[0.10] hover:text-black",
             )}
-            title={`Apply update to ${pendingUpdate.file}`}
+            title={`Apply update to ${pendingUpdate.edits.length} file${pendingUpdate.edits.length === 1 ? "" : "s"}`}
           >
             Apply update
           </button>
