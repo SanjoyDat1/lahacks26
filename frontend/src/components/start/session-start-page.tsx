@@ -242,7 +242,6 @@ export function SessionStartPage() {
   const [isRunning, setIsRunning] = useState(false);
   const [isDone, setIsDone] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [stage, setStage] = useState<StageId>("upload");
 	const [stageLabel, setStageLabel] = useState(
 		"Add a GitHub repo or uploads",
@@ -316,7 +315,6 @@ export function SessionStartPage() {
         const res = await fetch("/api/agent/stream");
         const data = (await res.json()) as { offline?: boolean; bootstrap_ws_url?: string };
         if (!cancelled) {
-          setAgentOnline(!data.offline);
           bootstrapWsUrlRef.current =
             typeof data.bootstrap_ws_url === "string" && data.bootstrap_ws_url.length > 0
               ? data.bootstrap_ws_url
@@ -324,7 +322,6 @@ export function SessionStartPage() {
         }
       } catch {
         if (!cancelled) {
-          setAgentOnline(false);
           bootstrapWsUrlRef.current = undefined;
         }
       }
@@ -627,7 +624,7 @@ export function SessionStartPage() {
   }, []);
 
   const runBootstrap = useCallback(() => {
-    if (!hasBootstrapSource || isRunning || agentOnline === false) return;
+    if (!hasBootstrapSource || isRunning) return;
 
     setIsRunning(true);
     setIsDone(false);
@@ -978,7 +975,6 @@ export function SessionStartPage() {
       };
     })();
   }, [
-    agentOnline,
     cleanupRestBootstrap,
     docs,
     githubApiList,
@@ -1027,7 +1023,7 @@ export function SessionStartPage() {
 						hasBootstrapSource={hasBootstrapSource}
 						isDragging={isDragging}
 						isRunning={isRunning}
-						canSubmit={hasBootstrapSource && agentOnline !== false}
+						canSubmit={hasBootstrapSource}
 						onTextChange={setEntryText}
 						onPasteGithubRepos={addGithubRepoUrls}
 						onBrowse={() => inputRef.current?.click()}
@@ -1289,8 +1285,7 @@ function UniversalStartEntry({
   const attachWrapRef = useRef<HTMLDivElement | null>(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
 
-  // canSubmit already requires hasBootstrapSource + agent reachable; don’t also require a
-  // derived attachment count — it could disagree with parent after Google import and block submit.
+  // canSubmit is hasBootstrapSource only; agent reachability is checked when you run (preflight / WS).
   const canRun = canSubmit && !isRunning;
 
   useEffect(() => {

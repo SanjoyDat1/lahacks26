@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 
 import { getBootstrapWebSocketUrlForClient } from "@/lib/bootstrap-ws-url";
 
-const AGENT_API = process.env.AGENT_API_URL ?? "http://localhost:8000";
+/** Prefer 127.0.0.1 so Node fetch matches browser WS (avoids IPv6 localhost quirks). */
+const AGENT_API = (process.env.AGENT_API_URL ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
 
 function withBootstrapWsUrl(payload: Record<string, unknown>) {
   const bootstrap_ws_url = getBootstrapWebSocketUrlForClient();
@@ -62,8 +63,26 @@ export async function POST(request: NextRequest) {
 
 export async function GET() {
   try {
-    const res = await fetch(`${AGENT_API}/tools`);
-    const data = (await res.json()) as Record<string, unknown>;
+    let res = await fetch(`${AGENT_API}/tools`, { cache: "no-store" });
+    if (!res.ok) {
+      res = await fetch(`${AGENT_API}/health`, { cache: "no-store" });
+    }
+    if (!res.ok) throw new Error(`agent ${res.status}`);
+    const data = res.ok && res.headers.get("content-type")?.includes("json")
+      ? ((await res.json()) as Record<string, unknown>)
+      : {};
+    if (!("reader" in data) && !("writer" in data)) {
+      return withBootstrapWsUrl({
+        reader: [
+          "list_reference_brain", "read_reference_file", "search_reference_brain",
+          "list_working_brain", "read_working_file", "search_working_brain",
+          "get_working_frontmatter", "semantic_search", "get_brief",
+        ],
+        writer: ["upsert_working_file", "replace_working_file", "propose_update", "record_audit"],
+        graph: null,
+        offline: false,
+      });
+    }
     return withBootstrapWsUrl({ ...data, offline: false });
   } catch {
     return withBootstrapWsUrl({
