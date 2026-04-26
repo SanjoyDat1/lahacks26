@@ -30,6 +30,10 @@ import {
   parseRepoSlugFromUrl,
 } from "@/lib/brain/bootstrap-scaffold";
 import { githubReposForApi, type GithubRepoFormRow } from "@/lib/brain/github-ingest";
+import {
+  SessionIntegrationSources,
+  type IntegrationDocBatch,
+} from "@/components/start/session-integration-sources";
 import { cn } from "@/lib/utils";
 
 function newGithubRepoRow(): GithubRepoFormRow {
@@ -183,13 +187,13 @@ export function SessionStartPage() {
   const [error, setError] = useState<string | null>(null);
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [stage, setStage] = useState<StageId>("upload");
-  const [stageLabel, setStageLabel] = useState("Add a GitHub repo URL to start");
+  const [stageLabel, setStageLabel] = useState("Add GitHub, Workspace sources, or uploads");
   const [, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
   const [, setEdges] = useState<GraphEdge[]>(INITIAL_EDGES);
   const [tree, setTree] = useState<BrainTreeNode[]>([]);
   const [createdFiles, setCreatedFiles] = useState<CreatedFile[]>([]);
   const [thinking, setThinking] = useState<string[]>([
-    "Paste a public GitHub repo URL to bootstrap a brain from the codebase. Extra PDFs or notes are optional.",
+    "Connect GitHub, Google Workspace, uploads, or meeting webhooks—everything merges into one bootstrap for the brain agent.",
   ]);
   const [resultText, setResultText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -252,6 +256,36 @@ export function SessionStartPage() {
     thinkingEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thinking]);
 
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const g = sp.get("google");
+    if (g === "connected") {
+      setThinking((p) => [
+        ...p,
+        "Google Workspace connected. Pick Drive files, paste a Sheet URL, and/or add a calendar snapshot, then import into this session.",
+      ]);
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (g === "error") {
+      const msg = sp.get("message") ?? "unknown";
+      setThinking((p) => [...p, `Google: ${decodeURIComponent(msg)}`]);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  const appendFromIntegration = useCallback((items: IntegrationDocBatch[]) => {
+    const nextDocs: UploadDoc[] = items.map((item) => ({
+      id: `int-${item.name}-${item.chars}-${Math.random().toString(36).slice(2, 9)}`,
+      name: item.name,
+      text: item.text,
+      content_base64: item.content_base64,
+      mime_type: item.mime_type,
+      size: item.size,
+      chars: item.chars,
+      status: "ready",
+    }));
+    setDocs((prev) => [...prev, ...nextDocs]);
+  }, []);
+
   const resetRun = useCallback(() => {
     cleanupRestBootstrap();
     socketRef.current?.close();
@@ -260,14 +294,14 @@ export function SessionStartPage() {
     setIsDone(false);
     setError(null);
     setStage("upload");
-    setStageLabel("Add a GitHub repo URL to start");
+    setStageLabel("Add GitHub, Workspace sources, or uploads");
     setNodes(INITIAL_NODES);
     setEdges(INITIAL_EDGES);
     setTree([]);
     setCreatedFiles([]);
     setResultText("");
     setThinking([
-      "Paste a public GitHub repo URL to bootstrap a brain from the codebase. Extra PDFs or notes are optional.",
+      "Connect GitHub, Google Workspace, uploads, or meeting webhooks—everything merges into one bootstrap for the brain agent.",
     ]);
     setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
     setGithubRepos([newGithubRepoRow()]);
@@ -534,7 +568,7 @@ export function SessionStartPage() {
             setError(formatInitializeErrorDetail(raw, res.status));
             setIsRunning(false);
             setStage("upload");
-            setStageLabel("Add a GitHub repo URL to start");
+            setStageLabel("Add GitHub, Workspace sources, or uploads");
             return;
           }
 
@@ -604,7 +638,7 @@ export function SessionStartPage() {
           setError(e instanceof Error ? e.message : "Initialize request failed");
           setIsRunning(false);
           setStage("upload");
-          setStageLabel("Add a GitHub repo URL to start");
+          setStageLabel("Add GitHub, Workspace sources, or uploads");
         }
       })();
       return;
@@ -694,7 +728,7 @@ export function SessionStartPage() {
       />
 
       {!buildMode ? (
-        <section className="mx-auto flex min-h-[calc(100vh-120px)] max-w-4xl flex-col items-center justify-center">
+        <section className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-6xl flex-col pb-10">
           <div className="mb-8 text-center">
             <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-violet-200/60 bg-white/75 px-4 py-2 text-xs font-semibold text-violet-700 shadow-sm backdrop-blur-2xl">
               <Sparkles size={13} className="text-violet-500" />
@@ -703,98 +737,112 @@ export function SessionStartPage() {
             <h1 className="mt-6 text-5xl font-bold tracking-tight text-slate-950 md:text-6xl">
               Paste a repo. Get a codebase brain.
             </h1>
-            <p className="mx-auto mt-4 max-w-2xl text-base leading-7 text-slate-500">
-              Built for real codebases: link a public GitHub repository and we clone, scan, and distill it into a structured brain. Drop extra PDFs or notes only if you want more context.
+            <p className="mx-auto mt-4 max-w-3xl text-base leading-7 text-slate-500">
+              Wire up <span className="font-semibold text-slate-700">GitHub</span>,{" "}
+              <span className="font-semibold text-slate-700">Google Workspace</span> (Drive, Docs, Sheets, Calendar),{" "}
+              <span className="font-semibold text-slate-700">Slack</span> (soon), and{" "}
+              <span className="font-semibold text-slate-700">ElevenLabs</span> meeting transcripts—then run one unified bootstrap into your brain.
             </p>
           </div>
 
-          <div className="w-full max-w-3xl rounded-[2rem] border border-slate-200/80 bg-white/70 p-5 shadow-sm backdrop-blur-xl">
-            <div className="mb-3 flex items-center gap-2">
-              <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-slate-900 text-white shadow-sm">
-                <GitBranch size={16} />
-              </span>
-              <div>
-                <p className="text-sm font-semibold text-slate-800">GitHub repository — primary</p>
-                <p className="text-xs text-slate-500">
-                  Public HTTPS only. One URL is enough to initialize; no uploads required. We shallow-clone and rank source files like an IDE would.
-                </p>
-              </div>
-            </div>
-            <div className="space-y-3">
-              {githubRepos.map((row, index) => (
-                <div key={row.id} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                  <label className="block min-w-0 flex-1">
-                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Repo URL {githubRepos.length > 1 ? `#${index + 1}` : ""}
-                    </span>
-                    <input
-                      type="url"
-                      placeholder="https://github.com/owner/repo"
-                      value={row.url}
-                      disabled={isRunning}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, url: v } : r)));
-                      }}
-                      className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none ring-violet-500/0 transition focus:ring-2 focus:ring-violet-500/30"
-                    />
-                  </label>
-                  <label className="block w-full sm:w-36">
-                    <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch (opt.)</span>
-                    <input
-                      type="text"
-                      placeholder="main"
-                      value={row.ref}
-                      disabled={isRunning}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, ref: v } : r)));
-                      }}
-                      className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-violet-500/30"
-                    />
-                  </label>
-                  {githubRepos.length > 1 && (
-                    <button
-                      type="button"
-                      disabled={isRunning}
-                      onClick={() => setGithubRepos((prev) => prev.filter((r) => r.id !== row.id))}
-                      className="rounded-xl border border-slate-200/80 px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
-                    >
-                      Remove
-                    </button>
-                  )}
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+            <div className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-5 shadow-sm backdrop-blur-xl">
+              <div className="mb-3 flex items-center gap-3">
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 shadow-md shadow-slate-300/30">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/brand/github.svg" alt="" className="h-7 w-7" draggable={false} />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-slate-800">GitHub repository</p>
+                  <p className="text-xs text-slate-500">
+                    Public HTTPS. Shallow clone + ranked source scan—still the fastest way to anchor the brain in code.
+                  </p>
                 </div>
-              ))}
+              </div>
+              <div className="space-y-3">
+                {githubRepos.map((row, index) => (
+                  <div key={row.id} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label className="block min-w-0 flex-1">
+                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                        Repo URL {githubRepos.length > 1 ? `#${index + 1}` : ""}
+                      </span>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/owner/repo"
+                        value={row.url}
+                        disabled={isRunning}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, url: v } : r)));
+                        }}
+                        className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none ring-violet-500/0 transition focus:ring-2 focus:ring-violet-500/30"
+                      />
+                    </label>
+                    <label className="block w-full sm:w-36">
+                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch (opt.)</span>
+                      <input
+                        type="text"
+                        placeholder="main"
+                        value={row.ref}
+                        disabled={isRunning}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, ref: v } : r)));
+                        }}
+                        className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-violet-500/30"
+                      />
+                    </label>
+                    {githubRepos.length > 1 && (
+                      <button
+                        type="button"
+                        disabled={isRunning}
+                        onClick={() => setGithubRepos((prev) => prev.filter((r) => r.id !== row.id))}
+                        className="rounded-xl border border-slate-200/80 px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {githubRepos.length < 4 && (
+                <button
+                  type="button"
+                  disabled={isRunning}
+                  onClick={() => setGithubRepos((prev) => [...prev, newGithubRepoRow()])}
+                  className="mt-3 text-xs font-semibold text-violet-600 hover:text-violet-800 disabled:opacity-50"
+                >
+                  + Add another repository
+                </button>
+              )}
             </div>
-            {githubRepos.length < 4 && (
-              <button
-                type="button"
-                disabled={isRunning}
-                onClick={() => setGithubRepos((prev) => [...prev, newGithubRepoRow()])}
-                className="mt-3 text-xs font-semibold text-violet-600 hover:text-violet-800 disabled:opacity-50"
-              >
-                + Add another repository
-              </button>
-            )}
+
+            <SessionIntegrationSources
+              disabled={isRunning}
+              onImported={appendFromIntegration}
+              onLog={(msg) => setThinking((prev) => [...prev, msg])}
+            />
           </div>
 
-          <DocumentDropzone
-            docs={docs}
-            isDragging={isDragging}
-            isRunning={isRunning}
-            onBrowse={() => inputRef.current?.click()}
-            onRemove={(id) => setDocs((prev) => prev.filter((doc) => doc.id !== id))}
-            onDragOver={(event) => {
-              event.preventDefault();
-              setIsDragging(true);
-            }}
-            onDragLeave={() => setIsDragging(false)}
-            onDrop={handleDrop}
-            variant="hero"
-            supportingFiles
-          />
+          <div className="mt-6">
+            <DocumentDropzone
+              docs={docs}
+              isDragging={isDragging}
+              isRunning={isRunning}
+              onBrowse={() => inputRef.current?.click()}
+              onRemove={(id) => setDocs((prev) => prev.filter((doc) => doc.id !== id))}
+              onDragOver={(event) => {
+                event.preventDefault();
+                setIsDragging(true);
+              }}
+              onDragLeave={() => setIsDragging(false)}
+              onDrop={handleDrop}
+              variant="hero"
+              supportingFiles
+            />
+          </div>
 
-          <div className="mt-6 flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <AgentStatus online={agentOnline} compact />
             <button
               onClick={runBootstrap}
@@ -811,7 +859,7 @@ export function SessionStartPage() {
             </button>
           </div>
 
-          {error && <div className="mt-4 w-full max-w-3xl"><ErrorBanner message={error} /></div>}
+          {error ? <div className="mt-4 w-full"><ErrorBanner message={error} /></div> : null}
         </section>
       ) : (
         <section className="mx-auto flex max-w-screen-2xl flex-col gap-5 pb-10">

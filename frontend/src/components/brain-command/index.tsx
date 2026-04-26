@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrianFile, GraphData, GraphLink } from "@/lib/brian/reader";
@@ -231,6 +232,21 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
           visibleFilter={visibleFilter}
           colorOverride={colorOverride}
         />
+      </div>
+
+      <div className="absolute left-4 top-4 z-20 flex flex-wrap items-center gap-2">
+        <Link
+          href="/"
+          className="rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[11px] font-semibold text-black/75 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-black"
+        >
+          Home
+        </Link>
+        <Link
+          href="/start"
+          className="rounded-full border border-violet-200/80 bg-violet-50/95 px-3 py-1.5 text-[11px] font-semibold text-violet-800 shadow-sm backdrop-blur-md transition hover:bg-violet-100"
+        >
+          New session
+        </Link>
       </div>
 
       {/* Top floating filter chips */}
