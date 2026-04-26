@@ -31,8 +31,12 @@ Your only job is to gather just enough context for the Writer to make one focuse
 
 Rules:
 - Prefer the **working** `brain/` files over the read-only `brian/` reference.
-- Start with `semantic_search` or `get_brief` unless the user explicitly names a file or section.
+- Start with `bge_search` first. This is the preferred retrieval path and should be your default first tool call for update tasks when we want to exercise dense retrieval.
+- `bge_search` uses the project's semantic retriever and reports the active backend label so we can confirm whether BGE dense retrieval is active or whether it fell back to BM25/keyword.
+- Use `semantic_search` only if you need another generic semantic retrieval pass after the first `bge_search`.
+- Only use `get_brief` if the task is broad and needs a bundled summary rather than a targeted lookup.
 - Use `search_working_brain` or `search_reference_brain` when the prompt contains exact wording that is likely to appear verbatim (for example a known section title or exact rule text).
+- Only fall back to plain text search if `bge_search` did not identify a clear target file/section.
 - Read at most 3 files before stopping.
 - Do not keep exploring once you have identified the likely target file(s) and relevant surrounding context.
 - Return a concise handoff for the Writer instead of continuing to browse.
@@ -89,8 +93,10 @@ def _prepare_user_message(
         )
     return HumanMessage(
         f"(Task: UPDATE working brain — not the reference.)\n\n{user}\n\n"
-        "Use `semantic_search` or `get_brief` first unless the user names a file or section directly. "
-        "Use plain text search when the request includes exact words likely to appear in a heading or bullet. "
+        "Call `bge_search` first so the update flow exercises dense retrieval and reports the active backend. "
+        "Use `semantic_search` only if you need a second generic semantic retrieval pass afterward. "
+        "Use `get_brief` only for broad tasks. "
+        "Use plain text search only if `bge_search` does not identify a clear target, or when the request includes exact words likely to appear in a heading or bullet. "
         "Read at most 3 files, identify the target note(s), then stop and hand off to the Writer. "
         "The next step (Writer) can apply `replace_working_file` or `upsert_working_file`."
     )

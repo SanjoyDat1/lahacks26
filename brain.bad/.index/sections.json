@@ -1,0 +1,2517 @@
+{
+  "version": 1,
+  "file_mtimes": {
+    "brian/agents/coding_agent_prompt.md": 1777148161.0278225,
+    "brian/agents/distiller_agent_prompt.md": 1777148161.0280933,
+    "brian/architecture/brain_storage.md": 1777148161.0331473,
+    "brian/architecture/data_model.md": 1777148161.032012,
+    "brian/architecture/distillation_pipeline.md": 1777148161.0325632,
+    "brian/architecture/ingestion_pipeline.md": 1777148161.0323606,
+    "brian/architecture/runtime_flow.md": 1777148161.032942,
+    "brian/architecture/system_overview.md": 1777148161.0327518,
+    "brian/context/constraints.md": 1777148161.0263293,
+    "brian/context/open_questions.md": 1777148161.0259626,
+    "brian/decisions/ADR-0001-git-backed-brain.md": 1777148161.030461,
+    "brian/decisions/ADR-0002-local-demo-fallbacks.md": 1777148161.030224,
+    "brian/decisions/decision_log.md": 1777148161.0306892,
+    "brian/goals/product_goals.md": 1777148161.027341,
+    "brian/index.md": 1777148161.0334404,
+    "brian/integrations/github.md": 1777148161.0313435,
+    "brian/integrations/meetings.md": 1777148161.0315878,
+    "brian/integrations/slack.md": 1777148161.0311077,
+    "brian/map.md": 1777148161.0268507,
+    "brian/summaries/architecture_summary.md": 1777148161.0344892,
+    "brian/summaries/project_summary.md": 1777148161.0339997,
+    "data_model.md": 1777147979.5768611
+  },
+  "sections": [
+    {
+      "file_path": "brian/agents/coding_agent_prompt.md",
+      "section_id": "brian/agents/coding_agent_prompt.md#_intro",
+      "heading": "Intro",
+      "content": "# Coding Agent Prompt\n\nYou are a coding agent working on the AI Brain project.\n\nYour job is to make code changes that preserve the project's brain-backed source of truth.",
+      "frontmatter": {
+        "id": "agents.coding_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Coding Agent Prompt",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "coding agent",
+          "system prompt",
+          "implementation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/coding_agent_prompt.md",
+      "section_id": "brian/agents/coding_agent_prompt.md#before-coding",
+      "heading": "Before Coding",
+      "content": "1. Read `brian/index.md`.\n2. Read `brian/summaries/project_summary.md`.\n3. Read the architecture file most relevant to the change.\n4. Read `brian/decisions/decision_log.md` if the change affects architecture, product behavior, storage, integrations, or agent behavior.",
+      "frontmatter": {
+        "id": "agents.coding_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Coding Agent Prompt",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "coding agent",
+          "system prompt",
+          "implementation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/coding_agent_prompt.md",
+      "section_id": "brian/agents/coding_agent_prompt.md#while-coding",
+      "heading": "While Coding",
+      "content": "- Prefer existing project patterns over new abstractions.\n- Keep local demo mode working unless the task explicitly removes it.\n- Preserve production paths for Postgres, OpenAI, and GitHub.\n- Do not make the app require credentials for basic local testing.\n- If you change an API route, verify the corresponding UI still works.\n- If you change brain structure, update `brian/map.md` and any affected summary.",
+      "frontmatter": {
+        "id": "agents.coding_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Coding Agent Prompt",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "coding agent",
+          "system prompt",
+          "implementation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/coding_agent_prompt.md",
+      "section_id": "brian/agents/coding_agent_prompt.md#when-making-durable-decisions",
+      "heading": "When Making Durable Decisions",
+      "content": "If you introduce a durable architecture or product decision:\n\n1. Add or update an ADR under `brian/decisions/`.\n2. Link the ADR from `brian/decisions/decision_log.md`.\n3. Link impacted architecture files.\n4. Keep the decision short, explicit, and source-aware.",
+      "frontmatter": {
+        "id": "agents.coding_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Coding Agent Prompt",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "coding agent",
+          "system prompt",
+          "implementation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/coding_agent_prompt.md",
+      "section_id": "brian/agents/coding_agent_prompt.md#retrieval-rules",
+      "heading": "Retrieval Rules",
+      "content": "- Read summaries first.\n- Follow links instead of scanning every file.\n- Use frontmatter `type`, `importance`, and `keywords` to decide relevance.\n- Prefer specific files over broad summaries once you know the task area.",
+      "frontmatter": {
+        "id": "agents.coding_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Coding Agent Prompt",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "coding agent",
+          "system prompt",
+          "implementation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/coding_agent_prompt.md",
+      "section_id": "brian/agents/coding_agent_prompt.md#never",
+      "heading": "Never",
+      "content": "- Create unlinked brain files.\n- Dump raw chat or transcript text into permanent brain files.\n- Remove historical decisions without superseding them.\n- Break local demo mode while adding production functionality.",
+      "frontmatter": {
+        "id": "agents.coding_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Coding Agent Prompt",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "coding agent",
+          "system prompt",
+          "implementation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/distiller_agent_prompt.md",
+      "section_id": "brian/agents/distiller_agent_prompt.md#_intro",
+      "heading": "Intro",
+      "content": "# Distiller Agent Prompt\n\nYou are the Context Distiller for AI Brain.\n\nYour job is to decide whether new source context should update the project brain.",
+      "frontmatter": {
+        "id": "agents.distiller_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Distiller Agent Prompt",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "context.constraints"
+        ],
+        "keywords": [
+          "distiller",
+          "significance",
+          "brain updates"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/distiller_agent_prompt.md",
+      "section_id": "brian/agents/distiller_agent_prompt.md#input",
+      "heading": "Input",
+      "content": "You receive:\n\n- normalized event metadata\n- source text\n- current brain summaries\n- relevant linked brain files",
+      "frontmatter": {
+        "id": "agents.distiller_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Distiller Agent Prompt",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "context.constraints"
+        ],
+        "keywords": [
+          "distiller",
+          "significance",
+          "brain updates"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/distiller_agent_prompt.md",
+      "section_id": "brian/agents/distiller_agent_prompt.md#output",
+      "heading": "Output",
+      "content": "Return structured JSON with:\n\n- `significant`: boolean\n- `significance`: `high`, `medium`, `low`, or `none`\n- `rationale`: short explanation\n- `files`: brain files that should change\n- `update`: proposed Markdown change",
+      "frontmatter": {
+        "id": "agents.distiller_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Distiller Agent Prompt",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "context.constraints"
+        ],
+        "keywords": [
+          "distiller",
+          "significance",
+          "brain updates"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/distiller_agent_prompt.md",
+      "section_id": "brian/agents/distiller_agent_prompt.md#significant-context",
+      "heading": "Significant Context",
+      "content": "Mark an event significant if it changes:\n\n- goals\n- architecture\n- constraints\n- data model\n- integrations\n- security posture\n- launch requirements\n- open questions\n- agent behavior",
+      "frontmatter": {
+        "id": "agents.distiller_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Distiller Agent Prompt",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "context.constraints"
+        ],
+        "keywords": [
+          "distiller",
+          "significance",
+          "brain updates"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/distiller_agent_prompt.md",
+      "section_id": "brian/agents/distiller_agent_prompt.md#not-significant",
+      "heading": "Not Significant",
+      "content": "Do not update the brain for:\n\n- casual acknowledgements\n- repeated information\n- vague preferences without decision impact\n- raw logs with no durable meaning",
+      "frontmatter": {
+        "id": "agents.distiller_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Distiller Agent Prompt",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "context.constraints"
+        ],
+        "keywords": [
+          "distiller",
+          "significance",
+          "brain updates"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/agents/distiller_agent_prompt.md",
+      "section_id": "brian/agents/distiller_agent_prompt.md#brain-writing-rules",
+      "heading": "Brain Writing Rules",
+      "content": "- Write concise updates.\n- Link related files.\n- Update summaries when a detailed file changes materially.\n- Add decisions to the decision log or ADR files.\n- Add unresolved ambiguity to open questions.\n- Avoid copying long raw event text into the brain.",
+      "frontmatter": {
+        "id": "agents.distiller_agent_prompt",
+        "type": "agent_prompt",
+        "title": "Distiller Agent Prompt",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "context.constraints"
+        ],
+        "keywords": [
+          "distiller",
+          "significance",
+          "brain updates"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/brain_storage.md",
+      "section_id": "brian/architecture/brain_storage.md#_intro",
+      "heading": "Intro",
+      "content": "# Brain Storage\n\nThe brain is a set of Markdown files that humans and coding agents can read.",
+      "frontmatter": {
+        "id": "architecture.brain_storage",
+        "type": "architecture",
+        "title": "Brain Storage",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.distillation_pipeline",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail",
+          "brain files"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/brain_storage.md",
+      "section_id": "brian/architecture/brain_storage.md#production-storage",
+      "heading": "Production Storage",
+      "content": "Production uses GitHub as the source of truth.\n\nRequired env vars:\n\n- `GITHUB_TOKEN`\n- `BRAIN_REPO_OWNER`\n- `BRAIN_REPO_NAME`\n- `BRAIN_REPO_BRANCH`\n\nWhen these are set, brain reads and writes go through the GitHub Contents API. Human edits and AI distillation updates become commits.",
+      "frontmatter": {
+        "id": "architecture.brain_storage",
+        "type": "architecture",
+        "title": "Brain Storage",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.distillation_pipeline",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail",
+          "brain files"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/brain_storage.md",
+      "section_id": "brian/architecture/brain_storage.md#local-demo-storage",
+      "heading": "Local Demo Storage",
+      "content": "If GitHub env vars are not configured, the app uses an in-memory brain seeded from defaults in `src/lib/brain/defaults.ts`.\n\nThis is useful for local testing but resets when the server restarts.",
+      "frontmatter": {
+        "id": "architecture.brain_storage",
+        "type": "architecture",
+        "title": "Brain Storage",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.distillation_pipeline",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail",
+          "brain files"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/brain_storage.md",
+      "section_id": "brian/architecture/brain_storage.md#recommended-future-brain-shape",
+      "heading": "Recommended Future Brain Shape",
+      "content": "The current runtime brain is flat. This example `brian/` folder proposes a graph-shaped brain:\n\n- strict frontmatter\n- flexible typed body sections\n- summaries for fast lookup\n- map file for visualization\n- backlinks for traversal",
+      "frontmatter": {
+        "id": "architecture.brain_storage",
+        "type": "architecture",
+        "title": "Brain Storage",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.distillation_pipeline",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail",
+          "brain files"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/brain_storage.md",
+      "section_id": "brian/architecture/brain_storage.md#agent-rule",
+      "heading": "Agent Rule",
+      "content": "Agents should never create orphan brain files. Every new file should be linked from at least one existing file, and important files should be linked from `index.md` or `map.md`.",
+      "frontmatter": {
+        "id": "architecture.brain_storage",
+        "type": "architecture",
+        "title": "Brain Storage",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.distillation_pipeline",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail",
+          "brain files"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/data_model.md",
+      "section_id": "brian/architecture/data_model.md#_intro",
+      "heading": "Intro",
+      "content": "# Data Model\n\nThe database schema is defined in `src/lib/db/schema.ts` with Drizzle ORM.",
+      "frontmatter": {
+        "id": "architecture.data_model",
+        "type": "architecture",
+        "title": "Data Model",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.runtime_flow",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "database",
+          "schema",
+          "Postgres",
+          "pgvector"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/data_model.md",
+      "section_id": "brian/architecture/data_model.md#tables",
+      "heading": "Tables",
+      "content": "### events\n\nStores normalized raw events from GitHub, GitLab, Slack, Discord, meetings, and manual/demo sources.\n\nImportant fields:\n\n- `source`\n- `sourceEventId`\n- `sourceUrl`\n- `actor`\n- `title`\n- `body`\n- `repository`\n- `channel`\n- `eventType`\n- `payload`\n- `status`\n- `significance`\n- `distillerSummary`\n\n### documents\n\nStores searchable text chunks derived from events.\n\nImportant fields:\n\n- `eventId`\n- `source`\n- `text`\n- `sourceUrl`\n- `embedding`\n\nThe `embedding` column is `vector(1536)` and is intended for pgvector cosine search.\n\n### brain_updates\n\nStores audit metadata for AI-generated brain updates.\n\nImportant fields:\n\n- `eventId`\n- `status`\n- `rationale`\n- `changedFiles`\n- `commitSha`\n- `diffSummary`\n\n### integrations\n\nStores source setup state and last-seen event metadata.",
+      "frontmatter": {
+        "id": "architecture.data_model",
+        "type": "architecture",
+        "title": "Data Model",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.runtime_flow",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "database",
+          "schema",
+          "Postgres",
+          "pgvector"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/data_model.md",
+      "section_id": "brian/architecture/data_model.md#lookup-strategy",
+      "heading": "Lookup Strategy",
+      "content": "Fast lookup should use this order:\n\n1. `summaries/*.md` for high-level project context.\n2. `documents` vector search for source event context.\n3. Specific brain files linked from `index.md` or `map.md`.\n4. Raw `events.payload` only when source-specific details are needed.",
+      "frontmatter": {
+        "id": "architecture.data_model",
+        "type": "architecture",
+        "title": "Data Model",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.runtime_flow",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "database",
+          "schema",
+          "Postgres",
+          "pgvector"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/data_model.md",
+      "section_id": "brian/architecture/data_model.md#current-tradeoff",
+      "heading": "Current Tradeoff",
+      "content": "The memory fallback is intentionally non-durable. It exists so the product can be demoed instantly. Production reliability requires a real `DATABASE_URL`.",
+      "frontmatter": {
+        "id": "architecture.data_model",
+        "type": "architecture",
+        "title": "Data Model",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.runtime_flow",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "database",
+          "schema",
+          "Postgres",
+          "pgvector"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/distillation_pipeline.md",
+      "section_id": "brian/architecture/distillation_pipeline.md#_intro",
+      "heading": "Intro",
+      "content": "# Distillation Pipeline\n\nThe distillation pipeline decides whether incoming context should change the project brain.",
+      "frontmatter": {
+        "id": "architecture.distillation_pipeline",
+        "type": "architecture",
+        "title": "Distillation Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "architecture.brain_storage",
+          "agents.distiller_agent_prompt"
+        ],
+        "keywords": [
+          "distillation",
+          "embeddings",
+          "significance",
+          "LLM"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/distillation_pipeline.md",
+      "section_id": "brian/architecture/distillation_pipeline.md#current-flow",
+      "heading": "Current Flow",
+      "content": "1. Format the event into canonical text.\n2. Generate an embedding for semantic search.\n3. Store the canonical text as a document.\n4. Read the existing brain files.\n5. Ask the LLM whether the event changes durable context.\n6. Use heuristic fallback when no LLM is configured.\n7. If significant, append an entry to a brain file.\n8. Store a `brain_updates` row with rationale and commit metadata.",
+      "frontmatter": {
+        "id": "architecture.distillation_pipeline",
+        "type": "architecture",
+        "title": "Distillation Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "architecture.brain_storage",
+          "agents.distiller_agent_prompt"
+        ],
+        "keywords": [
+          "distillation",
+          "embeddings",
+          "significance",
+          "LLM"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/distillation_pipeline.md",
+      "section_id": "brian/architecture/distillation_pipeline.md#significance-criteria",
+      "heading": "Significance Criteria",
+      "content": "Events are significant when they change or clarify:\n\n- product goals\n- architecture\n- data model\n- external integration requirements\n- security assumptions\n- launch constraints\n- agent behavior\n- open questions\n- durable team decisions\n\nEvents are usually not significant when they are:\n\n- casual acknowledgements\n- status-only messages\n- duplicate information\n- implementation details already captured elsewhere",
+      "frontmatter": {
+        "id": "architecture.distillation_pipeline",
+        "type": "architecture",
+        "title": "Distillation Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "architecture.brain_storage",
+          "agents.distiller_agent_prompt"
+        ],
+        "keywords": [
+          "distillation",
+          "embeddings",
+          "significance",
+          "LLM"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/distillation_pipeline.md",
+      "section_id": "brian/architecture/distillation_pipeline.md#current-limitation",
+      "heading": "Current Limitation",
+      "content": "The first implementation mostly appends to `brain/decision_log.md`. A stronger future version should route updates to typed files like `architecture/*.md`, `goals/*.md`, and `context/open_questions.md`.",
+      "frontmatter": {
+        "id": "architecture.distillation_pipeline",
+        "type": "architecture",
+        "title": "Distillation Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "architecture.brain_storage",
+          "agents.distiller_agent_prompt"
+        ],
+        "keywords": [
+          "distillation",
+          "embeddings",
+          "significance",
+          "LLM"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/ingestion_pipeline.md",
+      "section_id": "brian/architecture/ingestion_pipeline.md#_intro",
+      "heading": "Intro",
+      "content": "# Ingestion Pipeline\n\nThe ingestion pipeline accepts external context and converts it into a normalized event that the rest of the app can process consistently.",
+      "frontmatter": {
+        "id": "architecture.ingestion_pipeline",
+        "type": "architecture",
+        "title": "Ingestion Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "ingestion",
+          "webhooks",
+          "normalization"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/ingestion_pipeline.md",
+      "section_id": "brian/architecture/ingestion_pipeline.md#endpoint",
+      "heading": "Endpoint",
+      "content": "All sources use:\n\n```text\nPOST /api/ingest/[source]\n```\n\nSupported source values:\n\n- `github`\n- `gitlab`\n- `slack`\n- `discord`\n- `meetings`",
+      "frontmatter": {
+        "id": "architecture.ingestion_pipeline",
+        "type": "architecture",
+        "title": "Ingestion Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "ingestion",
+          "webhooks",
+          "normalization"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/ingestion_pipeline.md",
+      "section_id": "brian/architecture/ingestion_pipeline.md#validation",
+      "heading": "Validation",
+      "content": "Webhook verification is optional in local demos and active when secrets are configured.\n\n- GitHub uses `GITHUB_WEBHOOK_SECRET`.\n- GitLab uses `GITLAB_WEBHOOK_SECRET`.\n- Slack uses `SLACK_SIGNING_SECRET`.\n- Discord uses `DISCORD_WEBHOOK_SECRET`.\n- Meetings use `MEETINGS_WEBHOOK_SECRET`.",
+      "frontmatter": {
+        "id": "architecture.ingestion_pipeline",
+        "type": "architecture",
+        "title": "Ingestion Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "ingestion",
+          "webhooks",
+          "normalization"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/ingestion_pipeline.md",
+      "section_id": "brian/architecture/ingestion_pipeline.md#normalization-contract",
+      "heading": "Normalization Contract",
+      "content": "Every source becomes a `NormalizedEvent`:\n\n- `source`\n- `sourceEventId`\n- `sourceUrl`\n- `actor`\n- `title`\n- `body`\n- `repository`\n- `channel`\n- `eventType`\n- `payload`",
+      "frontmatter": {
+        "id": "architecture.ingestion_pipeline",
+        "type": "architecture",
+        "title": "Ingestion Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "ingestion",
+          "webhooks",
+          "normalization"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/ingestion_pipeline.md",
+      "section_id": "brian/architecture/ingestion_pipeline.md#useful-coding-context",
+      "heading": "Useful Coding Context",
+      "content": "If adding a new source, update:\n\n- `src/lib/types.ts`\n- `src/lib/ingest/normalizers.ts`\n- `src/lib/ingest/security.ts`\n- `src/lib/db/store.ts` integration list if it should appear in the UI\n- this brain folder's integration files and map",
+      "frontmatter": {
+        "id": "architecture.ingestion_pipeline",
+        "type": "architecture",
+        "title": "Ingestion Pipeline",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.runtime_flow",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "ingestion",
+          "webhooks",
+          "normalization"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/runtime_flow.md",
+      "section_id": "brian/architecture/runtime_flow.md#_intro",
+      "heading": "Intro",
+      "content": "# Runtime Flow\n\nThis file describes what happens when a new piece of human context enters the system.",
+      "frontmatter": {
+        "id": "architecture.runtime_flow",
+        "type": "architecture",
+        "title": "Runtime Flow",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "runtime",
+          "request flow",
+          "ingestion",
+          "distillation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/runtime_flow.md",
+      "section_id": "brian/architecture/runtime_flow.md#webhook-to-brain-update",
+      "heading": "Webhook To Brain Update",
+      "content": "```mermaid\nsequenceDiagram\n  participant Source as External Source\n  participant API as Ingestion API\n  participant Store as Event Store\n  participant Distiller as Distiller\n  participant Brain as Brain Provider\n  participant UI as Product UI\n\n  Source->>API: POST webhook payload\n  API->>API: verify signature if configured\n  API->>API: normalize payload\n  API->>Store: create event\n  API->>Distiller: distill event\n  Distiller->>Store: create searchable document\n  Distiller->>Distiller: classify significance\n  alt Significant\n    Distiller->>Brain: append Markdown update\n    Brain->>Brain: commit to GitHub or memory\n    Distiller->>Store: create brain update\n  else Not significant\n    Distiller->>Store: mark event ignored\n  end\n  UI->>Store: read events and updates\n  UI->>Brain: read brain files\n```",
+      "frontmatter": {
+        "id": "architecture.runtime_flow",
+        "type": "architecture",
+        "title": "Runtime Flow",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "runtime",
+          "request flow",
+          "ingestion",
+          "distillation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/runtime_flow.md",
+      "section_id": "brian/architecture/runtime_flow.md#important-failure-behavior",
+      "heading": "Important Failure Behavior",
+      "content": "- If no database is configured, `src/lib/db/store.ts` falls back to memory.\n- If no OpenAI key is configured, `src/lib/llm/client.ts` falls back to deterministic embeddings and heuristic distillation.\n- If no GitHub brain repo is configured, `src/lib/brain/provider.ts` falls back to memory.\n- Placeholder database URLs should be ignored so local demo mode does not attempt a fake network connection.",
+      "frontmatter": {
+        "id": "architecture.runtime_flow",
+        "type": "architecture",
+        "title": "Runtime Flow",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "runtime",
+          "request flow",
+          "ingestion",
+          "distillation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/runtime_flow.md",
+      "section_id": "brian/architecture/runtime_flow.md#files-to-read-before-editing-flow",
+      "heading": "Files To Read Before Editing Flow",
+      "content": "- `src/app/api/ingest/[source]/route.ts`\n- `src/lib/ingest/service.ts`\n- `src/lib/distiller/index.ts`\n- `src/lib/db/store.ts`\n- `src/lib/brain/provider.ts`",
+      "frontmatter": {
+        "id": "architecture.runtime_flow",
+        "type": "architecture",
+        "title": "Runtime Flow",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "runtime",
+          "request flow",
+          "ingestion",
+          "distillation"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/system_overview.md",
+      "section_id": "brian/architecture/system_overview.md#_intro",
+      "heading": "Intro",
+      "content": "# System Overview\n\nAI Brain is a context pipeline for teams that use LLM coding agents.\n\nThe product turns unstructured human communication into a structured Markdown brain. The brain becomes the shared source of truth for humans and agents.",
+      "frontmatter": {
+        "id": "architecture.system_overview",
+        "type": "architecture",
+        "title": "System Overview",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.architecture_summary",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "system design",
+          "Next.js",
+          "pipeline",
+          "brain"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/system_overview.md",
+      "section_id": "brian/architecture/system_overview.md#system-role",
+      "heading": "System Role",
+      "content": "The app handles five jobs:\n\n1. Capture engineering context from external streams.\n2. Normalize source-specific payloads into one event model.\n3. Store raw context and searchable embeddings.\n4. Distill durable project knowledge into Markdown.\n5. Expose a human-editable, Git-auditable brain.",
+      "frontmatter": {
+        "id": "architecture.system_overview",
+        "type": "architecture",
+        "title": "System Overview",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.architecture_summary",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "system design",
+          "Next.js",
+          "pipeline",
+          "brain"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/system_overview.md",
+      "section_id": "brian/architecture/system_overview.md#main-components",
+      "heading": "Main Components",
+      "content": "- Ingestion API: accepts webhook events from external tools.\n- Store adapter: writes to Postgres when configured, otherwise memory.\n- Distiller: embeds text, classifies significance, writes brain updates.\n- Brain provider: writes files to GitHub when configured, otherwise memory.\n- Product UI: lets humans inspect, search, and edit project memory.",
+      "frontmatter": {
+        "id": "architecture.system_overview",
+        "type": "architecture",
+        "title": "System Overview",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.architecture_summary",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "system design",
+          "Next.js",
+          "pipeline",
+          "brain"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/system_overview.md",
+      "section_id": "brian/architecture/system_overview.md#current-runtime-modes",
+      "heading": "Current Runtime Modes",
+      "content": "### Local Demo Mode\n\nUsed when `DATABASE_URL`, `OPENAI_API_KEY`, or GitHub brain env vars are missing or placeholders.\n\nBehavior:\n\n- Events live in memory.\n- Brain files live in memory.\n- Embeddings are deterministic local vectors.\n- Distillation uses keyword heuristics.\n- No external setup is required.\n\n### Production Mode\n\nUsed when real env vars are configured.\n\nBehavior:\n\n- Postgres stores events, documents, integrations, and brain updates.\n- pgvector powers semantic search.\n- OpenAI generates embeddings and structured distillation results.\n- GitHub stores Markdown brain files and commit history.",
+      "frontmatter": {
+        "id": "architecture.system_overview",
+        "type": "architecture",
+        "title": "System Overview",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.architecture_summary",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "system design",
+          "Next.js",
+          "pipeline",
+          "brain"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/architecture/system_overview.md",
+      "section_id": "brian/architecture/system_overview.md#related-files",
+      "heading": "Related Files",
+      "content": "- [Runtime Flow](runtime_flow.md)\n- [Data Model](data_model.md)\n- [Brain Storage](brain_storage.md)\n- [Decision Log](../decisions/decision_log.md)",
+      "frontmatter": {
+        "id": "architecture.system_overview",
+        "type": "architecture",
+        "title": "System Overview",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.architecture_summary",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "system design",
+          "Next.js",
+          "pipeline",
+          "brain"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/constraints.md",
+      "section_id": "brian/context/constraints.md#_intro",
+      "heading": "Intro",
+      "content": "# Constraints",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "constraints",
+          "assumptions",
+          "limitations"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/constraints.md",
+      "section_id": "brian/context/constraints.md#technical-constraints",
+      "heading": "Technical Constraints",
+      "content": "- The app is a Next.js TypeScript application.\n- Vercel is the primary deployment target.\n- Postgres with pgvector is the intended production database.\n- The app must remain usable without external credentials for demos.\n- The brain should stay human-readable Markdown.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "constraints",
+          "assumptions",
+          "limitations"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/constraints.md",
+      "section_id": "brian/context/constraints.md#product-constraints",
+      "heading": "Product Constraints",
+      "content": "- The brain must be understandable by humans and LLMs.\n- Brain files should not become noisy dumps of raw transcripts or chat logs.\n- Significant updates should explain their source and rationale.\n- Important files should be graph-linked so they are not orphaned.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "constraints",
+          "assumptions",
+          "limitations"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/constraints.md",
+      "section_id": "brian/context/constraints.md#retrieval-constraints",
+      "heading": "Retrieval Constraints",
+      "content": "- Agents should read summaries before long files.\n- Frontmatter should contain machine-usable metadata.\n- Body content should prioritize meaning over template rigidity.\n- Boilerplate should be minimized because it wastes retrieval and context-window budget.",
+      "frontmatter": {
+        "id": "context.constraints",
+        "type": "context",
+        "title": "Constraints",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "constraints",
+          "assumptions",
+          "limitations"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/open_questions.md",
+      "section_id": "brian/context/open_questions.md#_intro",
+      "heading": "Intro",
+      "content": "# Open Questions",
+      "frontmatter": {
+        "id": "context.open_questions",
+        "type": "context",
+        "title": "Open Questions",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "open questions",
+          "unknowns",
+          "future work"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/open_questions.md",
+      "section_id": "brian/context/open_questions.md#product-questions",
+      "heading": "Product Questions",
+      "content": "- Should AI-generated brain updates require human approval before GitHub commits?\n- Should the app support multiple separate brains for multiple projects?\n- Should users be able to mark specific Slack or Discord channels as authoritative?",
+      "frontmatter": {
+        "id": "context.open_questions",
+        "type": "context",
+        "title": "Open Questions",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "open questions",
+          "unknowns",
+          "future work"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/open_questions.md",
+      "section_id": "brian/context/open_questions.md#architecture-questions",
+      "heading": "Architecture Questions",
+      "content": "- Should distillation run synchronously in the API route or move to a queue?\n- Should brain files use wiki links, Markdown links, or both?\n- Should the generated map be updated automatically after every brain write?",
+      "frontmatter": {
+        "id": "context.open_questions",
+        "type": "context",
+        "title": "Open Questions",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "open questions",
+          "unknowns",
+          "future work"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/context/open_questions.md",
+      "section_id": "brian/context/open_questions.md#retrieval-questions",
+      "heading": "Retrieval Questions",
+      "content": "- What is the ideal chunking strategy for long meeting transcripts?\n- Should summary files be generated from the detailed files on a schedule?\n- How should stale or superseded context be marked so agents avoid old assumptions?",
+      "frontmatter": {
+        "id": "context.open_questions",
+        "type": "context",
+        "title": "Open Questions",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "open questions",
+          "unknowns",
+          "future work"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0001-git-backed-brain.md",
+      "section_id": "brian/decisions/ADR-0001-git-backed-brain.md#_intro",
+      "heading": "Intro",
+      "content": "# ADR-0001: Use GitHub-Backed Markdown As The Production Brain",
+      "frontmatter": {
+        "id": "decisions.ADR-0001-git-backed-brain",
+        "type": "decision",
+        "title": "Use GitHub-Backed Markdown As The Production Brain",
+        "status": "accepted",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0001-git-backed-brain.md",
+      "section_id": "brian/decisions/ADR-0001-git-backed-brain.md#decision",
+      "heading": "Decision",
+      "content": "Use Markdown files in a GitHub repository as the production source of truth for project brain content.",
+      "frontmatter": {
+        "id": "decisions.ADR-0001-git-backed-brain",
+        "type": "decision",
+        "title": "Use GitHub-Backed Markdown As The Production Brain",
+        "status": "accepted",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0001-git-backed-brain.md",
+      "section_id": "brian/decisions/ADR-0001-git-backed-brain.md#context",
+      "heading": "Context",
+      "content": "The system needs a source of truth that humans can inspect, agents can read, and teams can audit over time.",
+      "frontmatter": {
+        "id": "decisions.ADR-0001-git-backed-brain",
+        "type": "decision",
+        "title": "Use GitHub-Backed Markdown As The Production Brain",
+        "status": "accepted",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0001-git-backed-brain.md",
+      "section_id": "brian/decisions/ADR-0001-git-backed-brain.md#rationale",
+      "heading": "Rationale",
+      "content": "Git provides:\n\n- history\n- diffs\n- blame\n- branches\n- review workflows\n- durable human-readable artifacts\n\nMarkdown provides:\n\n- readable prose\n- diagrams\n- links\n- compatibility with Obsidian-style workflows\n- low friction for humans and LLMs",
+      "frontmatter": {
+        "id": "decisions.ADR-0001-git-backed-brain",
+        "type": "decision",
+        "title": "Use GitHub-Backed Markdown As The Production Brain",
+        "status": "accepted",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0001-git-backed-brain.md",
+      "section_id": "brian/decisions/ADR-0001-git-backed-brain.md#consequences",
+      "heading": "Consequences",
+      "content": "- Brain updates should have clear commit messages.\n- Agents should document durable design choices before implementation.\n- The app needs a local fallback for demos without GitHub credentials.",
+      "frontmatter": {
+        "id": "decisions.ADR-0001-git-backed-brain",
+        "type": "decision",
+        "title": "Use GitHub-Backed Markdown As The Production Brain",
+        "status": "accepted",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "GitHub",
+          "Markdown",
+          "audit trail"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0002-local-demo-fallbacks.md",
+      "section_id": "brian/decisions/ADR-0002-local-demo-fallbacks.md#_intro",
+      "heading": "Intro",
+      "content": "# ADR-0002: Keep Local Demo Fallbacks",
+      "frontmatter": {
+        "id": "decisions.ADR-0002-local-demo-fallbacks",
+        "type": "decision",
+        "title": "Keep Local Demo Fallbacks",
+        "status": "accepted",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "local demo",
+          "fallback",
+          "hackathon"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0002-local-demo-fallbacks.md",
+      "section_id": "brian/decisions/ADR-0002-local-demo-fallbacks.md#decision",
+      "heading": "Decision",
+      "content": "The product should work without a real database, OpenAI key, or GitHub brain repo.",
+      "frontmatter": {
+        "id": "decisions.ADR-0002-local-demo-fallbacks",
+        "type": "decision",
+        "title": "Keep Local Demo Fallbacks",
+        "status": "accepted",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "local demo",
+          "fallback",
+          "hackathon"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0002-local-demo-fallbacks.md",
+      "section_id": "brian/decisions/ADR-0002-local-demo-fallbacks.md#context",
+      "heading": "Context",
+      "content": "Hackathon demos and early product exploration need a zero-setup experience. If the app requires every external service before showing value, testing becomes slow and fragile.",
+      "frontmatter": {
+        "id": "decisions.ADR-0002-local-demo-fallbacks",
+        "type": "decision",
+        "title": "Keep Local Demo Fallbacks",
+        "status": "accepted",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "local demo",
+          "fallback",
+          "hackathon"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0002-local-demo-fallbacks.md",
+      "section_id": "brian/decisions/ADR-0002-local-demo-fallbacks.md#rationale",
+      "heading": "Rationale",
+      "content": "Local fallbacks let users test the full product loop immediately:\n\n- ingest an event\n- distill significance\n- update a brain file\n- search context\n- edit Markdown",
+      "frontmatter": {
+        "id": "decisions.ADR-0002-local-demo-fallbacks",
+        "type": "decision",
+        "title": "Keep Local Demo Fallbacks",
+        "status": "accepted",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "local demo",
+          "fallback",
+          "hackathon"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/ADR-0002-local-demo-fallbacks.md",
+      "section_id": "brian/decisions/ADR-0002-local-demo-fallbacks.md#consequences",
+      "heading": "Consequences",
+      "content": "- In-memory mode is not durable.\n- Production users must configure real env vars.\n- Placeholder env values should be ignored instead of treated as real credentials.",
+      "frontmatter": {
+        "id": "decisions.ADR-0002-local-demo-fallbacks",
+        "type": "decision",
+        "title": "Keep Local Demo Fallbacks",
+        "status": "accepted",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.decision_log",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "local demo",
+          "fallback",
+          "hackathon"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/decision_log.md",
+      "section_id": "brian/decisions/decision_log.md#_intro",
+      "heading": "Intro",
+      "content": "# Decision Log\n\nThis file lists durable product and architecture decisions. Detailed decisions should live in ADR files.",
+      "frontmatter": {
+        "id": "decisions.decision_log",
+        "type": "decision_log",
+        "title": "Decision Log",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.ADR-0001-git-backed-brain",
+          "decisions.ADR-0002-local-demo-fallbacks",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "decisions",
+          "ADR",
+          "rationale"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/decision_log.md",
+      "section_id": "brian/decisions/decision_log.md#active-decisions",
+      "heading": "Active Decisions",
+      "content": "| ID | Decision | Status | Link |\n| --- | --- | --- | --- |\n| ADR-0001 | Use GitHub-backed Markdown as the production brain | Accepted | [ADR-0001](ADR-0001-git-backed-brain.md) |\n| ADR-0002 | Keep local demo fallbacks for all external dependencies | Accepted | [ADR-0002](ADR-0002-local-demo-fallbacks.md) |",
+      "frontmatter": {
+        "id": "decisions.decision_log",
+        "type": "decision_log",
+        "title": "Decision Log",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.ADR-0001-git-backed-brain",
+          "decisions.ADR-0002-local-demo-fallbacks",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "decisions",
+          "ADR",
+          "rationale"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/decisions/decision_log.md",
+      "section_id": "brian/decisions/decision_log.md#decision-rules",
+      "heading": "Decision Rules",
+      "content": "- Do not delete old decisions.\n- If a decision changes, write a new ADR that supersedes the previous one.\n- Link decisions to impacted architecture files.\n- Keep decisions short enough that agents can scan them quickly.",
+      "frontmatter": {
+        "id": "decisions.decision_log",
+        "type": "decision_log",
+        "title": "Decision Log",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "decisions.ADR-0001-git-backed-brain",
+          "decisions.ADR-0002-local-demo-fallbacks",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "decisions",
+          "ADR",
+          "rationale"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/goals/product_goals.md",
+      "section_id": "brian/goals/product_goals.md#_intro",
+      "heading": "Intro",
+      "content": "# Product Goals",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/goals/product_goals.md",
+      "section_id": "brian/goals/product_goals.md#primary-goal",
+      "heading": "Primary Goal",
+      "content": "Bridge the gap between human project context and LLM coding agents by maintaining a shared, auditable, human-readable source of truth.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/goals/product_goals.md",
+      "section_id": "brian/goals/product_goals.md#user-facing-goals",
+      "heading": "User-Facing Goals",
+      "content": "- Let teams connect project communication sources quickly.\n- Show what the system knows and why it knows it.\n- Let humans edit the project brain directly.\n- Make AI brain updates auditable through Git commits.\n- Help coding agents retrieve the right context before making changes.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/goals/product_goals.md",
+      "section_id": "brian/goals/product_goals.md#launch-goals",
+      "heading": "Launch Goals",
+      "content": "- Run locally with no credentials.\n- Deploy cleanly to Vercel.\n- Support Postgres persistence.\n- Support real webhook-shaped ingestion.\n- Provide a clear demo path.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/goals/product_goals.md",
+      "section_id": "brian/goals/product_goals.md#non-goals-for-the-first-version",
+      "heading": "Non-Goals For The First Version",
+      "content": "- Full enterprise auth.\n- Multi-tenant billing.\n- Perfect source-specific webhook coverage.\n- Real-time background queue infrastructure.\n- Human review workflow for every AI brain update.",
+      "frontmatter": {
+        "id": "goals.product_goals",
+        "type": "goals",
+        "title": "Product Goals",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "goals",
+          "product",
+          "launch"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/index.md",
+      "section_id": "brian/index.md#_intro",
+      "heading": "Intro",
+      "content": "# Brian Project Brain\n\nThis folder is an example of a structured project brain for the AI Brain application. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.\n\nTreat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through [Brain Map](map.md).",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brian Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "architecture.data_model",
+          "architecture.runtime_flow",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "decisions.decision_log",
+          "goals.product_goals",
+          "context.constraints",
+          "context.open_questions",
+          "agents.coding_agent_prompt",
+          "agents.distiller_agent_prompt",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/index.md",
+      "section_id": "brian/index.md#read-order-for-agents",
+      "heading": "Read Order For Agents",
+      "content": "1. Read [Project Summary](summaries/project_summary.md) for the shortest useful context.\n2. Read [System Overview](architecture/system_overview.md) to understand the product.\n3. Read [Product Goals](goals/product_goals.md) and [Constraints](context/constraints.md) before changing scope.\n4. Read [Runtime Flow](architecture/runtime_flow.md) before changing ingestion, distillation, brain storage, or UI behavior.\n5. Read [Decision Log](decisions/decision_log.md) before making design changes.\n6. Read [Coding Agent Prompt](agents/coding_agent_prompt.md) before implementing code.",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brian Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "architecture.data_model",
+          "architecture.runtime_flow",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "decisions.decision_log",
+          "goals.product_goals",
+          "context.constraints",
+          "context.open_questions",
+          "agents.coding_agent_prompt",
+          "agents.distiller_agent_prompt",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/index.md",
+      "section_id": "brian/index.md#current-product-state",
+      "heading": "Current Product State",
+      "content": "AI Brain is a Next.js application that ingests engineering context from external tools, stores normalized events, distills significant events into Markdown brain updates, and lets humans edit the brain through a web UI.\n\nThe app works in two modes:\n\n- Local demo mode: no database, no OpenAI key, no GitHub repo required. Data lives in memory.\n- Production mode: Postgres stores events and vectors, OpenAI powers embeddings and distillation, and GitHub commits brain updates.",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brian Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "architecture.data_model",
+          "architecture.runtime_flow",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "decisions.decision_log",
+          "goals.product_goals",
+          "context.constraints",
+          "context.open_questions",
+          "agents.coding_agent_prompt",
+          "agents.distiller_agent_prompt",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/index.md",
+      "section_id": "brian/index.md#important-links",
+      "heading": "Important Links",
+      "content": "- [Brain Map](map.md)\n- [Project Summary](summaries/project_summary.md)\n- [Architecture Summary](summaries/architecture_summary.md)\n- [System Overview](architecture/system_overview.md)\n- [Data Model](architecture/data_model.md)\n- [Runtime Flow](architecture/runtime_flow.md)\n- [Ingestion Pipeline](architecture/ingestion_pipeline.md)\n- [Distillation Pipeline](architecture/distillation_pipeline.md)\n- [Brain Storage](architecture/brain_storage.md)\n- [Product Goals](goals/product_goals.md)\n- [Decision Log](decisions/decision_log.md)\n- [Git-Backed Brain ADR](decisions/ADR-0001-git-backed-brain.md)\n- [Local Demo Fallbacks ADR](decisions/ADR-0002-local-demo-fallbacks.md)\n- [Constraints](context/constraints.md)\n- [Open Questions](context/open_questions.md)\n- [Coding Agent Prompt](agents/coding_agent_prompt.md)\n- [Distiller Agent Prompt](agents/distiller_agent_prompt.md)\n- [GitHub Integration](integrations/github.md)\n- [Slack Integration](integrations/slack.md)\n- [Meetings Integration](integrations/meetings.md)",
+      "frontmatter": {
+        "id": "brian.index",
+        "type": "index",
+        "title": "Brian Project Brain",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "summaries.project_summary",
+          "architecture.system_overview",
+          "architecture.data_model",
+          "architecture.runtime_flow",
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline",
+          "architecture.brain_storage",
+          "decisions.decision_log",
+          "goals.product_goals",
+          "context.constraints",
+          "context.open_questions",
+          "agents.coding_agent_prompt",
+          "agents.distiller_agent_prompt",
+          "integrations.github",
+          "integrations.slack",
+          "integrations.meetings"
+        ],
+        "keywords": [
+          "source of truth",
+          "project memory",
+          "coding agent context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/github.md",
+      "section_id": "brian/integrations/github.md#_intro",
+      "heading": "Intro",
+      "content": "# GitHub Integration\n\nGitHub ingestion captures project context from issues, pull requests, and comments.",
+      "frontmatter": {
+        "id": "integrations.github",
+        "type": "integration",
+        "title": "GitHub Integration",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "GitHub",
+          "issues",
+          "pull requests",
+          "webhooks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/github.md",
+      "section_id": "brian/integrations/github.md#endpoint",
+      "heading": "Endpoint",
+      "content": "```text\nPOST /api/ingest/github\n```",
+      "frontmatter": {
+        "id": "integrations.github",
+        "type": "integration",
+        "title": "GitHub Integration",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "GitHub",
+          "issues",
+          "pull requests",
+          "webhooks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/github.md",
+      "section_id": "brian/integrations/github.md#relevant-events",
+      "heading": "Relevant Events",
+      "content": "- issue comments\n- issue descriptions\n- pull request descriptions\n- pull request comments",
+      "frontmatter": {
+        "id": "integrations.github",
+        "type": "integration",
+        "title": "GitHub Integration",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "GitHub",
+          "issues",
+          "pull requests",
+          "webhooks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/github.md",
+      "section_id": "brian/integrations/github.md#verification",
+      "heading": "Verification",
+      "content": "Set `GITHUB_WEBHOOK_SECRET` to verify `x-hub-signature-256`.\n\nIf no secret is set, the endpoint accepts payloads for local testing.",
+      "frontmatter": {
+        "id": "integrations.github",
+        "type": "integration",
+        "title": "GitHub Integration",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "GitHub",
+          "issues",
+          "pull requests",
+          "webhooks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/github.md",
+      "section_id": "brian/integrations/github.md#normalized-fields",
+      "heading": "Normalized Fields",
+      "content": "- repository maps to `repository.full_name`\n- actor maps to `sender.login`\n- title maps to the issue, PR, or comment context\n- body combines title, description, and comment body",
+      "frontmatter": {
+        "id": "integrations.github",
+        "type": "integration",
+        "title": "GitHub Integration",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "GitHub",
+          "issues",
+          "pull requests",
+          "webhooks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/github.md",
+      "section_id": "brian/integrations/github.md#agent-note",
+      "heading": "Agent Note",
+      "content": "GitHub events often contain durable architecture and implementation decisions. Pull request descriptions are especially important because they often explain why a code change exists.",
+      "frontmatter": {
+        "id": "integrations.github",
+        "type": "integration",
+        "title": "GitHub Integration",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.runtime_flow"
+        ],
+        "keywords": [
+          "GitHub",
+          "issues",
+          "pull requests",
+          "webhooks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/meetings.md",
+      "section_id": "brian/integrations/meetings.md#_intro",
+      "heading": "Intro",
+      "content": "# Meeting Transcript Integration\n\nMeeting ingestion accepts transcript-style payloads from tools such as AssemblyAI, Deepgram, or manual transcript upload workflows.",
+      "frontmatter": {
+        "id": "integrations.meetings",
+        "type": "integration",
+        "title": "Meeting Transcript Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline"
+        ],
+        "keywords": [
+          "meetings",
+          "transcripts",
+          "AssemblyAI",
+          "Deepgram"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/meetings.md",
+      "section_id": "brian/integrations/meetings.md#endpoint",
+      "heading": "Endpoint",
+      "content": "```text\nPOST /api/ingest/meetings\n```",
+      "frontmatter": {
+        "id": "integrations.meetings",
+        "type": "integration",
+        "title": "Meeting Transcript Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline"
+        ],
+        "keywords": [
+          "meetings",
+          "transcripts",
+          "AssemblyAI",
+          "Deepgram"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/meetings.md",
+      "section_id": "brian/integrations/meetings.md#accepted-payload-shape",
+      "heading": "Accepted Payload Shape",
+      "content": "Useful fields include:\n\n- `id`\n- `title`\n- `transcript`\n- `text`\n- `summary`\n- `organizer`\n- `audio_url`",
+      "frontmatter": {
+        "id": "integrations.meetings",
+        "type": "integration",
+        "title": "Meeting Transcript Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline"
+        ],
+        "keywords": [
+          "meetings",
+          "transcripts",
+          "AssemblyAI",
+          "Deepgram"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/meetings.md",
+      "section_id": "brian/integrations/meetings.md#distillation-guidance",
+      "heading": "Distillation Guidance",
+      "content": "Meeting transcripts are high-signal but long. The distiller should extract:\n\n- decisions\n- constraints\n- requirements\n- unresolved questions\n- ownership\n- deadlines",
+      "frontmatter": {
+        "id": "integrations.meetings",
+        "type": "integration",
+        "title": "Meeting Transcript Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline"
+        ],
+        "keywords": [
+          "meetings",
+          "transcripts",
+          "AssemblyAI",
+          "Deepgram"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/meetings.md",
+      "section_id": "brian/integrations/meetings.md#agent-note",
+      "heading": "Agent Note",
+      "content": "Meeting transcripts should usually be summarized into specific brain files rather than copied wholesale. Raw transcript text belongs in searchable documents, not permanent brain files.",
+      "frontmatter": {
+        "id": "integrations.meetings",
+        "type": "integration",
+        "title": "Meeting Transcript Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "architecture.distillation_pipeline"
+        ],
+        "keywords": [
+          "meetings",
+          "transcripts",
+          "AssemblyAI",
+          "Deepgram"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/slack.md",
+      "section_id": "brian/integrations/slack.md#_intro",
+      "heading": "Intro",
+      "content": "# Slack Integration\n\nSlack ingestion captures messages from selected project channels.",
+      "frontmatter": {
+        "id": "integrations.slack",
+        "type": "integration",
+        "title": "Slack Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "context.constraints"
+        ],
+        "keywords": [
+          "Slack",
+          "channel",
+          "webhook",
+          "dev sync"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/slack.md",
+      "section_id": "brian/integrations/slack.md#endpoint",
+      "heading": "Endpoint",
+      "content": "```text\nPOST /api/ingest/slack\n```",
+      "frontmatter": {
+        "id": "integrations.slack",
+        "type": "integration",
+        "title": "Slack Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "context.constraints"
+        ],
+        "keywords": [
+          "Slack",
+          "channel",
+          "webhook",
+          "dev sync"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/slack.md",
+      "section_id": "brian/integrations/slack.md#verification",
+      "heading": "Verification",
+      "content": "Set `SLACK_SIGNING_SECRET` to verify Slack request signatures.\n\nThe endpoint also supports Slack URL verification by returning the `challenge` field.",
+      "frontmatter": {
+        "id": "integrations.slack",
+        "type": "integration",
+        "title": "Slack Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "context.constraints"
+        ],
+        "keywords": [
+          "Slack",
+          "channel",
+          "webhook",
+          "dev sync"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/slack.md",
+      "section_id": "brian/integrations/slack.md#recommended-channels",
+      "heading": "Recommended Channels",
+      "content": "- `#dev-sync`\n- `#product-decisions`\n- `#architecture`\n- `#launch`",
+      "frontmatter": {
+        "id": "integrations.slack",
+        "type": "integration",
+        "title": "Slack Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "context.constraints"
+        ],
+        "keywords": [
+          "Slack",
+          "channel",
+          "webhook",
+          "dev sync"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/integrations/slack.md",
+      "section_id": "brian/integrations/slack.md#distillation-guidance",
+      "heading": "Distillation Guidance",
+      "content": "Do not treat every Slack message as durable truth. Slack is noisy.\n\nMark a Slack event as significant only when it includes:\n\n- an explicit decision\n- a changed requirement\n- a blocker\n- a launch constraint\n- architecture context\n- a resolved open question",
+      "frontmatter": {
+        "id": "integrations.slack",
+        "type": "integration",
+        "title": "Slack Integration",
+        "status": "active",
+        "importance": "medium",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.ingestion_pipeline",
+          "context.constraints"
+        ],
+        "keywords": [
+          "Slack",
+          "channel",
+          "webhook",
+          "dev sync"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/map.md",
+      "section_id": "brian/map.md#_intro",
+      "heading": "Intro",
+      "content": "# Brian Knowledge Map\n\nThis file is the visual navigation layer for the brain. Humans can use it to understand the project shape. Agents can use it to decide which files to read next.\n\n```mermaid\nflowchart LR\n  Index[\"index.md\"] --> ProjectSummary[\"summaries/project_summary.md\"]\n  Index --> ArchitectureSummary[\"summaries/architecture_summary.md\"]\n  Index --> SystemOverview[\"architecture/system_overview.md\"]\n  Index --> RuntimeFlow[\"architecture/runtime_flow.md\"]\n  Index --> DecisionLog[\"decisions/decision_log.md\"]\n  Index --> CodingPrompt[\"agents/coding_agent_prompt.md\"]\n\n  SystemOverview --> DataModel[\"architecture/data_model.md\"]\n  SystemOverview --> RuntimeFlow\n  RuntimeFlow --> Ingestion[\"architecture/ingestion_pipeline.md\"]\n  RuntimeFlow --> Distillation[\"architecture/distillation_pipeline.md\"]\n  RuntimeFlow --> BrainStorage[\"architecture/brain_storage.md\"]\n\n  Ingestion --> GitHub[\"integrations/github.md\"]\n  Ingestion --> Slack[\"integrations/slack.md\"]\n  Ingestion --> Meetings[\"integrations/meetings.md\"]\n\n  Distillation --> DistillerPrompt[\"agents/distiller_agent_prompt.md\"]\n  BrainStorage --> DecisionLog\n  DecisionLog --> Constraints[\"context/constraints.md\"]\n  DecisionLog --> OpenQuestions[\"context/open_questions.md\"]\n```",
+      "frontmatter": {
+        "id": "brian.map",
+        "type": "map",
+        "title": "Brian Knowledge Map",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "graph",
+          "map",
+          "backlinks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/map.md",
+      "section_id": "brian/map.md#map-rules",
+      "heading": "Map Rules",
+      "content": "- Every important file should be reachable from `index.md` or this map.\n- New architecture files should link back to [System Overview](architecture/system_overview.md).\n- New durable decisions should link from [Decision Log](decisions/decision_log.md).\n- Integration files should link back to [Ingestion Pipeline](architecture/ingestion_pipeline.md).",
+      "frontmatter": {
+        "id": "brian.map",
+        "type": "map",
+        "title": "Brian Knowledge Map",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "summaries.project_summary",
+          "architecture.system_overview"
+        ],
+        "keywords": [
+          "graph",
+          "map",
+          "backlinks"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/summaries/architecture_summary.md",
+      "section_id": "brian/summaries/architecture_summary.md#_intro",
+      "heading": "Intro",
+      "content": "# Architecture Summary\n\nThe app is a single Next.js TypeScript application using the App Router.\n\nThe main runtime path is:\n\n1. A webhook posts to `/api/ingest/[source]`.\n2. The source is verified if a secret is configured.\n3. The payload is normalized into a `NormalizedEvent`.\n4. The event is stored in Postgres or in memory.\n5. The event text is embedded and stored as a searchable document.\n6. The distiller decides whether the event is significant.\n7. Significant events append Markdown context to a brain file.\n8. The brain write commits to GitHub in production or memory in local demo mode.\n9. The UI shows events, brain files, integrations, updates, and search results.",
+      "frontmatter": {
+        "id": "summaries.architecture_summary",
+        "type": "summary",
+        "title": "Architecture Summary",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "architecture",
+          "summary",
+          "retrieval"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/summaries/architecture_summary.md",
+      "section_id": "brian/summaries/architecture_summary.md#core-code-locations",
+      "heading": "Core Code Locations",
+      "content": "- `src/app/api/ingest/[source]/route.ts`: dynamic ingestion route.\n- `src/lib/ingest/normalizers.ts`: source-specific payload normalization.\n- `src/lib/ingest/security.ts`: webhook signature and token checks.\n- `src/lib/distiller/index.ts`: embedding, significance, and brain-update logic.\n- `src/lib/db/schema.ts`: Drizzle schema.\n- `src/lib/db/store.ts`: database/in-memory storage adapter.\n- `src/lib/brain/provider.ts`: GitHub/in-memory brain adapter.\n- `src/components/brain-workspace.tsx`: human brain editor.",
+      "frontmatter": {
+        "id": "summaries.architecture_summary",
+        "type": "summary",
+        "title": "Architecture Summary",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "architecture",
+          "summary",
+          "retrieval"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/summaries/architecture_summary.md",
+      "section_id": "brian/summaries/architecture_summary.md#key-design-constraint",
+      "heading": "Key Design Constraint",
+      "content": "The app must work without credentials for demos, but switch to durable production systems when env vars are configured.",
+      "frontmatter": {
+        "id": "summaries.architecture_summary",
+        "type": "summary",
+        "title": "Architecture Summary",
+        "status": "active",
+        "importance": "high",
+        "updated": "2026-04-25",
+        "links": [
+          "architecture.system_overview",
+          "architecture.runtime_flow",
+          "architecture.data_model",
+          "architecture.brain_storage"
+        ],
+        "keywords": [
+          "architecture",
+          "summary",
+          "retrieval"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/summaries/project_summary.md",
+      "section_id": "brian/summaries/project_summary.md#_intro",
+      "heading": "Intro",
+      "content": "# Project Summary\n\nAI Brain is a full-stack product that keeps human project context synchronized with LLM coding agents.\n\nIt ingests engineering conversations and artifacts from GitHub, GitLab, Slack, Discord, and meeting transcripts. Incoming events are normalized into one event shape, embedded for semantic search, and passed through a distiller that decides whether the event changes product goals, architecture, constraints, risks, or open questions.\n\nIf the event is significant, the app updates Markdown brain files. In production, those updates are committed to GitHub for an audit trail. In local demo mode, the same flow works in memory so the product can be tested without credentials.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "architecture.system_overview",
+          "goals.product_goals",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/summaries/project_summary.md",
+      "section_id": "brian/summaries/project_summary.md#what-works-right-now",
+      "heading": "What Works Right Now",
+      "content": "- Next.js app with dashboard, brain editor, events page, integrations page, and semantic search page.\n- API endpoints for GitHub, GitLab, Slack, Discord, meetings, brain files, search, integrations, and demo seeding.\n- Drizzle schema for Postgres tables.\n- pgvector-compatible document embeddings.\n- OpenAI-backed embeddings and JSON distillation when `OPENAI_API_KEY` is present.\n- Deterministic fallback embeddings and heuristic distillation when no API key is present.\n- GitHub-backed brain file read/write/commit when GitHub env vars are configured.\n- In-memory fallback brain and event store for local testing.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "architecture.system_overview",
+          "goals.product_goals",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/summaries/project_summary.md",
+      "section_id": "brian/summaries/project_summary.md#fastest-local-test",
+      "heading": "Fastest Local Test",
+      "content": "Run the app:\n\n```bash\nnpm run dev\n```\n\nOpen `http://localhost:3000`, click `Seed demo events`, then inspect:\n\n- `/brain`\n- `/events`\n- `/search`\n- `/integrations`",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "architecture.system_overview",
+          "goals.product_goals",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "brian/summaries/project_summary.md",
+      "section_id": "brian/summaries/project_summary.md#agent-guidance",
+      "heading": "Agent Guidance",
+      "content": "Before changing code, read this file, then read the specific architecture or decision files linked from the task.",
+      "frontmatter": {
+        "id": "summaries.project_summary",
+        "type": "summary",
+        "title": "Project Summary",
+        "status": "active",
+        "importance": "critical",
+        "updated": "2026-04-25",
+        "links": [
+          "brian.index",
+          "architecture.system_overview",
+          "goals.product_goals",
+          "decisions.decision_log"
+        ],
+        "keywords": [
+          "summary",
+          "current state",
+          "quick context"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "data_model.md",
+      "section_id": "data_model.md#_intro",
+      "heading": "Intro",
+      "content": "",
+      "frontmatter": {
+        "title": "Data Model"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "data_model.md",
+      "section_id": "data_model.md#overview",
+      "heading": "Overview",
+      "content": "The data model is designed to prioritize memory efficiency over performance. This approach ensures that data retention and retrieval are optimized for long-term storage and accessibility, rather than speed.",
+      "frontmatter": {
+        "title": "Data Model"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "data_model.md",
+      "section_id": "data_model.md#key-principles",
+      "heading": "Key Principles",
+      "content": "1. **Memory Efficiency**: Focus on minimizing the memory footprint of data structures.\n2. **Data Retention**: Implement strategies that enhance the longevity of stored data.\n3. **Access Patterns**: Design access patterns that favor memory usage over raw performance metrics.",
+      "frontmatter": {
+        "title": "Data Model"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "data_model.md",
+      "section_id": "data_model.md#implementation-strategies",
+      "heading": "Implementation Strategies",
+      "content": "- Utilize data compression techniques to reduce memory usage.\n- Implement caching mechanisms that prioritize memory over speed.\n- Optimize data structures for space efficiency, even if it results in slower access times.",
+      "frontmatter": {
+        "title": "Data Model"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "data_model.md",
+      "section_id": "data_model.md#conclusion",
+      "heading": "Conclusion",
+      "content": "By emphasizing memory in the data model, we can ensure that our systems are capable of handling large volumes of data while maintaining accessibility and longevity.",
+      "frontmatter": {
+        "title": "Data Model"
+      },
+      "source_kind": null
+    }
+  ]
+}

@@ -220,6 +220,22 @@ def build_all_tools(ctx: BrainContext) -> list:
         return _format_hits(hits)
 
     @tool
+    def bge_search(query: str, top_k: int = 5) -> str:
+        """
+        Exercise the dense retrieval path first for testing.
+
+        This uses the same retriever as `semantic_search`, but it explicitly
+        reports which encoder/reranker backend is active so update-mode runs
+        can confirm whether BGE dense retrieval is actually being used.
+        """
+        try:
+            r = _get_retriever(wk if wk.is_dir() else ref)
+        except FileNotFoundError as e:
+            return f"Brain not initialized: {e}"
+        hits = r.query(query, top_k=top_k, token_budget=2000)
+        return f"Backend: {r.backend_label}\n\n{_format_hits(hits)}"
+
+    @tool
     def get_brief(task: str, token_budget: int = 2000) -> str:
         """
         Build a token-budgeted briefing bundle for a task.
@@ -501,6 +517,7 @@ def build_all_tools(ctx: BrainContext) -> list:
         delete_working_directory,
         move_working_file,
         semantic_search,
+        bge_search,
         get_brief,
         propose_update,
         record_audit,
@@ -520,6 +537,7 @@ _READER_TOOL_NAMES: frozenset[str] = frozenset(
         "read_working_file",
         "search_working_brain",
         "get_working_frontmatter",
+        "bge_search",
         "semantic_search",
         "get_brief",
     }
@@ -533,6 +551,7 @@ _UPDATE_READER_TOOL_NAMES: frozenset[str] = frozenset(
         "read_reference_file",
         "search_working_brain",
         "search_reference_brain",
+        "bge_search",
         "semantic_search",
         "get_brief",
     }

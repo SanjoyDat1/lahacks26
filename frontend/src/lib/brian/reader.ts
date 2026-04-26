@@ -59,6 +59,8 @@ function hasMarkdownFiles(dir: string): boolean {
 }
 
 export function resolveBrianDir(): string {
+  // Prefer the live working brain, but only if it actually contains
+  // Markdown content. Fall back to the reference brain when needed.
   if (process.env.BRAIN_DIR && hasMarkdownFiles(process.env.BRAIN_DIR)) {
     return process.env.BRAIN_DIR;
   }

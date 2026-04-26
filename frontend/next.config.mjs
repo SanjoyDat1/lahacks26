@@ -1,7 +1,10 @@
 import path from "path";
-import type { NextConfig } from "next";
+import { fileURLToPath } from "url";
 
-const nextConfig: NextConfig = {
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/** @type {import("next").NextConfig} */
+const nextConfig = {
   turbopack: {
     // node_modules lives at the repo root (one level up from frontend/)
     root: path.resolve(__dirname, ".."),
