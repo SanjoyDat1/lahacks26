@@ -120,10 +120,13 @@ export function ContextMapRebuildNotifier({
 
       if (evt.type === "connected") {
         setLastMessage(evt.message);
+        // Do NOT auto-open the popup on stream connection. The agent may report
+        // an `active_run_id` from a stale/previous run; we only want the toast
+        // to appear when there's real rebuild activity (rebuild_started / error
+        // / done). If a rebuild is genuinely in-flight, those events will arrive
+        // immediately after connection and open the popup then.
         if (evt.active_run_id) {
           setActiveRunId(evt.active_run_id);
-          setStatus("running");
-          setOpen(true);
         }
         return;
       }
