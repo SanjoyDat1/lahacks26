@@ -22,8 +22,16 @@ const importanceOrder: Record<string, number> = {
   low: 3,
 };
 
+/**
+ * Working brain on disk — must match the agent's default `BRAIN_DIR`
+ * (`agent/brain_agents/config.py`: repo root `brain/`, not `agent/brain`).
+ */
 export function resolveBrianDir(): string {
-  return path.join(process.cwd(), "..", "agent", "brain");
+  const fromEnv = process.env.BRAIN_DIR?.trim() || process.env.WORKING_BRAIN_DIR?.trim();
+  if (fromEnv) {
+    return path.isAbsolute(fromEnv) ? fromEnv : path.resolve(process.cwd(), fromEnv);
+  }
+  return path.resolve(process.cwd(), "..", "brain");
 }
 
 export function readBrianFiles(): BrianFile[] {
@@ -49,6 +57,7 @@ export function readBrianFiles(): BrianFile[] {
 
 function collectMd(baseDir: string, currentDir: string, out: BrianFile[]) {
   for (const entry of fs.readdirSync(currentDir)) {
+    if (entry.startsWith(".")) continue;
     const full = path.join(currentDir, entry);
     if (fs.statSync(full).isDirectory()) {
       collectMd(baseDir, full, out);
