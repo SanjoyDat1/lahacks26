@@ -361,42 +361,44 @@ def _plan_brain_files(
 
     minimum_files = min(max_files, MIN_RICH_BOOTSTRAP_FILES)
     system = SystemMessage(
-        "You plan interlinked Markdown files for an **enterprise knowledge brain**: canonical, source-grounded context "
-        "so many AI agents (engineering, GTM, finance, etc.) can align on facts, decisions, and guardrails. "
-        "Infer which **business functions** matter from INITIAL PROMPT + SOURCE DOCUMENTS only. "
-        "The subject is the customer's organization and work—not a product named 'AI Brain', 'Brian', or this tool. "
-        "The reference catalog is layout/schema only, not factual content. Return only JSON."
+        "You plan interlinked Markdown files for an **enterprise company brain**: one **directory per company section** "
+        "(department / function) when sources support it, with rich **inner links** between sections so the org is navigable "
+        "as Markdown + graph. Agents need to see how Engineering, Finance, Marketing, etc. connect. "
+        "Infer sections only from INITIAL PROMPT + SOURCE DOCUMENTS. "
+        "Not a product named 'AI Brain' or this tool. Reference catalog is layout-only. Return only JSON."
     )
     user = HumanMessage(
         f"""Plan the Markdown files for this working brain from the sources below.
 
-## Enterprise structure (required pattern)
+## Company directory layout (primary)
 - Always include `index.md`, `map.md`, and `summaries/project_summary.md`.
-- Use **parallel domain hubs** under `context/<slug>/` where `<slug>` is a lowercase hyphenated function or facet **evidenced by sources** (examples you may use only when applicable: engineering, product, design, marketing, sales, finance, legal, security, operations, people, customer-success).
-- Each active domain MUST include `context/<slug>/overview.md` as the hub. Add 0–2 additional files under that domain (e.g. `metrics.md`, `risks.md`, `roadmap.md`) only when SOURCE DOCUMENTS support them.
-- When **GitHub repos** are primary technical sources, also use `projects/<repo-slug>/` for repo-specific depth (overview, architecture, data_model, timeline, open_questions) **in addition to** `context/engineering` (or similar) if engineering content exists—do not collapse everything into a single folder if sources span business + engineering.
-- When sources are **narrowly one codebase** and there is no marketing/finance/etc. material, it is OK to plan **one** strong technical hub (e.g. `projects/<slug>/` + optional `context/engineering/overview.md`)—do **not** invent empty marketing/finance trees.
-- Allocate roughly **2–6** domain hubs when imports are clearly multi-aspect (e.g. Docs + Sheets + repo); **1–2** when sources are thin or purely technical.
-- Optional spine when sources discuss policy, risk, or agent behavior: `meta/using_this_brain.md` and/or `governance/agent_guardrails.md` (one file each at most).
-- `summaries/project_summary.md` must read as a **cross-functional snapshot**: org/initiative identity, what agents must know first, and pointers to each planned `context/*/overview.md` hub—every claim backed by evidence.
-- `index.md` must link to the spine, summary, map, each `context/*/overview.md`, and important `projects/*` overviews.
+- **Default:** put each distinct company function under its **own directory**: `company/<section-slug>/` where `<slug>` is lowercase hyphenated (e.g. `engineering`, `product`, `design`, `marketing`, `sales`, `finance`, `legal`, `security`, `operations`, `people`, `customer-success`). Only create a section folder when sources justify it.
+- **Every active section** MUST include `company/<slug>/overview.md` as the hub for that part of the org.
+- Add more files **inside the same section directory** when sources support them (e.g. `company/marketing/positioning.md`, `company/finance/budget-signals.md`, `company/engineering/architecture-notes.md`)—keep related material **together** under that section.
+- **Inner company links:** In every `company/<slug>/overview.md` plan, `links` MUST include the spine (`index.md`, `summaries/project_summary.md`) plus **at least two** other planned paths: peer `company/*/overview.md` files and/or `projects/*` or `governance/*` when dependencies exist. Show how sections hand off work to each other.
+- **`map.md`** will visualize the company: plan it with `links` to **every** `company/*/overview.md` and to `projects/*/overview.md` hubs so the map is the single diagrammatic entry to org structure.
+- **`index.md`** must include a clear **## Company sections** (or equivalent) listing every `company/<slug>/overview.md` with one-line intent per section, plus links to `map.md`, summary, and code hubs under `projects/` when present.
+- When **GitHub repos** matter, keep **`projects/<repo-slug>/`** for repo depth (overview, architecture, …) **and** link those project overviews from the relevant **`company/<section>/overview.md`** (e.g. engineering section ↔ monorepo project).
+- If imports are **only one codebase**, a single **`company/engineering/overview.md`** (or one section) plus `projects/<slug>/` is enough—do **not** fabricate empty Finance/Marketing trees.
+- Optional: `company/cross-cutting/` for org-wide topics that are not one department (e.g. `company/cross-cutting/strategic-priorities.md`) only when sources support it.
+- Legacy path `context/<slug>/` is discouraged—prefer **`company/<slug>/`** for the same role when planning new files.
+- Optional spine: `meta/using_this_brain.md`, `governance/agent_guardrails.md` (at most one each).
+- `summaries/project_summary.md`: executive view of the **whole company / initiative** with bullets for each section and **explicit markdown links** to every section overview—evidence-backed only.
 
-## Grounding and anti-hallucination
-- Every planned file needs 1–3 `evidence` bullets quoted or tightly paraphrased from SOURCE DOCUMENTS or INITIAL PROMPT.
-- If a function is **weakly** evidenced, plan a **short** overview plus open questions—no fabricated metrics, revenue, or headcount.
-- Do NOT name or describe Brian, AI Brain, this bootstrap tool, or demo-stack trivia unless those exact ideas appear in SOURCE DOCUMENTS or INITIAL PROMPT.
+## Grounding
+- Every planned file: 1–3 `evidence` bullets from SOURCE DOCUMENTS or INITIAL PROMPT.
+- Weak evidence → short overview + open questions; no invented numbers.
+- Do NOT name Brian, AI Brain, this tool, or irrelevant demo stacks unless sources say so.
 
 ## Graph / linking
-- Every file plan's `links` lists **2–6** related paths from the same plan set. Link **across domains** where dependencies exist (e.g. product roadmap ↔ engineering architecture ↔ finance assumptions).
-- Use `template_path` only when a reference path helps structure; otherwise leave empty.
+- Each file plan's `links`: **2–6** paths from this plan. Prefer **cross-section** links (Product ↔ Engineering ↔ Finance) grounded in sources.
+- `template_path` only when a reference file helps structure.
 
 ## Output shape
-- Return JSON with:
-  - `"context_domains"`: optional array of `{{"slug": "engineering", "rationale": "one line why sources justify this hub"}}` for each domain hub you create (omit if none).
-  - `"files"`: array of file plans.
-  - `"rationale"`: short string.
-- Example line (abbreviated):
-  {{"context_domains": [{{"slug": "engineering", "rationale": "GitHub repo excerpts"}}], "files": [{{"path": "index.md", "title": "Knowledge index", "purpose": "Entry point; links all context domains for agents", "template_path": "index.md", "evidence": ["source-backed point"], "links": ["summaries/project_summary.md", "context/engineering/overview.md"]}}], "rationale": "…"}}
+- `"context_domains"`: array of `{{"slug": "engineering", "rationale": "…"}}` for each **`company/<slug>/`** hub (same schema as before; slug is the folder name under `company/`).
+- `"files"`, `"rationale"` as before.
+- Example (abbreviated):
+  {{"context_domains": [{{"slug": "engineering", "rationale": "Repo + technical docs"}}], "files": [{{"path": "index.md", "title": "Company brain index", "purpose": "Entry point; lists all company sections", "template_path": "index.md", "evidence": ["…"], "links": ["summaries/project_summary.md", "map.md", "company/engineering/overview.md"]}}], "rationale": "…"}}
 
 ## Budget
 - Plan at least {minimum_files} files and at most {max_files} files total.
@@ -454,8 +456,8 @@ SOURCE DOCUMENTS:
 
     if len(plans) < minimum_files:
         fallback_paths = [
-            "context/key_facts.md",
-            "context/open_questions.md",
+            "company/cross-cutting/key_facts.md",
+            "company/cross-cutting/open_questions.md",
         ]
         for fallback_path in fallback_paths:
             if len(plans) >= min(max_files, minimum_files):
@@ -474,6 +476,37 @@ SOURCE DOCUMENTS:
 
     _log_bootstrap(f"planned files={[plan.path for plan in plans]}")
     return plans[:max_files]
+
+
+def _cousin_company_section_paths(relative_path: str, selected_paths: list[str], *, max_cousins: int = 5) -> list[str]:
+    """Other `company/<slug>/` hubs (prefer overview.md) for cross-section graph edges."""
+    parts = relative_path.split("/")
+    if len(parts) < 2 or parts[0] != "company":
+        return []
+    my_slug = parts[1]
+    slugs = sorted(
+        {
+            p.split("/")[1]
+            for p in selected_paths
+            if p.startswith("company/") and len(p.split("/")) > 1 and p.split("/")[1] != "cross-cutting"
+        }
+    )
+    out: list[str] = []
+    for slug in slugs:
+        if slug == my_slug:
+            continue
+        ovs = sorted(
+            p
+            for p in selected_paths
+            if p.startswith(f"company/{slug}/") and p.endswith("overview.md")
+        )
+        if not ovs:
+            ovs = sorted(p for p in selected_paths if p.startswith(f"company/{slug}/"))
+        if ovs:
+            out.append(ovs[0])
+        if len(out) >= max_cousins:
+            break
+    return out
 
 
 def _cousin_project_paths(relative_path: str, selected_paths: list[str], *, max_cousins: int = 3) -> list[str]:
@@ -536,7 +569,10 @@ def _ensure_frontmatter_links(content: str, relative_path: str, selected_paths: 
         for p in REQUIRED_BOOTSTRAP_PATHS
         if p in selected_paths and p != relative_path
     ]
-    cousin_extra = _cousin_project_paths(relative_path, selected_paths)
+    cousin_extra = [
+        *_cousin_project_paths(relative_path, selected_paths),
+        *_cousin_company_section_paths(relative_path, selected_paths),
+    ]
     merged = list(dict.fromkeys([*valid_links, *hub_extra, *cousin_extra]))[:10]
     valid_links = merged
 
@@ -610,17 +646,17 @@ def _generate_file_batch(
     )
 
     system = SystemMessage(
-        "You write Markdown for an **enterprise knowledge brain**: source-grounded context so **multiple AI agents** "
-        "(coding, GTM, finance, design, etc.) share one canonical picture. "
-        "Each file should make clear **which decisions it informs**, **which agent roles rely on it**, and **how it links** to other domains. "
-        "Facts come only from SOURCE DOCUMENTS + INITIAL PROMPT—not from template bodies or a generic 'AI Brain' product. "
-        "Templates are YAML/heading patterns only. Return only valid JSON with generated file contents."
+        "You write Markdown for a **company brain**: directories mirror **org sections**; files **link across sections** "
+        "so humans and AI agents navigate the business like a small intranet. "
+        "Each doc states **audience**, **decisions**, and **hand-offs** to other departments. "
+        "Facts only from SOURCE DOCUMENTS + INITIAL PROMPT. Templates = YAML/heading hints only. Return only JSON."
     )
     user = HumanMessage(
         f"""Create these Markdown files: {", ".join(batch_paths)}.
 
-For **context/<domain>/** files: after frontmatter, include a short **## Audience** line naming agent or human roles that should read this (e.g. engineering agents, finance review agents)—only roles justified by the file purpose and sources.
-For **governance/** or **meta/** files: emphasize guardrails, uncertainty, and what agents must not assume without human confirmation.
+For **`company/<section>/`** files: after frontmatter, add **## Audience** (roles). Add **## How this section connects** (or **## Peer sections**) with **bullet list of Markdown links** to other `company/*/overview.md` and relevant `projects/*` files when those paths exist in the selected set—this is the main “inner company” navigation.
+For **`company/cross-cutting/**`: org-wide themes that span departments.
+For **governance/** or **meta/**: guardrails and what agents must verify with humans.
 
 Use each file plan's title, purpose, and `source_evidence`.
 Use templates only for frontmatter style, heading style, and organization hints.
@@ -634,11 +670,11 @@ id, type, title, status, importance, updated, links, keywords.
 Use `{date.today().isoformat()}` only if the template has an updated field.
 Keep links limited to these selected files: {", ".join(selected_paths) or "(none)"}
 Use each file plan's `planned_links` as the default frontmatter `links`, plus clearly related selected paths.
-Prefer exact paths such as `context/engineering/overview.md` and `projects/my-repo/overview.md`.
+Prefer exact paths such as `company/engineering/overview.md` and `projects/my-repo/overview.md`.
 
-If creating `index.md`: mandatory entry point; include a **## Context domains** section with links to every `context/*/overview.md` in the selected set; link `map.md`, `summaries/project_summary.md`, and key `projects/*` overviews; frame the brain as shared context for AI-assisted work **for this organization**.
-If creating `map.md`: show **functions and dependencies** (Mermaid flowchart or grouped bullet graph)—marketing → product → engineering, finance ↔ roadmap, etc.—grounded in sources, not only a repo file tree.
-If creating `summaries/project_summary.md`: cross-functional executive snapshot; name the org/initiative from sources; bullet **what agents must know first**; link each context domain overview; never "AI Brain" unless sources say so.
+If creating `index.md`: entry point with **## Company sections** — for each `company/*/overview.md` in the selected set, a short bullet with a Markdown link and one-line purpose; also link `map.md`, `summaries/project_summary.md`, and `projects/*/overview.md` hubs.
+If creating `map.md`: a **Mermaid** diagram (flowchart or graph) with **one subgraph per `company/<slug>/` section** that has files in the plan, and edges showing dependencies between sections and key `projects/*` hubs (labels from sources). If Mermaid is too large, use a compact diagram plus a **## Link index** table listing section pairs and relationship from evidence.
+If creating `summaries/project_summary.md`: executive snapshot; **## Company sections at a glance** with links to every section overview; **what agents must know first**; evidence-backed only.
 
 Include `## Source Evidence` in every non-index file with bullets from the file plan and/or SOURCE DOCUMENTS.
 

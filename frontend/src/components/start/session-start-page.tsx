@@ -237,7 +237,7 @@ export function SessionStartPage() {
 	]);
 	const [entryText, setEntryText] = useState("");
   const prompt =
-    "Build our enterprise knowledge brain from the linked GitHub repositories, uploads, and Google Workspace imports. Infer which business functions the sources actually cover (engineering, product, design, marketing, finance, legal, ops, etc.) and organize context so multiple AI agents share one grounded view. Prioritize decisions, metrics, owners, risks, and agent guardrails—only what the sources support.";
+    "Build our company brain from the linked GitHub repositories, uploads, and Google Workspace imports. Put each supported department or function in its own directory (company/engineering, company/finance, …), link sections to each other in the Markdown, and use map.md to visualize how the company fits together. Multiple AI agents should share one grounded org picture—decisions, metrics, owners, risks, guardrails—only what the sources support.";
   const [isDragging, setIsDragging] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isDone, setIsDone] = useState(false);

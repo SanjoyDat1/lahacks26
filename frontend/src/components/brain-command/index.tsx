@@ -154,23 +154,31 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
     [mutateGraphLink, router],
   );
 
-  const onRemoveSelectedLink = useCallback(async () => {
+  const removeEdge = useCallback(
+    async (edge: GraphLink) => {
+      const before = bundleRef.current;
+      const next = removeGraphLink(before.graphData, before.files, edge.source, edge.target);
+      if (next.graphData.links.length === before.graphData.links.length) return;
+      setBundle(next);
+      setLinkBusy(true);
+      try {
+        await mutateGraphLink("DELETE", edge.source, edge.target);
+        setSelectedEdge(null);
+      } catch (e) {
+        setBundle(before);
+        void router.refresh();
+        window.alert(e instanceof Error ? e.message : "Could not remove link");
+      } finally {
+        setLinkBusy(false);
+      }
+    },
+    [mutateGraphLink, router],
+  );
+
+  const onRemoveSelectedLink = useCallback(() => {
     if (!selectedEdge) return;
-    const before = bundleRef.current;
-    const next = removeGraphLink(before.graphData, before.files, selectedEdge.source, selectedEdge.target);
-    setBundle(next);
-    setLinkBusy(true);
-    try {
-      await mutateGraphLink("DELETE", selectedEdge.source, selectedEdge.target);
-      setSelectedEdge(null);
-    } catch (e) {
-      setBundle(before);
-      void router.refresh();
-      window.alert(e instanceof Error ? e.message : "Could not remove link");
-    } finally {
-      setLinkBusy(false);
-    }
-  }, [mutateGraphLink, router, selectedEdge]);
+    void removeEdge(selectedEdge);
+  }, [selectedEdge, removeEdge]);
 
   const edgeSourceFile = useMemo(() => {
     if (!selectedEdge) return null;
@@ -232,6 +240,7 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
               if (src) setSelectedFile(src);
             }
           }}
+          onEdgeDelete={(edge) => void removeEdge(edge)}
           onLinkCreate={onLinkCreate}
           visibleFilter={visibleFilter}
           colorOverride={colorOverride}
@@ -298,7 +307,7 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
       </div>
 
       {selectedEdge && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-52 z-[25] flex justify-center px-4 pb-2 sm:bottom-56">
+        <div className="pointer-events-none absolute inset-x-0 bottom-28 z-[25] flex justify-center px-4 pb-2 sm:bottom-32">
           <div
             className="pointer-events-auto flex max-w-[min(520px,calc(100vw-32px))] items-center gap-3 rounded-2xl border border-black/10 bg-white/95 px-4 py-2.5 text-[13px] shadow-xl shadow-black/10 backdrop-blur-md"
             role="status"

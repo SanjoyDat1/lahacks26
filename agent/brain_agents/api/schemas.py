@@ -65,10 +65,10 @@ class InitializeGitHubRepoSource(BaseModel):
 
 class BootstrapStreamRequest(BaseModel):
     prompt: str = (
-        "Build an enterprise knowledge brain from these imports for our AI agents. Infer which functions matter "
-        "(e.g. engineering, product, design, marketing, finance, legal, operations) from the sources only. "
-        "Prioritize decisions, metrics, owners, risks, and guardrails agents must respect. Stay strictly grounded "
-        "in the supplied repos, files, and Google Workspace content."
+        "Build a company brain from these imports: one directory per company section that the sources support "
+        "(engineering, product, marketing, finance, legal, ops, etc.), with rich links between sections. "
+        "Prioritize how departments connect, key decisions, metrics, owners, risks, and agent guardrails. "
+        "Stay strictly grounded in the supplied repos, files, and Google Workspace content."
     )
     documents: list[BootstrapDocument] = Field(default_factory=list)
     github_repos: list[InitializeGitHubRepoSource] = Field(

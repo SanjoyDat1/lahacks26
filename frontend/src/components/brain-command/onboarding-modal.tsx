@@ -6,7 +6,7 @@ import { Loader2, GitBranch, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PROMPT =
-  "Initialize an enterprise knowledge brain from this repository for AI agents: infer technical and (if present) cross-functional context—architecture, entry points, dependencies, and how the system fits together—strictly from repo evidence.";
+  "Initialize a company brain from this repo: use company/engineering (or similar) for technical org context and link to projects/* code hubs; surface architecture, entry points, and dependencies strictly from repo evidence.";
 
 function parseRepoSlugFromUrl(url: string): string {
   try {

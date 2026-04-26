@@ -10,6 +10,7 @@ export function GraphCanvas({
   flashEdge,
   onSelectFile,
   onEdgeSelect,
+  onEdgeDelete,
   onLinkCreate,
   visibleFilter,
   colorOverride,
@@ -20,6 +21,7 @@ export function GraphCanvas({
   flashEdge?: GraphLink | null;
   onSelectFile: (filePathOrId: string) => void;
   onEdgeSelect?: (edge: GraphLink | null) => void;
+  onEdgeDelete?: (edge: GraphLink) => void;
   onLinkCreate?: (sourceId: string, targetId: string) => Promise<void>;
   visibleFilter: (node: { id: string; path?: string }) => boolean;
   colorOverride: (node: { id: string; path?: string }) => string;
@@ -37,6 +39,7 @@ export function GraphCanvas({
           onSelectFile(node.id || node.path);
         }}
         onEdgeSelect={onEdgeSelect}
+        onEdgeDelete={onEdgeDelete}
         onLinkCreate={onLinkCreate}
         visibleFilter={visibleFilter}
         colorOverride={colorOverride}

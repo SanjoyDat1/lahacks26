@@ -627,6 +627,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
                   setRightOpen(true);
                 }
               }}
+              onEdgeDelete={(edge) => void mutateLink("DELETE", edge.source, edge.target)}
               onLinkCreate={(sourceId, targetId) => mutateLink("POST", sourceId, targetId)}
               selectedId={selectedId}
               selectedEdge={selectedEdge}
@@ -646,6 +647,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
                 graphData={graphData}
                 onNodeSelect={(node) => handleNodeSelect(node, false)}
                 onEdgeSelect={setSelectedEdge}
+                onEdgeDelete={(edge) => void mutateLink("DELETE", edge.source, edge.target)}
                 onLinkCreate={(sourceId, targetId) => mutateLink("POST", sourceId, targetId)}
                 selectedId={selectedId}
                 selectedEdge={selectedEdge}
