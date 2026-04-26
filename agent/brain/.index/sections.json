@@ -1,324 +1,496 @@
 {
   "version": 1,
   "file_mtimes": {
-    "index.md": 1777186852.557815,
-    "map.md": 1777186852.558045,
-    "projects/team_task_board_api/configuration.md": 1777186850.2118323,
-    "projects/team_task_board_api/data_model.md": 1777186850.2115848,
-    "projects/team_task_board_api/open_questions.md": 1777186850.2120152,
-    "projects/team_task_board_api/overview.md": 1777186852.55849,
-    "projects/team_task_board_api/testing.md": 1777186850.2121816,
-    "summaries/project_summary.md": 1777186852.5582519
+    "projects/team_task_board_api/data_model.md": 1777187207.7412422,
+    "projects/team_task_board_api/entry_points.md": 1777187207.741576,
+    "projects/team_task_board_api/open_questions.md": 1777187207.7421098,
+    "projects/team_task_board_api/risks_constraints.md": 1777187201.2395158,
+    "projects/team_task_board_api/testing.md": 1777187207.7418222
   },
   "sections": [
-    {
-      "file_path": "index.md",
-      "section_id": "index.md#_intro",
-      "heading": "Intro",
-      "content": "# Brain Index\n\nThis folder is an example of a structured project brain for the AI Brain application. It is designed to be readable by humans, efficient for LLM lookup, and easy to render as a linked knowledge map.\n\nTreat this file as the required entry point. Every generated working brain should include its own `index.md`, and every important generated file should be reachable from this page directly or through [Brain Map](map.md).",
-      "frontmatter": {
-        "id": "brian.index",
-        "type": "index",
-        "title": "Brain Index",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
-        "links": [
-          "map.md",
-          "summaries/project_summary.md- map.md",
-          "summaries/project_summary.md"
-        ],
-        "keywords": [
-          "source of truth",
-          "project memory",
-          "coding agent context"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "index.md",
-      "section_id": "index.md#read-order-for-agents",
-      "heading": "Read Order For Agents",
-      "content": "1. Read [Project Summary](summaries/project_summary.md) for the shortest useful context.\n2. Read [Brain Map](map.md) to understand the project shape.",
-      "frontmatter": {
-        "id": "brian.index",
-        "type": "index",
-        "title": "Brain Index",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
-        "links": [
-          "map.md",
-          "summaries/project_summary.md- map.md",
-          "summaries/project_summary.md"
-        ],
-        "keywords": [
-          "source of truth",
-          "project memory",
-          "coding agent context"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "index.md",
-      "section_id": "index.md#important-links",
-      "heading": "Important Links",
-      "content": "- [Brain Map](map.md)\n- [Project Summary](summaries/project_summary.md)",
-      "frontmatter": {
-        "id": "brian.index",
-        "type": "index",
-        "title": "Brain Index",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
-        "links": [
-          "map.md",
-          "summaries/project_summary.md- map.md",
-          "summaries/project_summary.md"
-        ],
-        "keywords": [
-          "source of truth",
-          "project memory",
-          "coding agent context"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "index.md",
-      "section_id": "index.md#generated-brain-files",
-      "heading": "Generated Brain Files",
-      "content": "- [projects/team_task_board_api/overview.md](projects/team_task_board_api/overview.md)\n- [projects/team_task_board_api/data_model.md](projects/team_task_board_api/data_model.md)\n- [projects/team_task_board_api/configuration.md](projects/team_task_board_api/configuration.md)\n- [projects/team_task_board_api/open_questions.md](projects/team_task_board_api/open_questions.md)\n- [projects/team_task_board_api/testing.md](projects/team_task_board_api/testing.md)",
-      "frontmatter": {
-        "id": "brian.index",
-        "type": "index",
-        "title": "Brain Index",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
-        "links": [
-          "map.md",
-          "summaries/project_summary.md- map.md",
-          "summaries/project_summary.md"
-        ],
-        "keywords": [
-          "source of truth",
-          "project memory",
-          "coding agent context"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "map.md",
-      "section_id": "map.md#_intro",
-      "heading": "Intro",
-      "content": "# Brain Map\n\nThis file is the visual navigation layer for the brain. Humans can use it to understand the project shape. Agents can use it to decide which files to read next.\n\n```mermaid\nflowchart LR\n  Index[\"index.md\"] --> ProjectSummary[\"summaries/project_summary.md\"]\n```",
-      "frontmatter": {
-        "id": "brian.map",
-        "type": "map",
-        "title": "Brain Map",
-        "status": "active",
-        "importance": "high",
-        "updated": "2026-04-25",
-        "links": [
-          "index.md",
-          "summaries/project_summary.md- brian.index",
-          "summaries.project_summary"
-        ],
-        "keywords": [
-          "graph",
-          "map",
-          "backlinks"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "map.md",
-      "section_id": "map.md#map-rules",
-      "heading": "Map Rules",
-      "content": "- Every important file should be reachable from `index.md` or this map.",
-      "frontmatter": {
-        "id": "brian.map",
-        "type": "map",
-        "title": "Brain Map",
-        "status": "active",
-        "importance": "high",
-        "updated": "2026-04-25",
-        "links": [
-          "index.md",
-          "summaries/project_summary.md- brian.index",
-          "summaries.project_summary"
-        ],
-        "keywords": [
-          "graph",
-          "map",
-          "backlinks"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "projects/team_task_board_api/configuration.md",
-      "section_id": "projects/team_task_board_api/configuration.md#_intro",
-      "heading": "Intro",
-      "content": "# Configuration and Setup\n\nInstructions for local setup.",
-      "frontmatter": {},
-      "source_kind": null
-    },
-    {
-      "file_path": "projects/team_task_board_api/configuration.md",
-      "section_id": "projects/team_task_board_api/configuration.md#local-setup-instructions",
-      "heading": "Local Setup Instructions",
-      "content": "```bash\npython -m venv .venv\nsource .venv/bin/activate\npip install -r requirements.txt\nuvicorn app.main:app --reload\n```",
-      "frontmatter": {},
-      "source_kind": null
-    },
-    {
-      "file_path": "projects/team_task_board_api/configuration.md",
-      "section_id": "projects/team_task_board_api/configuration.md#source-evidence",
-      "heading": "Source Evidence",
-      "content": "- Local Setup Instructions: python -m venv .venv, source .venv/bin/activate.",
-      "frontmatter": {},
-      "source_kind": null
-    },
     {
       "file_path": "projects/team_task_board_api/data_model.md",
       "section_id": "projects/team_task_board_api/data_model.md#_intro",
       "heading": "Intro",
-      "content": "# Data Model\n\nDetails on data structures.",
-      "frontmatter": {},
+      "content": "",
+      "frontmatter": {
+        "id": "data_model",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md"
+        ],
+        "keywords": [
+          "data model",
+          "task",
+          "API"
+        ],
+        "title": "Data Model"
+      },
       "source_kind": null
     },
     {
       "file_path": "projects/team_task_board_api/data_model.md",
-      "section_id": "projects/team_task_board_api/data_model.md#task-model",
-      "heading": "Task Model",
-      "content": "- Represents a task with fields like `id`, `title`, `description`, `assignee`, `priority`, and `status`.",
-      "frontmatter": {},
+      "section_id": "projects/team_task_board_api/data_model.md#purpose",
+      "heading": "Purpose",
+      "content": "Description of data structures used",
+      "frontmatter": {
+        "id": "data_model",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md"
+        ],
+        "keywords": [
+          "data model",
+          "task",
+          "API"
+        ],
+        "title": "Data Model"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/data_model.md",
+      "section_id": "projects/team_task_board_api/data_model.md#data-structures",
+      "heading": "Data Structures",
+      "content": "- **Task**: Represents a task with fields for ID, title, description, assignee, priority, and status.\n- **TaskCreate**: Model for creating a new task.",
+      "frontmatter": {
+        "id": "data_model",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md"
+        ],
+        "keywords": [
+          "data model",
+          "task",
+          "API"
+        ],
+        "title": "Data Model"
+      },
       "source_kind": null
     },
     {
       "file_path": "projects/team_task_board_api/data_model.md",
       "section_id": "projects/team_task_board_api/data_model.md#source-evidence",
       "heading": "Source Evidence",
-      "content": "- Task: Represents a task with fields like id, title, description, assignee, priority, and status.",
-      "frontmatter": {},
+      "content": "- Task: Represents a task with fields for ID, title, description, assignee, priority, and status.\n- TaskCreate: Model for creating a new task.",
+      "frontmatter": {
+        "id": "data_model",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/entry_points.md"
+        ],
+        "keywords": [
+          "data model",
+          "task",
+          "API"
+        ],
+        "title": "Data Model"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/entry_points.md",
+      "section_id": "projects/team_task_board_api/entry_points.md#_intro",
+      "heading": "Intro",
+      "content": "",
+      "frontmatter": {
+        "id": "entry_points",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md"
+        ],
+        "keywords": [
+          "API",
+          "entry points",
+          "routes"
+        ],
+        "title": "API Entry Points"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/entry_points.md",
+      "section_id": "projects/team_task_board_api/entry_points.md#purpose",
+      "heading": "Purpose",
+      "content": "Details on how to interact with the API",
+      "frontmatter": {
+        "id": "entry_points",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md"
+        ],
+        "keywords": [
+          "API",
+          "entry points",
+          "routes"
+        ],
+        "title": "API Entry Points"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/entry_points.md",
+      "section_id": "projects/team_task_board_api/entry_points.md#application-bootstrap",
+      "heading": "Application Bootstrap",
+      "content": "- To start the application, use the command: `uvicorn app.main:app --reload`",
+      "frontmatter": {
+        "id": "entry_points",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md"
+        ],
+        "keywords": [
+          "API",
+          "entry points",
+          "routes"
+        ],
+        "title": "API Entry Points"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/entry_points.md",
+      "section_id": "projects/team_task_board_api/entry_points.md#api-routes",
+      "heading": "API Routes",
+      "content": "- `GET /health`: Health check endpoint.\n- `GET /tasks`: Retrieve a list of tasks.\n- `POST /tasks`: Create a new task.\n- `PATCH /tasks/{task_id}`: Update an existing task's status or assignee.\n- `GET /summary`: Retrieve summary metrics for the dashboard.",
+      "frontmatter": {
+        "id": "entry_points",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md"
+        ],
+        "keywords": [
+          "API",
+          "entry points",
+          "routes"
+        ],
+        "title": "API Entry Points"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/entry_points.md",
+      "section_id": "projects/team_task_board_api/entry_points.md#source-evidence",
+      "heading": "Source Evidence",
+      "content": "- Application Bootstrap: uvicorn app.main:app --reload\n- API Routes include GET /health and POST /tasks.",
+      "frontmatter": {
+        "id": "entry_points",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/testing.md"
+        ],
+        "keywords": [
+          "API",
+          "entry points",
+          "routes"
+        ],
+        "title": "API Entry Points"
+      },
       "source_kind": null
     },
     {
       "file_path": "projects/team_task_board_api/open_questions.md",
       "section_id": "projects/team_task_board_api/open_questions.md#_intro",
       "heading": "Intro",
-      "content": "# Open Questions\n\nList of unresolved issues.",
-      "frontmatter": {},
+      "content": "",
+      "frontmatter": {
+        "id": "open_questions",
+        "status": "draft",
+        "importance": "low",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md"
+        ],
+        "keywords": [
+          "open questions",
+          "contract testing"
+        ],
+        "title": "Open Questions"
+      },
       "source_kind": null
     },
     {
       "file_path": "projects/team_task_board_api/open_questions.md",
-      "section_id": "projects/team_task_board_api/open_questions.md#current-open-questions",
-      "heading": "Current Open Questions",
-      "content": "- The code does not handle task deletion or archiving explicitly.\n- The summary endpoint currently includes archived tasks, which may need to be filtered based on contract testing results.",
-      "frontmatter": {},
+      "section_id": "projects/team_task_board_api/open_questions.md#purpose",
+      "heading": "Purpose",
+      "content": "List of unresolved questions",
+      "frontmatter": {
+        "id": "open_questions",
+        "status": "draft",
+        "importance": "low",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md"
+        ],
+        "keywords": [
+          "open questions",
+          "contract testing"
+        ],
+        "title": "Open Questions"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/open_questions.md",
+      "section_id": "projects/team_task_board_api/open_questions.md#open-questions",
+      "heading": "Open Questions",
+      "content": "- Ensure backend changes do not break frontend expectations.\n- Use `scripts/analyze_failure.py` to extract and analyze contract test failures.",
+      "frontmatter": {
+        "id": "open_questions",
+        "status": "draft",
+        "importance": "low",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md"
+        ],
+        "keywords": [
+          "open questions",
+          "contract testing"
+        ],
+        "title": "Open Questions"
+      },
       "source_kind": null
     },
     {
       "file_path": "projects/team_task_board_api/open_questions.md",
       "section_id": "projects/team_task_board_api/open_questions.md#source-evidence",
       "heading": "Source Evidence",
-      "content": "- The code does not handle task deletion or archiving explicitly.",
-      "frontmatter": {},
+      "content": "- Ensure backend changes do not break frontend expectations.\n- Use scripts/analyze_failure.py to extract and analyze contract test failures.",
+      "frontmatter": {
+        "id": "open_questions",
+        "status": "draft",
+        "importance": "low",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/risks_constraints.md"
+        ],
+        "keywords": [
+          "open questions",
+          "contract testing"
+        ],
+        "title": "Open Questions"
+      },
       "source_kind": null
     },
     {
-      "file_path": "projects/team_task_board_api/overview.md",
-      "section_id": "projects/team_task_board_api/overview.md#_intro",
+      "file_path": "projects/team_task_board_api/risks_constraints.md",
+      "section_id": "projects/team_task_board_api/risks_constraints.md#_intro",
       "heading": "Intro",
-      "content": "# Project Overview\n\nThe Team Task Board API is a FastAPI backend for a team task board demo app, exposing a simple in-memory REST API for task management.",
+      "content": "# Risks and Constraints",
       "frontmatter": {
-        "id": "projects.team_task_board_api.overview",
-        "type": "overview",
-        "title": "Project Overview",
-        "status": "active",
+        "id": "risks_constraints",
+        "type": "document",
+        "title": "Risks and Constraints",
+        "status": "draft",
         "importance": "high",
-        "updated": "2026-04-25",
+        "updated": "2026-04-26",
         "links": [
-          "projects/team_task_board_api/data_model.md",
-          "projects/team_task_board_api/configuration.md",
+          "projects/team_task_board_api/overview.md",
           "projects/team_task_board_api/open_questions.md",
           "index.md",
           "map.md",
-          "summaries/project_summary.md- projects/team_task_board_api/data_model.md",
-          "projects/team_task_board_api/configuration.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
           "projects/team_task_board_api/open_questions.md"
         ],
         "keywords": [
-          "project overview",
-          "task management",
-          "FastAPI"
+          "risks",
+          "constraints",
+          "testing"
         ]
       },
       "source_kind": null
     },
     {
-      "file_path": "projects/team_task_board_api/overview.md",
-      "section_id": "projects/team_task_board_api/overview.md#user-facing-capabilities",
-      "heading": "User-facing Capabilities",
-      "content": "- Health check endpoint\n- List tasks\n- Create tasks\n- Update task status and assignee\n- Summary endpoint for dashboard metrics",
+      "file_path": "projects/team_task_board_api/risks_constraints.md",
+      "section_id": "projects/team_task_board_api/risks_constraints.md#purpose",
+      "heading": "Purpose",
+      "content": "Document potential risks and constraints associated with the Team Task Board API project.",
       "frontmatter": {
-        "id": "projects.team_task_board_api.overview",
-        "type": "overview",
-        "title": "Project Overview",
-        "status": "active",
+        "id": "risks_constraints",
+        "type": "document",
+        "title": "Risks and Constraints",
+        "status": "draft",
         "importance": "high",
-        "updated": "2026-04-25",
+        "updated": "2026-04-26",
         "links": [
-          "projects/team_task_board_api/data_model.md",
-          "projects/team_task_board_api/configuration.md",
+          "projects/team_task_board_api/overview.md",
           "projects/team_task_board_api/open_questions.md",
           "index.md",
           "map.md",
-          "summaries/project_summary.md- projects/team_task_board_api/data_model.md",
-          "projects/team_task_board_api/configuration.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
           "projects/team_task_board_api/open_questions.md"
         ],
         "keywords": [
-          "project overview",
-          "task management",
-          "FastAPI"
+          "risks",
+          "constraints",
+          "testing"
         ]
       },
       "source_kind": null
     },
     {
-      "file_path": "projects/team_task_board_api/overview.md",
-      "section_id": "projects/team_task_board_api/overview.md#source-evidence",
+      "file_path": "projects/team_task_board_api/risks_constraints.md",
+      "section_id": "projects/team_task_board_api/risks_constraints.md#risks",
+      "heading": "Risks",
+      "content": "- **Contract Testing**: Failing tests must be analyzed and documented before code changes are made.",
+      "frontmatter": {
+        "id": "risks_constraints",
+        "type": "document",
+        "title": "Risks and Constraints",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/open_questions.md"
+        ],
+        "keywords": [
+          "risks",
+          "constraints",
+          "testing"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/risks_constraints.md",
+      "section_id": "projects/team_task_board_api/risks_constraints.md#constraints",
+      "heading": "Constraints",
+      "content": "- **CORS Configuration**: Ensure CORS settings allow frontend development from specified origins.",
+      "frontmatter": {
+        "id": "risks_constraints",
+        "type": "document",
+        "title": "Risks and Constraints",
+        "status": "draft",
+        "importance": "high",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
+          "projects/team_task_board_api/open_questions.md"
+        ],
+        "keywords": [
+          "risks",
+          "constraints",
+          "testing"
+        ]
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/risks_constraints.md",
+      "section_id": "projects/team_task_board_api/risks_constraints.md#source-evidence",
       "heading": "Source Evidence",
-      "content": "- Project Name: Team Task Board API\n- Purpose: A FastAPI backend for a team task board demo app, exposing a simple in-memory REST API for task management.\n- User-facing Capabilities: Health check endpoint, List tasks, Create tasks, Update task status and assignee.",
+      "content": "- Failing tests must be analyzed and documented before code changes are made.\n- Ensure CORS settings allow frontend development from specified origins.",
       "frontmatter": {
-        "id": "projects.team_task_board_api.overview",
-        "type": "overview",
-        "title": "Project Overview",
-        "status": "active",
+        "id": "risks_constraints",
+        "type": "document",
+        "title": "Risks and Constraints",
+        "status": "draft",
         "importance": "high",
-        "updated": "2026-04-25",
+        "updated": "2026-04-26",
         "links": [
-          "projects/team_task_board_api/data_model.md",
-          "projects/team_task_board_api/configuration.md",
+          "projects/team_task_board_api/overview.md",
           "projects/team_task_board_api/open_questions.md",
           "index.md",
           "map.md",
-          "summaries/project_summary.md- projects/team_task_board_api/data_model.md",
-          "projects/team_task_board_api/configuration.md",
+          "summaries/project_summary.md- projects/team_task_board_api/overview.md",
           "projects/team_task_board_api/open_questions.md"
         ],
         "keywords": [
-          "project overview",
-          "task management",
-          "FastAPI"
+          "risks",
+          "constraints",
+          "testing"
         ]
       },
       "source_kind": null
@@ -327,119 +499,134 @@
       "file_path": "projects/team_task_board_api/testing.md",
       "section_id": "projects/team_task_board_api/testing.md#_intro",
       "heading": "Intro",
-      "content": "# Testing\n\nGuidelines for running tests.",
-      "frontmatter": {},
+      "content": "",
+      "frontmatter": {
+        "id": "testing",
+        "status": "draft",
+        "importance": "medium",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md"
+        ],
+        "keywords": [
+          "testing",
+          "pytest",
+          "API"
+        ],
+        "title": "Testing"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/testing.md",
+      "section_id": "projects/team_task_board_api/testing.md#purpose",
+      "heading": "Purpose",
+      "content": "Information on testing the application",
+      "frontmatter": {
+        "id": "testing",
+        "status": "draft",
+        "importance": "medium",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md"
+        ],
+        "keywords": [
+          "testing",
+          "pytest",
+          "API"
+        ],
+        "title": "Testing"
+      },
       "source_kind": null
     },
     {
       "file_path": "projects/team_task_board_api/testing.md",
       "section_id": "projects/team_task_board_api/testing.md#running-tests",
       "heading": "Running Tests",
-      "content": "Use `pytest` to run tests located in `tests/test_api.py`.",
-      "frontmatter": {},
+      "content": "- Use `pytest` to run tests defined in `tests/test_api.py`.",
+      "frontmatter": {
+        "id": "testing",
+        "status": "draft",
+        "importance": "medium",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md"
+        ],
+        "keywords": [
+          "testing",
+          "pytest",
+          "API"
+        ],
+        "title": "Testing"
+      },
+      "source_kind": null
+    },
+    {
+      "file_path": "projects/team_task_board_api/testing.md",
+      "section_id": "projects/team_task_board_api/testing.md#test-cases",
+      "heading": "Test Cases",
+      "content": "- Health check and task listing tests are implemented.",
+      "frontmatter": {
+        "id": "testing",
+        "status": "draft",
+        "importance": "medium",
+        "updated": "2026-04-26",
+        "links": [
+          "projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md",
+          "index.md",
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md"
+        ],
+        "keywords": [
+          "testing",
+          "pytest",
+          "API"
+        ],
+        "title": "Testing"
+      },
       "source_kind": null
     },
     {
       "file_path": "projects/team_task_board_api/testing.md",
       "section_id": "projects/team_task_board_api/testing.md#source-evidence",
       "heading": "Source Evidence",
-      "content": "- Use pytest to run tests located in tests/test_api.py.",
-      "frontmatter": {},
-      "source_kind": null
-    },
-    {
-      "file_path": "summaries/project_summary.md",
-      "section_id": "summaries/project_summary.md#_intro",
-      "heading": "Intro",
-      "content": "# Project Summary\n\nAI Brain is a full-stack product that keeps human project context synchronized with LLM coding agents.\n\nIt ingests engineering conversations and artifacts from various sources. Incoming events are normalized into one event shape, embedded for semantic search, and passed through a distiller that decides whether the event changes product goals, architecture, constraints, risks, or open questions.\n\nIf the event is significant, the app updates Markdown brain files. In production, those updates are committed for an audit trail. In local demo mode, the same flow works in memory so the product can be tested without credentials.",
+      "content": "- Use pytest to run tests defined in tests/test_api.py.\n- Health check and task listing tests are implemented.",
       "frontmatter": {
-        "id": "summaries.project_summary",
-        "type": "summary",
-        "title": "Project Summary",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
+        "id": "testing",
+        "status": "draft",
+        "importance": "medium",
+        "updated": "2026-04-26",
         "links": [
+          "projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md",
           "index.md",
-          "map.md- brian.index"
+          "map.md",
+          "summaries/project_summary.md- projects/team_task_board_api/entry_points.md",
+          "projects/team_task_board_api/open_questions.md"
         ],
         "keywords": [
-          "summary",
-          "current state",
-          "quick context"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "summaries/project_summary.md",
-      "section_id": "summaries/project_summary.md#what-works-right-now",
-      "heading": "What Works Right Now",
-      "content": "- Full-stack application with various features and integrations.",
-      "frontmatter": {
-        "id": "summaries.project_summary",
-        "type": "summary",
-        "title": "Project Summary",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
-        "links": [
-          "index.md",
-          "map.md- brian.index"
+          "testing",
+          "pytest",
+          "API"
         ],
-        "keywords": [
-          "summary",
-          "current state",
-          "quick context"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "summaries/project_summary.md",
-      "section_id": "summaries/project_summary.md#agent-guidance",
-      "heading": "Agent Guidance",
-      "content": "Before changing code, read this file, then read the specific architecture or decision files linked from the task.",
-      "frontmatter": {
-        "id": "summaries.project_summary",
-        "type": "summary",
-        "title": "Project Summary",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
-        "links": [
-          "index.md",
-          "map.md- brian.index"
-        ],
-        "keywords": [
-          "summary",
-          "current state",
-          "quick context"
-        ]
-      },
-      "source_kind": null
-    },
-    {
-      "file_path": "summaries/project_summary.md",
-      "section_id": "summaries/project_summary.md#source-evidence",
-      "heading": "Source Evidence",
-      "content": "- AI Brain is a full-stack product that keeps human project context synchronized with LLM coding agents.\n- It ingests engineering conversations and artifacts from various sources.\n- Updates are committed for an audit trail in production.",
-      "frontmatter": {
-        "id": "summaries.project_summary",
-        "type": "summary",
-        "title": "Project Summary",
-        "status": "active",
-        "importance": "critical",
-        "updated": "2026-04-25",
-        "links": [
-          "index.md",
-          "map.md- brian.index"
-        ],
-        "keywords": [
-          "summary",
-          "current state",
-          "quick context"
-        ]
+        "title": "Testing"
       },
       "source_kind": null
     }
