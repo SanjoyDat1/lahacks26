@@ -82,6 +82,9 @@ export function ContextMapRebuildNotifier({
 
   const wsRef = useRef<WebSocket | null>(null);
   const logEndRef = useRef<HTMLDivElement>(null);
+  /** Avoid putting `onRebuildDone` in the WS effect deps: parents often pass inline lambdas and re-render frequently. */
+  const onRebuildDoneRef = useRef<typeof onRebuildDone>(onRebuildDone);
+  onRebuildDoneRef.current = onRebuildDone;
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -178,7 +181,8 @@ export function ContextMapRebuildNotifier({
         setLastMessage("Context map updated.");
         const rid =
           "run_id" in evt && evt.run_id != null ? String(evt.run_id) : "";
-        if (typeof onRebuildDone === "function") onRebuildDone(rid);
+        const cb = onRebuildDoneRef.current;
+        if (typeof cb === "function") cb(rid);
         return;
       }
     };
@@ -202,7 +206,7 @@ export function ContextMapRebuildNotifier({
       }
       wsRef.current = null;
     };
-  }, [onRebuildDone]);
+  }, []);
 
   const stageLabel = useMemo(() => {
     const lastStage = [...events].reverse().find((e) => e.type === "stage_start") as

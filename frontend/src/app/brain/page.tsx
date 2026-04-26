@@ -91,6 +91,12 @@ export default function BrainPage() {
     void load();
   }, [load]);
 
+  const onContextMapRebuildDone = useCallback(() => {
+    setTimeout(() => {
+      void load();
+    }, 250);
+  }, [load]);
+
   const graphData = useMemo(() => buildGraphData(files ?? []), [files]);
 
   if (files === null && loading) {
@@ -138,14 +144,7 @@ export default function BrainPage() {
 
   return (
     <>
-      <ContextMapRebuildNotifier
-        onRebuildDone={() => {
-          // Small delay: ensures agent has finished writing + invalidation before we re-fetch.
-          setTimeout(() => {
-            void load();
-          }, 250);
-        }}
-      />
+      <ContextMapRebuildNotifier onRebuildDone={onContextMapRebuildDone} />
       <BrainCommand files={files ?? []} graphData={graphData} />
       {/* Floating refresh / source indicator so it's visually clear which agent
           the graph is reflecting. */}
