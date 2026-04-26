@@ -36,11 +36,11 @@ export const SCENARIOS: Scenario[] = [
       {
         action: "Load the index",
         thinking:
-          "I always start with the index — it's the authoritative map of everything this brain knows. I need to understand the topology before touching anything.",
+          "I always start with the index — it's the authoritative map of everything Brian knows. I need to understand the topology before touching anything.",
         files: [
           {
             id: "brian.index",
-            title: "Brian Project Brain",
+            title: "Brian — project knowledge",
             relevance: "primary",
             reason: "Entry point to the entire knowledge graph — tells me what exists and where to look",
           },
@@ -86,7 +86,7 @@ export const SCENARIOS: Scenario[] = [
             id: "architecture.runtime_flow",
             title: "Runtime Flow",
             relevance: "primary",
-            reason: "Shows exactly how a request moves from ingestion through distillation to the brain",
+            reason: "Shows exactly how a request moves from ingestion through distillation into Brian",
           },
           {
             id: "summaries.architecture_summary",
@@ -127,7 +127,7 @@ export const SCENARIOS: Scenario[] = [
   {
     id: "fix-bug",
     name: "Fix a Bug",
-    description: "Trace a reported bug through ingestion → distillation → brain pipeline",
+    description: "Trace a reported bug through ingestion → distillation → Brian pipeline",
     colorClass: "red",
     icon: "🐛",
     steps: [
@@ -220,7 +220,7 @@ export const SCENARIOS: Scenario[] = [
       {
         action: "Understand system boundaries",
         thinking:
-          "Adding an integration touches the ingestion layer, normalizers, and potentially the brain. I need the full picture first.",
+          "Adding an integration touches the ingestion layer, normalizers, and potentially Brian. I need the full picture first.",
         files: [
           {
             id: "architecture.system_overview",
@@ -452,9 +452,9 @@ export const SCENARIOS: Scenario[] = [
         files: [
           {
             id: "decisions.ADR-0001-git-backed-brain",
-            title: "ADR-0001: Git-Backed Brain",
+            title: "ADR-0001: Git-Backed Brian",
             relevance: "secondary",
-            reason: "Any brain storage changes must go through git — this ADR defines that constraint",
+            reason: "Any Brian storage changes must go through git — this ADR defines that constraint",
           },
           {
             id: "decisions.ADR-0002-local-demo-fallbacks",
@@ -518,9 +518,9 @@ export const SCENARIOS: Scenario[] = [
           },
           {
             id: "architecture.brain_storage",
-            title: "Brain Storage",
+            title: "Brian storage",
             relevance: "secondary",
-            reason: "Brain reads/writes go through GitHub API or disk — both have latency characteristics",
+            reason: "Brian reads/writes go through GitHub API or disk — both have latency characteristics",
           },
         ],
       },

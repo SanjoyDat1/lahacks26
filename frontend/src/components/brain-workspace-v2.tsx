@@ -510,7 +510,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
               <BookOpen size={14} className="text-violet-600" />
             </div>
             <div>
-              <span className="block text-[11px] font-semibold text-slate-800">Brain</span>
+              <span className="block text-[11px] font-semibold text-slate-800">Brian</span>
               <span className="text-[9px] text-slate-400">Notes &amp; context</span>
             </div>
           </div>
@@ -1169,7 +1169,7 @@ function Overview({
 
       {/* ── Brain Health ───────────────────────────────────────────────── */}
       <section>
-        <SectionLabel>Brain health</SectionLabel>
+        <SectionLabel>Brian health</SectionLabel>
         <div className={cn(
           "rounded-2xl border p-4",
           healthIssues.length === 0

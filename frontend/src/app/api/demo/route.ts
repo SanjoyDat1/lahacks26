@@ -6,7 +6,7 @@ export async function POST() {
   const samples = [
     {
       id: "demo-github-1",
-      title: "Adopt Git-backed brain as the source of truth",
+      title: "Adopt Git-backed Brian as the source of truth",
       body: "Architecture decision: before any coding agent writes code, it must read /brain and append durable design decisions to brain/decision_log.md.",
       actor: "founder",
     },

@@ -213,7 +213,7 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
           Ask
         </ModeTab>
         <ModeTab active={mode === "edit"} onClick={() => setMode("edit")} icon={<Pencil size={12} />}>
-          Edit Brain
+          Edit in Brian
         </ModeTab>
       </div>
 
@@ -299,13 +299,13 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
         </>
       )}
 
-      {/* ── Edit Brain panel ── */}
+      {/* ── Brian editor panel ── */}
       {mode === "edit" && (
         <div className="flex flex-1 flex-col overflow-hidden">
           {editState.status === "idle" || editState.status === "error" ? (
             <div className="flex flex-1 flex-col gap-4 p-4">
               <div className="rounded-2xl border border-violet-200/60 bg-violet-50/80 p-4">
-                <p className="text-xs font-semibold text-violet-700 mb-1">🤖 AI Brain Editor</p>
+                <p className="text-xs font-semibold text-violet-700 mb-1">🤖 Brian editor</p>
                 <p className="text-[11px] leading-5 text-slate-500">
                   Describe the change you want. The AI reads every file and edits the right one.
                   You&apos;ll preview the diff before anything is written.
@@ -369,7 +369,7 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
                 <div className="absolute inset-2 rounded-full bg-violet-600" />
               </div>
               <div>
-                <p className="text-sm font-medium text-slate-700">Reading the entire brain…</p>
+                <p className="text-sm font-medium text-slate-700">Reading the entire knowledge base…</p>
                 <p className="mt-1 text-xs text-slate-400">The AI is generating the edit</p>
               </div>
             </div>
@@ -424,7 +424,7 @@ export function BrainChat({ contextHint, files = [], onOpenSource }: BrainChatPr
                 <CheckCircle size={26} className="text-emerald-600" />
               </div>
               <div>
-                <p className="text-base font-semibold text-slate-800">Brain updated!</p>
+                <p className="text-base font-semibold text-slate-800">Brian updated!</p>
                 <p className="mt-1 font-mono text-xs text-violet-600">{editState.file}</p>
                 <p className="mt-2 text-sm text-slate-500">{editState.summary}</p>
               </div>

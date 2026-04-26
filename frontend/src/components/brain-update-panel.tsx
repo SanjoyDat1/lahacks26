@@ -326,12 +326,12 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
               <Zap size={13} className="text-violet-600" />
             </div>
             <div>
-              <p className="text-xs font-semibold text-slate-800">Update Brain</p>
+              <p className="text-xs font-semibold text-slate-800">Update Brian</p>
               <p className="text-[10px] text-slate-400">
                 {phase === "running"
                   ? "Processing new context…"
                   : phase === "done"
-                    ? "Brain updated"
+                    ? "Brian updated"
                     : "Add files and/or a public GitHub repo"}
               </p>
             </div>
@@ -656,7 +656,7 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
                   <CheckCircle2 size={14} className="text-white" />
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-emerald-800">Brain updated</p>
+                  <p className="text-xs font-semibold text-emerald-800">Brian updated</p>
                   <p className="text-[10px] text-emerald-600">
                     {summary.opsApplied} change{summary.opsApplied !== 1 ? "s" : ""} across {summary.files.length} file{summary.files.length !== 1 ? "s" : ""}
                   </p>

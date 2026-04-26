@@ -7,8 +7,8 @@ This project now includes a local MCP server entrypoint that exposes two tools t
 
 ## What The Server Uses
 
-- Reference brain: `/Users/albertzheng/Documents/lahacks26/brian`
-- Working brain: `/Users/albertzheng/Documents/lahacks26/brain`
+- Reference knowledge: `<repo>/brian` (templates / reference Markdown)
+- Working copy: `<repo>/brain` (agent-writable tree)
 
 On first run, the working `brain/` directory is bootstrapped from `brian/` if it does not already exist.
 
@@ -17,7 +17,7 @@ On first run, the working `brain/` directory is bootstrapped from `brian/` if it
 1. Create the env file:
 
 ```bash
-cd /Users/albertzheng/Documents/lahacks26/agent
+cd /path/to/your/clone/agent
 cp .env.example .env
 ```
 
@@ -26,7 +26,7 @@ cp .env.example .env
 3. Install dependencies:
 
 ```bash
-cd /Users/albertzheng/Documents/lahacks26/agent
+cd /path/to/your/clone/agent
 uv sync
 ```
 
@@ -35,7 +35,7 @@ uv sync
 You can verify the package loads and the command is available with:
 
 ```bash
-cd /Users/albertzheng/Documents/lahacks26/agent
+cd /path/to/your/clone/agent
 uv run brain-mcp
 ```
 
@@ -46,7 +46,7 @@ That command should start the MCP server and wait for a stdio client such as Cod
 Add the local server to Codex with:
 
 ```bash
-codex mcp add brian -- uv --directory /Users/albertzheng/Documents/lahacks26/agent run brain-mcp
+codex mcp add brian -- uv --directory /path/to/your/clone/agent run brain-mcp
 ```
 
 Then verify it:

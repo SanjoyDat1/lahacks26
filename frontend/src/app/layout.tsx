@@ -14,8 +14,13 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "AI Brain",
-  description: "Git-backed context bridge between humans and LLM coding agents.",
+  title: { default: "Brian", template: "%s · Brian" },
+  description:
+    "Brian — Git-backed company knowledge and context for humans and AI agents.",
+  icons: {
+    icon: "/brian-logo.png",
+    apple: "/brian-logo.png",
+  },
 };
 
 export default function RootLayout({

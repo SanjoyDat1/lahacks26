@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         detail:
-          `Brain agent at ${AGENT_API} has no POST /initialize (404). ` +
+          `Brian backend at ${AGENT_API} has no POST /initialize (404). ` +
           "Start it from this repo: cd agent && uv run brain-api. " +
           "If you use Docker, set AGENT_API_URL to the correct service URL (not localhost from inside the container).",
       },
@@ -80,7 +80,7 @@ async function tryGithubIngestFallback(body: InitializeBody): Promise<NextRespon
       {
         detail:
           `Agent at ${AGENT_API} has no POST /initialize (404). This fallback only supports one GitHub repo. ` +
-          "Remove extra URLs or set AGENT_API_URL to a brain-api that exposes /initialize.",
+          "Remove extra URLs or set AGENT_API_URL to a Brian backend (brain-api) that exposes /initialize.",
       },
       { status: 502 },
     );
@@ -114,7 +114,7 @@ async function tryGithubIngestFallback(body: InitializeBody): Promise<NextRespon
       {
         detail:
           `POST /initialize returned 404 and POST /github/ingest failed: ${msg}. ` +
-          `Check AGENT_API_URL (currently ${AGENT_API}) points at brain-api on port 8000.`,
+          `Check AGENT_API_URL (currently ${AGENT_API}) points at the Brian backend (brain-api) on port 8000.`,
       },
       { status: 502 },
     );
@@ -137,7 +137,7 @@ async function tryGithubIngestFallback(body: InitializeBody): Promise<NextRespon
         {
           detail:
             `Neither POST /initialize nor POST /github/ingest was found on ${AGENT_API}. ` +
-            "Run the API from the lahacks26 agent package: cd agent && uv run brain-api",
+            "Run the API from the Brian agent package: cd agent && uv run brain-api",
         },
         { status: 502 },
       );

@@ -1,6 +1,6 @@
-# AI Brain
+# Brian (web app)
 
-AI Brain bridges human project context and LLM coding agents. It ingests engineering signals from webhooks, embeds raw context for search, distills durable decisions into Markdown, and commits the shared brain to GitHub.
+Brian bridges human project context and LLM coding agents. It ingests engineering signals from webhooks, embeds raw context for search, distills durable decisions into Markdown, and commits shared knowledge to GitHub.
 
 ## What Is Included
 
@@ -10,7 +10,7 @@ AI Brain bridges human project context and LLM coding agents. It ingests enginee
 - pgvector-ready semantic search with deterministic local fallback.
 - OpenAI-backed context distiller with no-key heuristic fallback.
 - GitHub-backed brain file read/write/commit provider with local in-memory fallback.
-- Brain editor, event stream, integration setup page, semantic search, and launch dashboard.
+- Brian editor, event stream, integration setup page, semantic search, and launch dashboard.
 
 ## Local Setup
 
@@ -22,13 +22,13 @@ npm run dev
 
 The app runs without credentials for demos. In that mode, events, documents, and brain files live in memory until the server restarts.
 
-Open [http://localhost:3000](http://localhost:3000), then click `Seed demo events` to exercise ingestion, distillation, search, and the brain update flow.
+Open [http://localhost:3000](http://localhost:3000), then click `Seed demo events` to exercise ingestion, distillation, search, and the Brian update flow.
 
 ## Production Setup
 
 1. Create a Postgres database with the `vector` extension enabled.
 2. Set `DATABASE_URL` in Vercel.
-3. Create a GitHub token with access to the brain repository contents.
+3. Create a GitHub token with access to the knowledge repository contents.
 4. Set `GITHUB_TOKEN`, `BRAIN_REPO_OWNER`, `BRAIN_REPO_NAME`, and `BRAIN_REPO_BRANCH`.
 5. Set `OPENAI_API_KEY` for real embeddings and LLM distillation.
 6. Set webhook secrets for any external source you enable.
@@ -43,9 +43,9 @@ Open [http://localhost:3000](http://localhost:3000), then click `Seed demo event
 - `POST /api/ingest/discord`
 - `POST /api/ingest/meetings`
 
-If the matching secret env var is set, the endpoint verifies the request. If it is omitted, the endpoint accepts requests for hackathon demos and local testing.
+If the matching secret env var is set, the endpoint verifies the request. If it is omitted, the endpoint accepts requests for demos and local testing.
 
-## Brain Contract For Coding Agents
+## Contract For Coding Agents
 
 Coding agents should read the Markdown files under `brain/` before writing code. Durable design choices should be appended to `brain/decision_log.md` first, so human intent and agent execution stay aligned through Git history.
 
@@ -68,39 +68,14 @@ curl -X POST http://localhost:3000/api/ingest/github \
 
 curl "http://localhost:3000/api/search?q=pgvector"
 ```
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
-
-## Getting Started
-
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- [Next.js Documentation](https://nextjs.org/docs)
+- [Learn Next.js](https://nextjs.org/learn)
 
 ## Deploy on Vercel
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Use the [Vercel Platform](https://vercel.com/new) and see [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying).

@@ -122,7 +122,7 @@ export default function BrainPage() {
       <div className="flex h-screen items-center justify-center bg-white">
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <Loader2 size={16} className="animate-spin" />
-          Loading brain from agent…
+          Loading Brian from agent…
         </div>
       </div>
     );
@@ -132,7 +132,7 @@ export default function BrainPage() {
     return (
       <div className="flex h-screen flex-col items-center justify-center gap-4 bg-white px-6 text-center">
         <div className="max-w-md space-y-2">
-          <h1 className="text-lg font-semibold text-slate-900">Can&apos;t reach the brain agent</h1>
+          <h1 className="text-lg font-semibold text-slate-900">Can&apos;t reach the Brian backend</h1>
           <p className="text-sm text-slate-600">{error}</p>
           <p className="text-xs text-slate-400">
             Make sure the agent is running (default <code>http://localhost:8000</code>) and that{" "}
@@ -172,7 +172,7 @@ export default function BrainPage() {
             className="pointer-events-auto rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500 shadow-sm backdrop-blur"
             title={meta.brainDir}
           >
-            {meta.source === "working" ? "live agent brain" : "reference brain"} ·{" "}
+            {meta.source === "working" ? "live workspace" : "reference snapshot"} ·{" "}
             {(files ?? []).length} files
           </span>
         )}
@@ -181,7 +181,7 @@ export default function BrainPage() {
           onClick={() => void load()}
           disabled={loading}
           className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm backdrop-blur transition hover:bg-white disabled:opacity-50"
-          title="Re-fetch the brain from the connected agent"
+          title="Re-fetch files from the connected agent"
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
           Refresh

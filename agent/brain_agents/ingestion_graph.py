@@ -165,7 +165,7 @@ def _reduce_bootstrap_notes(model: object, merged: str) -> str | None:
         content=(
             "Merge per-source extractions into ONE dense briefing **about the user's organization and initiatives** "
             "(repos, uploads, Google Workspace content). "
-            "The briefing's subject is that real-world work—not a separate documentation tool or 'AI Brain' app. "
+            "The briefing's subject is that real-world work—not a separate documentation tool or 'Brian' product. "
             "Deduplicate aggressively. When sources are heterogeneous (e.g. spreadsheets + docs + code), add a ## section "
             "**By company section** (or **By business function**) and group bullets under subheadings such as Engineering, Product, "
             "Design, Marketing, Sales, Finance, Legal, Operations—**only for facets actually present in the excerpts**; "
@@ -200,7 +200,7 @@ def _single_pass_bootstrap_distill(model: object, raw_digest: str) -> str | None
             "Add ## Cross-cutting constraints for org-wide themes. "
             "Preserve concrete names, metrics, dates, URLs, technical terms, decisions, owners, constraints, risks. "
             "Strip chit-chat, duplicates, and layout noise. "
-            "Do not describe a generic 'AI Brain' platform unless the sources explicitly discuss it. "
+            "Do not describe this documentation platform (Brian) unless the sources explicitly discuss it. "
             "Use ## sections and - bullets. "
             "Return ONLY valid JSON: {\"distilled_text\": string} under ~16000 characters."
         )

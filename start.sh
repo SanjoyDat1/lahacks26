@@ -5,7 +5,7 @@
 set -e
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
 
-echo "▲ Starting AI Brain — full stack"
+echo "▲ Starting Brian — full stack"
 echo ""
 
 # ── Agent API (port 8000) ─────────────────────────────────────────────────────

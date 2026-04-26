@@ -1,8 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Brain } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -33,14 +33,19 @@ export function Nav() {
       <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-3">
         {/* Brand */}
         <Link href="/" className="group flex items-center gap-2.5">
-          <div className="relative flex h-8 w-8 items-center justify-center">
-            <div className="absolute inset-0 rounded-xl bg-black/[0.05] transition group-hover:bg-black/[0.08]" />
-            <div className="absolute inset-0 rounded-xl ring-1 ring-black/10" />
-            <Brain size={16} className="relative text-black/80" />
+          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-visible rounded-xl transition">
+            <Image
+              src="/brian-logo.png"
+              alt="Brian"
+              width={36}
+              height={36}
+              className="h-9 w-9 object-contain"
+              priority
+            />
           </div>
           <div>
-            <span className="text-[13px] font-semibold tracking-tight text-black/90">AI Brain</span>
-            <span className="ml-1.5 hidden text-[11px] text-black/55 sm:inline">command center</span>
+            <span className="text-[13px] font-semibold tracking-tight text-black/90">Brian</span>
+            <span className="ml-1.5 hidden text-[11px] text-black/55 sm:inline">company knowledge</span>
           </div>
         </Link>
 
@@ -62,7 +67,7 @@ export function Nav() {
             href="/brain"
             className="rounded-full border border-black/10 bg-white/70 px-3 py-1.5 text-[11px] font-semibold text-black/75 transition hover:bg-white hover:text-black"
           >
-            Open brain
+            Open map
           </Link>
         </div>
       </div>

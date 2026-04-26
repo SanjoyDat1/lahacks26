@@ -1256,7 +1256,7 @@ export function BrainGraph({
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-emerald-500" />
                 <span className="text-[10px] font-semibold text-emerald-700">
-                  {updateVisu.done.size} file{updateVisu.done.size === 1 ? "" : "s"} updated — refreshing brain...
+                  {updateVisu.done.size} file{updateVisu.done.size === 1 ? "" : "s"} updated — refreshing Brian...
                 </span>
               </div>
             </div>

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -218,7 +219,7 @@ const STAGES: { id: StageId; label: string; desc: string }[] = [
   { id: "upload", label: "Connect", desc: "Repo URL + optional files" },
   { id: "normalize", label: "Scan", desc: "Read codebase context" },
   { id: "distill", label: "Distill", desc: "Extract durable facts" },
-  { id: "write", label: "Write", desc: "Create brain files" },
+  { id: "write", label: "Write", desc: "Create Brian files" },
   { id: "index", label: "Index", desc: "Warm retrieval" },
   { id: "verify", label: "Verify", desc: "Confirm readiness" },
 ];
@@ -227,7 +228,7 @@ const INITIAL_NODES: GraphNode[] = [
   { id: "documents", label: "Codebase & sources", status: "idle" },
   { id: "normalize", label: "Normalize", status: "idle" },
   { id: "distill", label: "Distill", status: "idle" },
-  { id: "brain_files", label: "Brain Files", status: "idle" },
+  { id: "brain_files", label: "Brian files", status: "idle" },
   { id: "index", label: "Index", status: "idle" },
   { id: "ready", label: "Ready", status: "idle" },
 ];
@@ -247,7 +248,7 @@ export function SessionStartPage() {
 	]);
 	const [entryText, setEntryText] = useState("");
   const prompt =
-    "Build our company brain from the linked GitHub repositories, uploads, and Google Workspace imports. Put each supported department or function in its own directory (company/engineering, company/finance, …), link sections to each other in the Markdown, and use map.md to visualize how the company fits together. Multiple AI agents should share one grounded org picture—decisions, metrics, owners, risks, guardrails—only what the sources support.";
+    "Build Brian for your company from the linked GitHub repositories, uploads, and Google Workspace imports. Put each supported department or function in its own directory (company/engineering, company/finance, …), link sections to each other in the Markdown, and use map.md to visualize how the company fits together. Multiple AI agents should share one grounded org picture—decisions, metrics, owners, risks, guardrails—only what the sources support.";
   const [isDragging, setIsDragging] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isDone, setIsDone] = useState(false);
@@ -663,13 +664,13 @@ export function SessionStartPage() {
     }
     if (event.type === "done") {
       setStage("done");
-      setStageLabel("Brain ready");
+      setStageLabel("Brian ready");
       setIsDone(true);
       setIsRunning(false);
       setResultText(event.result_text);
       setThinking((prev) => [
         ...prev,
-        `Done. I wrote ${event.written_files.length} brain file${event.written_files.length === 1 ? "" : "s"} and warmed retrieval for the demo.`,
+        `Done. I wrote ${event.written_files.length} Brian file${event.written_files.length === 1 ? "" : "s"} and warmed retrieval for the demo.`,
       ]);
       return;
     }
@@ -702,9 +703,9 @@ export function SessionStartPage() {
       setNodes(INITIAL_NODES);
       setEdges(INITIAL_EDGES);
       setStage("normalize");
-      setStageLabel("Hand-off to brain agent…");
+      setStageLabel("Hand-off to Brian backend…");
       setThinking([
-        "Starting the GitHub → brain pipeline. Your repo is being shallow-cloned and scanned server-side—this story plays out in real time below.",
+        "Starting the GitHub → Brian pipeline. Your repo is being shallow-cloned and scanned server-side—this story plays out in real time below.",
         githubApiList.length === 1
           ? `Repository: ${githubApiList[0]!.repo_url}`
           : `${githubApiList.length} repositories will be processed in order.`,
@@ -737,14 +738,14 @@ export function SessionStartPage() {
         {
           t: 9200,
           stage: "write",
-          label: "Authoring brain markdown…",
+          label: "Authoring Brian markdown…",
           line: "The model is shaping projects/, architecture, and cross-links you can browse.",
         },
         {
           t: 12800,
           stage: "index",
           label: "Wiring retrieval…",
-          line: "Sections are prepared so search and agents can use this brain immediately.",
+          line: "Sections are prepared so search and agents can use Brian immediately.",
         },
         {
           t: 16800,
@@ -770,7 +771,7 @@ export function SessionStartPage() {
         if (restFetchDoneRef.current) return;
         setThinking((prev) => [
           ...prev,
-          "Laying out the brain directory scaffold—watch files and cross-links appear while the server still works.",
+          "Laying out the Brian directory scaffold—watch files and cross-links appear while the server still works.",
         ]);
       });
       let ghostT = 520;
@@ -863,7 +864,7 @@ export function SessionStartPage() {
           }
           setRestProgress(96);
           setStage("write");
-          setStageLabel("Materializing brain files on the canvas…");
+          setStageLabel("Materializing Brian files on the canvas…");
           setThinking((prev) => [
             ...prev,
             `Response received. Animating ${written.length} file${written.length === 1 ? "" : "s"} into the construction graph.`,
@@ -902,7 +903,7 @@ export function SessionStartPage() {
             scheduleRest(500, () => {
               setThinking((prev) => [
                 ...prev,
-                "No new file paths were reported—check the agent logs or open the brain workspace anyway.",
+                "No new file paths were reported—check the agent logs or open the Brian workspace anyway.",
               ]);
             });
           }
@@ -910,11 +911,11 @@ export function SessionStartPage() {
           scheduleRest(delay + 400, () => {
             setRestProgress(100);
             setStage("done");
-            setStageLabel("Brain ready");
+            setStageLabel("Brian ready");
             setResultText(String(raw.result_text ?? ""));
             setThinking((prev) => [
               ...prev,
-              `Done. ${written.length} brain file${written.length === 1 ? "" : "s"} staged. Opening the full workspace is one click away.`,
+              `Done. ${written.length} Brian file${written.length === 1 ? "" : "s"} staged. Opening the full workspace is one click away.`,
             ]);
             setIsDone(true);
             setIsRunning(false);
@@ -956,7 +957,7 @@ export function SessionStartPage() {
         };
         if (meta.offline === true) {
           setError(
-            "The brain agent is not running or Next.js cannot reach it. In a second terminal run: npm run brain-api (from the frontend folder) or: cd agent && uv run brain-api — then reload this page. Set AGENT_API_URL / NEXT_PUBLIC_AGENT_API_URL in .env if the API is not on port 8000.",
+            "The Brian backend is not running or Next.js cannot reach it. In a second terminal run: npm run brain-api (from the frontend folder) or: cd agent && uv run brain-api — then reload this page. Set AGENT_API_URL / NEXT_PUBLIC_AGENT_API_URL in .env if the API is not on port 8000.",
           );
           setIsRunning(false);
           setStage("upload");
@@ -968,7 +969,7 @@ export function SessionStartPage() {
         }
       } catch {
         setError(
-          "Could not verify the brain agent (request to /api/agent/stream failed). Check that the Next dev server is running, then start brain-api (npm run brain-api from frontend/).",
+          "Could not verify the Brian backend (request to /api/agent/stream failed). Check that the Next dev server is running, then start brain-api (npm run brain-api from frontend/).",
         );
         setIsRunning(false);
         setStage("upload");
@@ -976,7 +977,7 @@ export function SessionStartPage() {
         return;
       }
 
-      setStageLabel("Connecting to the brain agent");
+      setStageLabel("Connecting to the Brian backend");
       setNodes(INITIAL_NODES);
       setEdges(INITIAL_EDGES);
       setThinking([
@@ -1021,7 +1022,7 @@ export function SessionStartPage() {
 
       ws.onerror = () => {
         setError(
-          `Could not open the bootstrap WebSocket (${wsUrl}). Start the agent on port 8000 (npm run brain-api from frontend/, or cd agent && uv run brain-api). If the UI is not on the same machine, set NEXT_PUBLIC_AGENT_API_URL to the URL your browser can reach.`,
+          `Could not open the bootstrap WebSocket (${wsUrl}). Start the Brian backend on port 8000 (npm run brain-api from frontend/, or cd agent && uv run brain-api). If the UI is not on the same machine, set NEXT_PUBLIC_AGENT_API_URL to the URL your browser can reach.`,
         );
         setIsRunning(false);
       };
@@ -1061,8 +1062,18 @@ export function SessionStartPage() {
       {!buildMode ? (
 				<section className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-5xl flex-col items-center justify-center pb-10">
           <div className="mb-8 text-center">
-            <h1 className="mt-6 text-5xl font-bold tracking-tight text-slate-950 md:text-6xl">
-							What should your brain learn first?
+            <div className="mx-auto mb-5 flex justify-center">
+              <Image
+                src="/brian-logo.png"
+                alt="Brian"
+                width={88}
+                height={88}
+                className="h-[5.5rem] w-[5.5rem] object-contain drop-shadow-sm"
+                priority
+              />
+            </div>
+            <h1 className="mt-2 text-5xl font-bold tracking-tight text-slate-950 md:text-6xl">
+							What should Brian learn first?
             </h1>
 						<p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-500">
 							Paste a GitHub URL, drop files on the box, or open the paperclip to upload files and connect
@@ -1173,7 +1184,7 @@ export function SessionStartPage() {
             />
 
             <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr_320px]">
-              {/* Left: file tree styled like the main brain map */}
+              {/* Left: file tree styled like the main Brian map */}
               <section className="glass min-h-0 overflow-hidden">
                 <BuildFileTreeView
                   tree={tree}
@@ -1216,7 +1227,7 @@ export function SessionStartPage() {
                         className="inline-flex items-center gap-1.5 rounded-full bg-black px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-black/85"
                       >
                         <Brain size={11} />
-                        Open brain map
+                        Open Brian map
                       </Link>
                     )}
                   </div>
@@ -1249,7 +1260,7 @@ export function SessionStartPage() {
                       <div className="mb-2 flex items-center justify-between">
                         <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-black/70">
                           <GitBranch size={11} />
-                          GitHub → brain
+                          GitHub → Brian
                         </span>
                         <span className="font-mono text-[10px] font-bold tabular-nums text-black/65">
                           {Math.min(100, Math.round(restProgress))}%
@@ -1511,7 +1522,7 @@ function UniversalStartEntry({
           type="button"
           onClick={onSubmit}
           disabled={!canRun}
-          title="Create brain (Enter or ⌘/Ctrl+Enter)"
+          title="Create Brian (Enter or ⌘/Ctrl+Enter)"
           className={cn(
             "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition",
             hasBootstrapSource || text.trim().length > 0
@@ -1949,7 +1960,7 @@ function BootstrapLiveGraph({
 								fontFamily="ui-sans-serif,system-ui,sans-serif"
 								fill="#4c1d95"
 							>
-                brain/
+                Brian/
               </text>
             </g>
 
@@ -2244,7 +2255,7 @@ function GraphWaitingPlaceholder({ isRunning }: { isRunning: boolean }) {
         fill="#64748b"
       >
 				{isRunning
-					? "Planning brain structure\u2026"
+					? "Planning Brian structure\u2026"
 					: "Waiting for files"}
       </text>
     </g>
@@ -2327,7 +2338,7 @@ function BuildFileTreeView({
           </p>
         </div>
         <span className="rounded-full bg-black/[0.06] px-2.5 py-1 font-mono text-[10px] text-black/70">
-          brain/
+          Brian/
         </span>
       </div>
 
@@ -2482,7 +2493,7 @@ function CompletionBar({
         </div>
         <div className="min-w-0 flex-1">
 					<p className="text-sm font-semibold text-slate-800">
-						Brain is ready
+						Brian is ready
 					</p>
           <p className="truncate text-xs text-slate-500">
 						{resultText ||
@@ -2500,7 +2511,7 @@ function CompletionBar({
 					className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-emerald-200/70 transition hover:bg-emerald-700"
 				>
           <Brain size={13} />
-          View brain map
+          View Brian map
         </Link>
 				<Link
 					href="/agent"
@@ -2584,7 +2595,7 @@ function upsertFile(files: CreatedFile[], next: CreatedFile) {
 
 function directoryOf(path: string) {
   const parts = path.split("/").filter(Boolean);
-  return parts.length > 1 ? parts[0] : "brain";
+  return parts.length > 1 ? parts[0] : "Brian";
 }
 
 /** Short label for SVG nodes; keeps more characters for mono filenames. */

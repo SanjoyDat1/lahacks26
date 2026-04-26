@@ -74,7 +74,7 @@ export async function POST(req: NextRequest) {
 
   const system = [
     "You are a router for a single input box in a product UI.",
-    "Classify whether the user's instruction is (A) asking for information or (B) requesting an update to the project's brain files.",
+    "Classify whether the user's instruction is (A) asking for information or (B) requesting an update to the project's Brian (Markdown) files.",
     "Return strict JSON only with: { intent: \"ask\" | \"update\", confidence: number 0..1, reason: string }.",
     "Use intent=update when the user requests changing/adding/editing content. Use intent=ask when they want explanation or information.",
   ].join("\n");

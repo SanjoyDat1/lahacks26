@@ -20,7 +20,7 @@ keywords:
 ---
 # Coding Agent Prompt
 
-You are a coding agent working on the AI Brain project.
+You are a coding agent working on the Brian product.
 
 Your job is to make code changes that preserve the project's brain-backed source of truth.
 

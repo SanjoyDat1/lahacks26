@@ -62,7 +62,7 @@ type EventLog =
 
 const SAMPLE_PROMPTS = [
   "What are the core architectural decisions?",
-  "Explain the brain storage and retrieval system",
+  "Explain how Brian stores and retrieves knowledge",
   "What integrations does this system support?",
   "What are the current open questions?",
 ];
@@ -450,7 +450,7 @@ export function AgentObservatory() {
             {/* Mode toggle */}
             <div className="mb-3 flex items-center gap-2">
               <span className="text-[10px] font-semibold text-slate-400">Mode:</span>
-              {([ ["query", "Query", <Eye key="q" size={10}/>], ["update", "Update brain", <FileEdit key="u" size={10}/>] ] as const).map(([id, label, icon]) => (
+              {([ ["query", "Query", <Eye key="q" size={10}/>], ["update", "Update Brian", <FileEdit key="u" size={10}/>] ] as const).map(([id, label, icon]) => (
                 <button
                   key={id}
                   onClick={() => setTask(id)}
@@ -493,7 +493,7 @@ export function AgentObservatory() {
                   isAgentOnline === false
                     ? "Start the agent API first…"
                     : messages.length === 0
-                      ? "Ask anything about the brain…"
+                      ? "Ask anything about Brian…"
                       : "Ask a follow-up question…"
                 }
                 rows={2}
@@ -842,7 +842,7 @@ function EmptyState() {
       <div className="max-w-[280px]">
         <p className="text-sm font-semibold text-slate-700">Ask the agent anything</p>
         <p className="mt-1.5 text-[12px] leading-5 text-slate-500">
-          Ask questions about your brain files and watch the agent read, think, and answer — step by step.
+          Ask questions about your Brian files and watch the agent read, think, and answer — step by step.
         </p>
       </div>
       <div className="w-full rounded-2xl border border-slate-200/60 bg-white/60 p-4 text-left">

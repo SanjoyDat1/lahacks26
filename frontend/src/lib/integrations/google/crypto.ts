@@ -1,7 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
 
 const ALGO = "aes-256-gcm";
-const SALT = "lahacks-google-oauth-v1";
+const SALT = "brian-google-oauth-v1";
 
 export type GoogleTokenPayload = {
   access_token: string;

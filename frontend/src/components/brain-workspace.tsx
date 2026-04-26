@@ -45,7 +45,7 @@ export function BrainWorkspace({
   return (
     <div className="grid gap-5 lg:grid-cols-[240px_1fr_360px]">
       <aside className="rounded-3xl border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
-        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Brain files</h2>
+        <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Brian files</h2>
         <div className="space-y-1">
           {files.map((file) => (
             <button
@@ -108,7 +108,7 @@ export function BrainWorkspace({
                 </div>
               ))
             ) : (
-              <p className="text-sm text-slate-400">No AI brain updates yet.</p>
+              <p className="text-sm text-slate-400">No AI updates to Brian yet.</p>
             )}
           </div>
         </section>

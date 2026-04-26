@@ -6,7 +6,7 @@ import { Loader2, GitBranch, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PROMPT =
-  "Initialize a company brain from this repo: use company/engineering (or similar) for technical org context and link to projects/* code hubs; surface architecture, entry points, and dependencies strictly from repo evidence.";
+  "Initialize Brian for this repo: use company/engineering (or similar) for technical org context and link to projects/* code hubs; surface architecture, entry points, and dependencies strictly from repo evidence.";
 
 function parseRepoSlugFromUrl(url: string): string {
   try {
@@ -81,10 +81,10 @@ export function OnboardingModal({
               Bootstrap
             </p>
             <h1 className="mt-1 text-lg font-semibold text-black tracking-[-0.04em]">
-              Connect a GitHub repo to generate the brain
+              Connect a GitHub repo to generate Brian
             </h1>
             <p className="mt-1 text-[12px] leading-5 text-black/60">
-              Everything lives in one view. Once the brain files exist, the graph + directory + preview will populate automatically.
+              Everything lives in one view. Once the Markdown files exist, the graph + directory + preview will populate automatically.
             </p>
           </div>
         </div>
@@ -144,7 +144,7 @@ export function OnboardingModal({
             )}
           >
             {busy ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
-            {busy ? "Bootstrapping…" : "Generate brain"}
+            {busy ? "Bootstrapping…" : "Generate Brian"}
           </button>
         </div>
       </div>

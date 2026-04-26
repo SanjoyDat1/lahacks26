@@ -18,7 +18,7 @@ keywords:
 
 # Project Summary
 
-AI Brain is a full-stack product that keeps human project context synchronized with LLM coding agents.
+Brian is a full-stack product that keeps human project context synchronized with LLM coding agents.
 
 It ingests engineering conversations and artifacts from GitHub, GitLab, Slack, Discord, and meeting transcripts. Incoming events are normalized into one event shape, embedded for semantic search, and passed through a distiller that decides whether the event changes product goals, architecture, constraints, risks, or open questions.
 

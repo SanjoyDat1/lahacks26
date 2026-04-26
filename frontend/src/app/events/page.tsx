@@ -40,7 +40,7 @@ export default async function EventsPage() {
           <span className="font-medium text-slate-500">Reading the timeline:</span>
           <LegendItem color="bg-sky-400" label="Event received" />
           <LegendItem color="bg-violet-400" label="AI analyzed" />
-          <LegendItem color="bg-emerald-400" label="Brain updated" />
+          <LegendItem color="bg-emerald-400" label="Brian updated" />
           <LegendItem color="bg-slate-300" label="Skipped (low signal)" />
         </div>
       </div>
@@ -149,7 +149,7 @@ function EventTimelineItem({
               <JourneyArrow />
               <JourneyStep
                 done={distilled}
-                label="Brain updated"
+                label="Brian updated"
                 Icon={Brain}
                 color="text-emerald-600"
               />
@@ -169,7 +169,7 @@ function EventTimelineItem({
                 <Bot size={13} className="mt-0.5 flex-shrink-0 text-violet-500" />
                 <div>
                   <p className="text-[10px] font-semibold uppercase tracking-widest text-violet-500 mb-1">
-                    What the AI added to the brain
+                    What the AI added to Brian
                   </p>
                   <p className="text-xs leading-5 text-violet-800">{update.diffSummary ?? update.rationale}</p>
                   {update.changedFiles && update.changedFiles.length > 0 && (

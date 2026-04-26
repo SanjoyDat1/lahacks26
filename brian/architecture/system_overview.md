@@ -21,9 +21,9 @@ keywords:
 
 # System Overview
 
-AI Brain is a context pipeline for teams that use LLM coding agents.
+Brian is a context pipeline for teams that use LLM coding agents.
 
-The product turns unstructured human communication into a structured Markdown brain. The brain becomes the shared source of truth for humans and agents.
+The product turns unstructured human communication into structured Markdown knowledge. Brian becomes the shared source of truth for humans and agents.
 
 ## System Role
 

@@ -234,7 +234,7 @@ def _reference_catalog(reference_dir: Path) -> tuple[str, set[str]]:
         if isinstance(raw_kw, list):
             keywords = [str(k).strip() for k in raw_kw if str(k).strip()][:12]
         # Never embed template body prose here — excerpts biased models toward the reference
-        # product ("AI Brain") instead of the user's GitHub uploads and Google Workspace imports.
+        # product ("Brian") instead of the user's GitHub uploads and Google Workspace imports.
         entries.append(
             json.dumps(
                 {
@@ -365,7 +365,7 @@ def _plan_brain_files(
         "(department / function) when sources support it, with rich **inner links** between sections so the org is navigable "
         "as Markdown + graph. Agents need to see how Engineering, Finance, Marketing, etc. connect. "
         "Infer sections only from INITIAL PROMPT + SOURCE DOCUMENTS. "
-        "Not a product named 'AI Brain' or this tool. Reference catalog is layout-only. Return only JSON."
+        "Not the Brian documentation product or this repo's tooling unless sources discuss them. Reference catalog is layout-only. Return only JSON."
     )
     user = HumanMessage(
         f"""Plan the Markdown files for this working brain from the sources below.
@@ -388,7 +388,7 @@ def _plan_brain_files(
 ## Grounding
 - Every planned file: 1–3 `evidence` bullets from SOURCE DOCUMENTS or INITIAL PROMPT.
 - Weak evidence → short overview + open questions; no invented numbers.
-- Do NOT name Brian, AI Brain, this tool, or irrelevant demo stacks unless sources say so.
+- Do NOT name or market the Brian documentation product, this tool, or irrelevant demo stacks unless sources say so.
 
 ## Graph / linking
 - Each file plan's `links`: **2–6** paths from this plan. Prefer **cross-section** links (Product ↔ Engineering ↔ Finance) grounded in sources.
@@ -661,7 +661,7 @@ For **governance/** or **meta/**: guardrails and what agents must verify with hu
 Use each file plan's title, purpose, and `source_evidence`.
 Use templates only for frontmatter style, heading style, and organization hints.
 Never copy prose, product names, or stack claims from a template file body.
-Never mention Brian, AI Brain, this documentation tool, or stack trivia unless those facts appear in SOURCE DOCUMENTS or INITIAL PROMPT.
+Never mention the Brian documentation product, this tool, or stack trivia unless those facts appear in SOURCE DOCUMENTS or INITIAL PROMPT.
 Every factual statement must be supported by SOURCE DOCUMENTS or INITIAL PROMPT.
 If under-specified, write a concise source-grounded note plus `## Open questions`—no invented metrics.
 

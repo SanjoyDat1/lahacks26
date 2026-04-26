@@ -15,6 +15,8 @@ import {
   X,
 } from "lucide-react";
 
+import type { Components } from "react-markdown";
+
 import type { BrianFile } from "@/lib/brian/reader";
 import {
   buildBrianPathLookup,
@@ -222,108 +224,6 @@ function ConnectedPagesList({
 const linkLikeClass =
   "text-[color:var(--accent-700)] underline decoration-black/20 underline-offset-2 hover:decoration-[color:var(--accent-700)]";
 
-const markdownComponentsBase: Omit<Components, "a"> = {
-  h1: ({ children, ...p }) => (
-    <h1 {...p} className="mt-6 mb-4 text-2xl font-semibold tracking-tight text-black first:mt-0">
-      {children}
-    </h1>
-  ),
-  h2: ({ children, ...p }) => (
-    <h2 {...p} className="mt-7 mb-3 text-xl font-semibold tracking-tight text-black first:mt-0">
-      {children}
-    </h2>
-  ),
-  h3: ({ children, ...p }) => (
-    <h3 {...p} className="mt-6 mb-2.5 text-base font-semibold tracking-tight text-black/95 first:mt-0">
-      {children}
-    </h3>
-  ),
-  h4: ({ children, ...p }) => (
-    <h4 {...p} className="mt-5 mb-2 text-sm font-semibold uppercase tracking-[0.12em] text-black/80 first:mt-0">
-      {children}
-    </h4>
-  ),
-  p: ({ children, ...p }) => (
-    <p {...p} className="my-3 text-[13px] leading-7 text-black/80">
-      {children}
-    </p>
-  ),
-  ul: ({ children, ...p }) => (
-    <ul {...p} className="my-3 ml-5 list-disc space-y-1.5 text-[13px] leading-7 text-black/80 marker:text-black/45">
-      {children}
-    </ul>
-  ),
-  ol: ({ children, ...p }) => (
-    <ol {...p} className="my-3 ml-5 list-decimal space-y-1.5 text-[13px] leading-7 text-black/80 marker:text-black/55">
-      {children}
-    </ol>
-  ),
-  li: ({ children, ...p }) => (
-    <li {...p} className="pl-1">
-      {children}
-    </li>
-  ),
-  strong: ({ children, ...p }) => (
-    <strong {...p} className="font-semibold text-black">
-      {children}
-    </strong>
-  ),
-  em: ({ children, ...p }) => (
-    <em {...p} className="italic text-black/85">
-      {children}
-    </em>
-  ),
-  blockquote: ({ children, ...p }) => (
-    <blockquote {...p} className="my-4 border-l-2 border-black/20 pl-4 text-[13px] italic text-black/70">
-      {children}
-    </blockquote>
-  ),
-  hr: (p) => <hr {...p} className="my-6 border-black/10" />,
-  code: ({ className, children, ...p }) => {
-    const isBlock = /language-/.test(className ?? "");
-    if (isBlock) {
-      return (
-        <code {...p} className={cn(className, "block whitespace-pre text-[12px] leading-6 text-black/85")}>
-          {children}
-        </code>
-      );
-    }
-    return (
-      <code
-        {...p}
-        className="rounded-md border border-black/10 bg-black/[0.05] px-1.5 py-0.5 font-mono text-[12px] text-black/90"
-      >
-        {children}
-      </code>
-    );
-  },
-  pre: ({ children, ...p }) => (
-    <pre
-      {...p}
-      className="my-4 overflow-x-auto rounded-xl border border-black/10 bg-black/[0.05] p-4 font-mono text-[12px] leading-6 text-black/85"
-    >
-      {children}
-    </pre>
-  ),
-  table: ({ children, ...p }) => (
-    <div className="my-4 overflow-x-auto rounded-xl border border-black/10">
-      <table {...p} className="w-full border-collapse text-[12px] text-black/80">
-        {children}
-      </table>
-    </div>
-  ),
-  th: ({ children, ...p }) => (
-    <th {...p} className="border-b border-black/10 bg-black/[0.04] px-3 py-2 text-left font-semibold text-black/85">
-      {children}
-    </th>
-  ),
-  td: ({ children, ...p }) => (
-    <td {...p} className="border-b border-black/[0.06] px-3 py-2 align-top">
-      {children}
-    </td>
-  ),
-};
-
 export function PreviewPane({
   file,
   onSelectSource,
@@ -360,9 +260,9 @@ export function PreviewPane({
 
   const pathLookup = useMemo(() => buildBrianPathLookup(allFiles), [allFiles]);
 
-  const mdComponents = useMemo<Components>(
+  const previewMarkdownComponents = useMemo<Components>(
     () => ({
-      ...markdownComponentsBase,
+      ...mdComponents,
       a: ({ href, children, title }) => {
         if (!href?.trim()) {
           return <span className={linkLikeClass}>{children}</span>;
@@ -406,7 +306,7 @@ export function PreviewPane({
         return (
           <span
             className={cn(linkLikeClass, "cursor-help opacity-55")}
-            title={`No matching brain file loaded for “${href}”. It may be missing from the agent workspace.`}
+            title={`No matching Brian page loaded for “${href}”. It may be missing from the agent workspace.`}
           >
             {children}
           </span>
@@ -415,44 +315,6 @@ export function PreviewPane({
     }),
     [file?.path, pathLookup, onSelectSource],
   );
-
-  const answerBlock = lastAnswer ? (
-    <div className="space-y-4">
-      <div className="max-w-none">
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-          Assistant
-        </p>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-          {lastAnswer.markdown}
-        </ReactMarkdown>
-      </div>
-
-      {lastAnswer.sources?.length ? (
-        <div>
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-            Sources
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {lastAnswer.sources.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => onSelectSource(s)}
-                className={cn(
-                  "rounded-full border border-black/10 bg-white/70 px-3 py-1 text-[11px] font-medium text-black/75 transition",
-                  "hover:bg-white hover:text-black",
-                )}
-                style={{ boxShadow: `inset 0 0 0 1px ${accentForPath(s)}33` }}
-                title={s}
-              >
-                <span className="font-mono">{s}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  ) : null;
 
   const body = (sized: "inline" | "expanded") => (
     <div className={cn("min-h-0 flex-1 overflow-y-auto", sized === "expanded" ? "px-10 py-8" : "px-5 py-5")}>
@@ -471,7 +333,7 @@ export function PreviewPane({
               onSelect={onSelectSource}
             />
 
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewMarkdownComponents}>
               {contentBody}
             </ReactMarkdown>
           </div>
