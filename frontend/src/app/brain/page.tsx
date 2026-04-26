@@ -91,6 +91,24 @@ export default function BrainPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    const reloadIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        void load();
+      }
+    };
+
+    const interval = window.setInterval(reloadIfVisible, 3000);
+    window.addEventListener("focus", reloadIfVisible);
+    document.addEventListener("visibilitychange", reloadIfVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", reloadIfVisible);
+      document.removeEventListener("visibilitychange", reloadIfVisible);
+    };
+  }, [load]);
+
   const onContextMapRebuildDone = useCallback(() => {
     setTimeout(() => {
       void load();

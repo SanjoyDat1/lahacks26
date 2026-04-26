@@ -1,5 +1,6 @@
 export const CATEGORY_SHADES = {
   architecture: "#a78bfa", // violet-400
+  company: "#a5b4fc", // org section directories (company/*)
   decisions: "#8b5cf6",    // violet-500
   summaries: "#c4b5fd",    // violet-300
   integrations: "#7c3aed", // violet-600

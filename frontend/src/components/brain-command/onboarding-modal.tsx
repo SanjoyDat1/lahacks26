@@ -6,7 +6,7 @@ import { Loader2, GitBranch, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const DEFAULT_PROMPT =
-  "Build a transparent AI brain for this codebase from the linked GitHub repository. Focus on architecture, entry points, dependencies, and how the system fits together.";
+  "Initialize a company brain from this repo: use company/engineering (or similar) for technical org context and link to projects/* code hubs; surface architecture, entry points, and dependencies strictly from repo evidence.";
 
 function parseRepoSlugFromUrl(url: string): string {
   try {
@@ -46,7 +46,7 @@ export function OnboardingModal({
           prompt: DEFAULT_PROMPT,
           github_repos: [{ repo_url: repoUrl.trim(), ref: ref.trim() || undefined }],
           overwrite: true,
-          max_files: 20,
+          max_files: 24,
           apply: true,
           clone_timeout_s: 300,
         }),

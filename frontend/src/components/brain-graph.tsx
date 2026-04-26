@@ -248,6 +248,8 @@ interface Props {
   graphData: GraphData;
   onNodeSelect?: (node: GraphNode | null) => void;
   onEdgeSelect?: (edge: GraphLink | null) => void;
+  /** Double-click a link to remove it (optional; parent runs DELETE + local graph update). */
+  onEdgeDelete?: (edge: GraphLink) => void;
   onLinkCreate?: (sourceId: string, targetId: string) => Promise<void>;
   selectedId?: string;
   selectedEdge?: GraphLink | null;
@@ -269,6 +271,7 @@ export function BrainGraph({
   graphData,
   onNodeSelect,
   onEdgeSelect,
+  onEdgeDelete,
   onLinkCreate,
   selectedId,
   selectedEdge,
@@ -302,6 +305,8 @@ export function BrainGraph({
   const selectedIdRef = useRef(selectedId);
   const selectedEdgeRef = useRef<GraphLink | null | undefined>(selectedEdge);
   const flashEdgeRef = useRef<GraphLink | null>(null);
+  /** Link under pointer (when not on a node / not panning / not link-dragging) — drives hover stroke in drawFrame. */
+  const hoveredEdgeRef = useRef<GraphLink | null>(null);
   const draggingRef = useRef<SimNode | null>(null);
   const connectDragRef = useRef<{ source: SimNode; x: number; y: number } | null>(null);
   /** Press on node body — becomes a link drag after LINK_DRAG_PX movement (click still selects if you don't drag). */
@@ -313,6 +318,8 @@ export function BrainGraph({
   const [tooltipNode, setTooltipNode] = useState<SimNode | null>(null);
   const [hoverConnectionCount, setHoverConnectionCount] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
+  /** True when pointer is near a link (not a node) — custom cursor for “select / remove connection”. */
+  const [edgeHovered, setEdgeHovered] = useState(false);
   const hoverNodeRef = useRef<SimNode | null>(null);
   // Connected node IDs for the currently hovered node
   const hovConnectedRef = useRef<Set<string>>(new Set());
@@ -404,6 +411,7 @@ export function BrainGraph({
     const fType = filterTypeRef2.current;
     const hovConnected = hovConnectedRef.current;
     const selEdge = selectedEdgeRef.current;
+    const hovEdge = hoveredEdgeRef.current;
     const connectTarget = connectTargetRef.current;
 
     const uv = updateVisuRef.current;
@@ -456,6 +464,7 @@ export function BrainGraph({
       const isLinkedToHov = hovId && (s.id === hovId || t.id === hovId);
       const isLinkedToSel = selId && (s.id === selId || t.id === selId);
       const isSelectedEdge = !!selEdge && selEdge.source === s.id && selEdge.target === t.id;
+      const isHoveredEdge = !!hovEdge && hovEdge.source === s.id && hovEdge.target === t.id;
       const isFlashEdge =
         !!flashLink && flashLink.source === s.id && flashLink.target === t.id;
       const sMatches = nodeMatches(s), tMatches = nodeMatches(t);
@@ -475,6 +484,10 @@ export function BrainGraph({
         lineColor = "#8b5cf6";
         lineWidth = 3 / k;
         arrowColor = "#8b5cf6";
+      } else if (isHoveredEdge && !inUpdateMode) {
+        lineColor = minimal ? "#ddd6fe" : "#c4b5fd";
+        lineWidth = 3.2 / k;
+        arrowColor = minimal ? "#e9d5ff" : "#a78bfa";
       } else if (inUpdateMode) {
         const sActive = sUpdState === "active", tActive = tUpdState === "active";
         const sDone = sUpdState === "done", tDone = tUpdState === "done";
@@ -540,6 +553,8 @@ export function BrainGraph({
       if (isFlashEdge) {
         arrowLen = 12 / k;
       } else if (inHoverMode && isLinkedToHov && !isSelectedEdge && !inUpdateMode) {
+        arrowLen = (minimal ? 10.5 : 9.5) / k;
+      } else if (isHoveredEdge && !isSelectedEdge && !inUpdateMode) {
         arrowLen = (minimal ? 10.5 : 9.5) / k;
       }
 
@@ -980,6 +995,12 @@ export function BrainGraph({
       }
       setTooltipNode(nextHoverNode);
     }
+
+    const linkAt =
+      !connectDragRef.current && !panRef.current && !nextHoverNode ? findLink(cx, cy) : null;
+    hoveredEdgeRef.current = linkAt;
+    const overLink = linkAt !== null;
+    setEdgeHovered((prev) => (prev === overLink ? prev : overLink));
   }
 
   function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
@@ -1014,6 +1035,19 @@ export function BrainGraph({
     }
     onNodeSelect?.(null);
     onEdgeSelect?.(null);
+  }
+
+  function onDoubleClick(e: React.MouseEvent<HTMLCanvasElement>) {
+    if (!onEdgeDelete) return;
+    if (mouseDownRef.current?.moved) return;
+    const cx = e.nativeEvent.offsetX, cy = e.nativeEvent.offsetY;
+    if (findNode(cx, cy)) return;
+    const link = findLink(cx, cy);
+    if (link) {
+      onNodeSelect?.(null);
+      onEdgeSelect?.(null);
+      onEdgeDelete(link);
+    }
   }
 
   // Native non-passive wheel listener so we can actually preventDefault the
@@ -1063,7 +1097,9 @@ export function BrainGraph({
             ? "cursor-crosshair"
             : tooltipNode
               ? "cursor-pointer"
-              : "cursor-grab active:cursor-grabbing",
+              : edgeHovered
+                ? "cursor-brain-edge"
+                : "cursor-grab active:cursor-grabbing",
         )}
         style={{
           background: minimal
@@ -1082,6 +1118,8 @@ export function BrainGraph({
           connectAnchorRef.current = null;
           connectTargetRef.current = null;
           setIsConnecting(false);
+          setEdgeHovered(false);
+          hoveredEdgeRef.current = null;
           panRef.current = null;
           mouseDownRef.current = null;
           hoverIdRef.current = null;
@@ -1091,6 +1129,7 @@ export function BrainGraph({
           setTooltipNode(null);
         }}
         onClick={onClick}
+        onDoubleClick={onDoubleClick}
       />
 
       {/* ── Active type filter chip ───────────────────────────────────────── */}

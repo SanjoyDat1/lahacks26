@@ -122,6 +122,16 @@ type CreatedFile = {
   isGhost?: boolean;
 };
 
+type AgentFilesResponse = {
+  brain_dir: string;
+  source: "working" | "reference";
+  files: Array<{
+    path: string;
+    content: string;
+    frontmatter: Record<string, unknown>;
+  }>;
+};
+
 type BootstrapEvent =
   | { type: "connected"; message: string }
   | { type: "stage_start"; stage: StageId; label?: string }
@@ -237,7 +247,7 @@ export function SessionStartPage() {
 	]);
 	const [entryText, setEntryText] = useState("");
   const prompt =
-    "Build a transparent AI brain for this codebase from the linked GitHub repository (and any optional uploaded documents). Focus on architecture, entry points, dependencies, and how the system fits together.";
+    "Build our company brain from the linked GitHub repositories, uploads, and Google Workspace imports. Put each supported department or function in its own directory (company/engineering, company/finance, …), link sections to each other in the Markdown, and use map.md to visualize how the company fits together. Multiple AI agents should share one grounded org picture—decisions, metrics, owners, risks, guardrails—only what the sources support.";
   const [isDragging, setIsDragging] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isDone, setIsDone] = useState(false);
@@ -268,6 +278,31 @@ export function SessionStartPage() {
   const [googleAttachOpen, setGoogleAttachOpen] = useState(false);
   const [contextPills, setContextPills] = useState<ContextBundlePill[]>([]);
 
+  const syncCreatedFilesFromAgent = useCallback(async () => {
+    try {
+      const res = await fetch("/api/agent/files", { cache: "no-store" });
+      if (!res.ok) return;
+      const body = (await res.json()) as AgentFilesResponse | { error?: string };
+      if (!("files" in body) || !Array.isArray(body.files)) return;
+
+      const nextFiles: CreatedFile[] = body.files.map((file) => ({
+        path: file.path,
+        title: file.path.split("/").pop() ?? file.path,
+        preview:
+          typeof file.content === "string" && file.content.trim().length > 0
+            ? file.content.trim().slice(0, 180)
+            : undefined,
+        status: "done",
+        isGhost: false,
+      }));
+
+      setCreatedFiles(nextFiles);
+      setTree(pathsToVirtualTree(nextFiles.map((file) => file.path)));
+    } catch {
+      // Keep the bootstrap snapshot if the live agent isn't reachable.
+    }
+  }, []);
+
   const cleanupRestBootstrap = useCallback(() => {
     restBootstrapTimersRef.current.forEach((id) => window.clearTimeout(id));
     restBootstrapTimersRef.current = [];
@@ -281,6 +316,27 @@ export function SessionStartPage() {
   }, []);
 
   useEffect(() => () => cleanupRestBootstrap(), [cleanupRestBootstrap]);
+
+  useEffect(() => {
+    if (!isDone || isRunning) return;
+
+    const reloadIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        void syncCreatedFilesFromAgent();
+      }
+    };
+
+    void syncCreatedFilesFromAgent();
+    const interval = window.setInterval(reloadIfVisible, 3000);
+    window.addEventListener("focus", reloadIfVisible);
+    document.addEventListener("visibilitychange", reloadIfVisible);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", reloadIfVisible);
+      document.removeEventListener("visibilitychange", reloadIfVisible);
+    };
+  }, [isDone, isRunning, syncCreatedFilesFromAgent]);
 
 	const totalChars = useMemo(
 		() => docs.reduce((sum, doc) => sum + doc.chars, 0),
@@ -766,7 +822,7 @@ export function SessionStartPage() {
               prompt,
               github_repos: githubApiList,
               overwrite: true,
-              max_files: 20,
+              max_files: 24,
               apply: true,
               clone_timeout_s: 300,
             }),
@@ -949,7 +1005,7 @@ export function SessionStartPage() {
           github_repos: githubApiList,
           clone_timeout_s: 300,
           overwrite: true,
-          max_files: 20,
+          max_files: 24,
         }));
       };
 

@@ -8,8 +8,7 @@ from ..schemas import UpdateRequest, UpdateResponse
 router = APIRouter()
 
 
-@router.post("/update", response_model=UpdateResponse)
-def update(req: UpdateRequest) -> UpdateResponse:
+def handle_update_request(req: UpdateRequest) -> UpdateResponse:
     out = agent_runner.update(
         req.prompt,
         update_mode=req.update_mode,
@@ -29,3 +28,7 @@ def update(req: UpdateRequest) -> UpdateResponse:
         status=out.get("status"),
     )
 
+
+@router.post("/update", response_model=UpdateResponse)
+def update(req: UpdateRequest) -> UpdateResponse:
+    return handle_update_request(req)

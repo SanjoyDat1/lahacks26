@@ -27,7 +27,7 @@ def bootstrap(
     sources: list[str],
     *,
     overwrite: bool = False,
-    max_files: int = 3,
+    max_files: int = 24,
     settings: Settings | None = None,
 ) -> dict[str, Any]:
     s = settings or load_settings(validate=True)

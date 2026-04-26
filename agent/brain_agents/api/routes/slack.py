@@ -7,9 +7,10 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from ...services import agent_runner
 from ...services.slack_significance import is_significant
 from ...services.slack_verify import verify_slack_signature
+from ..schemas import UpdateRequest
+from .update import handle_update_request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -64,23 +65,75 @@ def _process_slack_event(text: str, event: dict, team_id: str) -> None:
     source = _build_source(event, team_id=team_id, channel=event.get("channel", ""))
     kw = _slack_update_kwargs()
     try:
-        out = agent_runner.update(
-            text,
-            update_mode="deterministic",
-            source=source,
-            **kw,
+        out = handle_update_request(
+            UpdateRequest(
+                prompt=text,
+                update_mode="deterministic",
+                source=source,
+                **kw,
+            )
         )
     except Exception as exc:  # noqa: BLE001 - background task must not raise
         logger.exception("background reconcile failed: %s", exc)
         return
-    plan = out.get("plan")
-    op_count = len(plan.operations) if hasattr(plan, "operations") else 0
+    plan = out.plan or {}
+    op_count = len(plan.get("operations", [])) if isinstance(plan, dict) else 0
     logger.info(
         "slack background ingest: ops=%s applied=%s status=%s kwargs=%s",
         op_count,
-        out.get("applied"),
-        out.get("status"),
+        out.applied,
+        out.status,
         kw,
+    )
+
+
+def _post_delayed_slack_response(response_url: str, text: str) -> None:
+    if not response_url:
+        return
+    try:
+        import httpx
+
+        httpx.post(
+            response_url,
+            json={"response_type": "in_channel", "text": text},
+            timeout=10.0,
+        )
+    except Exception as exc:  # noqa: BLE001 - best-effort follow-up only
+        logger.warning("failed to post delayed slack response: %s", exc)
+
+
+def _process_slack_command(text: str, source: dict, response_url: str) -> None:
+    kw = _slack_update_kwargs()
+    try:
+        out = handle_update_request(
+            UpdateRequest(
+                prompt=text,
+                update_mode="deterministic",
+                source=source,
+                **kw,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001 - background task must not raise
+        logger.exception("slash command reconcile failed: %s", exc)
+        _post_delayed_slack_response(
+            response_url,
+            f"🧠 Brain ingest failed: {str(exc)[:200]}",
+        )
+        return
+
+    plan = out.plan or {}
+    op_count = len(plan.get("operations", [])) if isinstance(plan, dict) else 0
+    rationale = str(plan.get("rationale", "ingested"))[:200] if isinstance(plan, dict) else "ingested"
+    applied = out.applied
+    status = out.status
+    extra = ""
+    if applied is True:
+        extra = " Applied to brain."
+    elif applied is False and status:
+        extra = f" Status: {status}."
+    _post_delayed_slack_response(
+        response_url,
+        f"🧠 Ingested into the brain. {op_count} operations proposed.{extra}\n> {rationale}",
     )
 
 
@@ -152,6 +205,7 @@ async def slack_events(request: Request, background_tasks: BackgroundTasks):
 
 @router.post("/slack/command")
 async def slack_command(
+    background_tasks: BackgroundTasks,
     token: str = Form(""),
     team_id: str = Form(""),
     channel_id: str = Form(""),
@@ -184,36 +238,13 @@ async def slack_command(
         "team": team_id,
         "via": "slash_command",
     }
-
-    kw = _slack_update_kwargs()
-    try:
-        out = agent_runner.update(
-            text,
-            update_mode="deterministic",
-            source=source,
-            **kw,
-        )
-    except Exception as exc:  # noqa: BLE001 - surface error to user
-        return {
-            "response_type": "ephemeral",
-            "text": f"Brain ingest failed: {str(exc)[:200]}",
-        }
-
-    plan = out.get("plan")
-    op_count = len(plan.operations) if hasattr(plan, "operations") else 0
-    rationale = (
-        plan.rationale[:200] if hasattr(plan, "rationale") else "ingested"
+    background_tasks.add_task(
+        _process_slack_command,
+        text=text,
+        source=source,
+        response_url=response_url,
     )
-    applied = out.get("applied")
-    status = out.get("status")
-    extra = ""
-    if applied is True:
-        extra = " Applied to brain."
-    elif applied is False and status:
-        extra = f" Status: {status}."
     return {
-        "response_type": "in_channel",
-        "text": (
-            f"🧠 Ingested into the brain. {op_count} operations proposed.{extra}\n> {rationale}"
-        ),
+        "response_type": "ephemeral",
+        "text": "🧠 Brain ingest queued. I’ll post the result here once processing finishes.",
     }
