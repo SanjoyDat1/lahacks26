@@ -72,6 +72,15 @@ class Operation:
         )
 
 
+PlanStatus = Literal[
+    "applied",
+    "auto_approved",
+    "pending_approval",
+    "approved",
+    "rejected",
+]
+
+
 @dataclass
 class ReconciliationPlan:
     """A complete proposal for how a single incoming text should change the brain.
@@ -92,6 +101,12 @@ class ReconciliationPlan:
         facts are intentionally capped lower than LLM-extracted ones.
     timestamp
         ISO-8601 UTC timestamp when the plan was constructed (auto-filled).
+    status
+        Governance routing tag. Defaults to ``"applied"`` so legacy callers
+        that don't use the gate behave exactly as before.
+    plan_id
+        Short, stable handle assigned by the governance layer when a plan is
+        persisted for later human review. Empty string for ungated plans.
     """
 
     operations: list[Operation] = field(default_factory=list)
@@ -101,6 +116,8 @@ class ReconciliationPlan:
     timestamp: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat()
     )
+    status: PlanStatus = "applied"
+    plan_id: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -109,6 +126,8 @@ class ReconciliationPlan:
             "confidence": self.confidence,
             "related_sections": list(self.related_sections),
             "operations": [op.to_dict() for op in self.operations],
+            "status": self.status,
+            "plan_id": self.plan_id,
         }
 
     @classmethod
@@ -118,6 +137,8 @@ class ReconciliationPlan:
             rationale=d.get("rationale", ""),
             related_sections=list(d.get("related_sections", [])),
             confidence=float(d.get("confidence", 0.0)),
+            status=d.get("status", "applied"),
+            plan_id=str(d.get("plan_id", "")),
         )
         if "timestamp" in d:
             plan.timestamp = d["timestamp"]
@@ -153,6 +174,7 @@ from .reconciler import Reconciler  # noqa: E402  (placed after dataclasses to a
 __all__ = [
     "Operation",
     "OperationKind",
+    "PlanStatus",
     "ReconciliationPlan",
     "Reconciler",
     "format_operation",

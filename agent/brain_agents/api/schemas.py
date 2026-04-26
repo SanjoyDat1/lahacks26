@@ -155,6 +155,13 @@ class UpdateRequest(BaseModel):
     update_mode: UpdateMode | None = None
     apply: bool = True
     source: dict[str, Any] = Field(default_factory=dict)
+    require_approval: bool = Field(
+        default=False,
+        description=(
+            "When true, plans below the governance gate's confidence × authority "
+            "thresholds are queued for human review instead of being applied."
+        ),
+    )
 
 
 class UpdateResponse(BaseModel):
@@ -164,6 +171,14 @@ class UpdateResponse(BaseModel):
     applied_ops: int | None = None
     files_touched: list[str] | None = None
     plan: dict[str, Any] | None = None
+    status: str | None = Field(
+        default=None,
+        description=(
+            "Governance status of the plan: 'applied', 'auto_approved', "
+            "'pending_approval', 'approved', or 'rejected'. Null when the gate "
+            "was disabled."
+        ),
+    )
 
 
 class GitHubRepoIngestRequest(BaseModel):

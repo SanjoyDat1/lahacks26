@@ -15,6 +15,7 @@ def update(req: UpdateRequest) -> UpdateResponse:
         update_mode=req.update_mode,
         apply=req.apply,
         source=req.source,
+        require_approval=req.require_approval,
     )
     plan = out.get("plan")
     plan_dict = plan.to_dict() if hasattr(plan, "to_dict") else (plan if isinstance(plan, dict) else None)
@@ -25,5 +26,6 @@ def update(req: UpdateRequest) -> UpdateResponse:
         applied_ops=out.get("applied_ops"),
         files_touched=out.get("files_touched"),
         plan=plan_dict,
+        status=out.get("status"),
     )
 
