@@ -1,26 +1,31 @@
 ---
-id: open_questions
-status: draft
-importance: low
-updated: 2026-04-25
+id: projects.iris_landing.open_questions
+ type: project
+ title: Open Questions
+ status: active
+ importance: high
+ updated: 2026-04-25
+ links:
+   - projects/iris_landing/overview.md
+   - summaries/project_summary.md
+ keywords:
+   - questions
+   - unresolved
 links:
   - projects/iris_landing/overview.md
-  - projects/iris_landing/architecture.md
+  - summaries/project_summary.md
   - index.md
   - map.md
-  - summaries/project_summary.md- projects/iris_landing/overview.md
-  - projects/iris_landing/architecture.md
-keywords: [questions, unresolved]
-title: Open Questions
 ---
 
 # Open Questions
 
-This document lists unresolved questions regarding the project.
+This document lists unresolved questions regarding the Iris Landing Page project that need to be addressed to move forward effectively.
 
-- Should the app support multiple separate brains for multiple projects?
-- Are there any ambiguities in the current implementation?
+## Key Questions
+- Should the app support multiple separate landing pages for different campaigns?
+- What features should be prioritized for the initial launch?
 
 ## Source Evidence
-- Should the app support multiple separate brains for multiple projects?
-- Are there any ambiguities in the current implementation?
+- Should the app support multiple separate landing pages for different campaigns?
+- What features should be prioritized for the initial launch?

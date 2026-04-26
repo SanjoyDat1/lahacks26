@@ -12,7 +12,7 @@ import { FileTree } from "@/components/brain-command/file-tree";
 import { GraphCanvas } from "@/components/brain-command/graph-canvas";
 import { PreviewPane } from "@/components/brain-command/preview-pane";
 import { PromptBar } from "@/components/brain-command/prompt-bar";
-import { Link2, Loader2, Unlink, X } from "lucide-react";
+import { ChevronLeft, Link2, Loader2, Unlink, X } from "lucide-react";
 
 type Props = {
   files: BrianFile[];
@@ -237,15 +237,10 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
       <div className="absolute left-4 top-4 z-20 flex flex-wrap items-center gap-2">
         <Link
           href="/"
-          className="rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[11px] font-semibold text-black/75 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-black"
+          className="inline-flex items-center gap-1 rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[11px] font-semibold text-black/75 shadow-sm backdrop-blur-md transition hover:bg-white hover:text-black"
         >
-          Home
-        </Link>
-        <Link
-          href="/start"
-          className="rounded-full border border-violet-200/80 bg-violet-50/95 px-3 py-1.5 text-[11px] font-semibold text-violet-800 shadow-sm backdrop-blur-md transition hover:bg-violet-100"
-        >
-          New session
+          <ChevronLeft size={12} />
+          Back to start
         </Link>
       </div>
 
@@ -331,12 +326,17 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
       )}
 
       {/* Bottom prompt bar */}
-      <div className="absolute inset-x-0 bottom-0 z-30 px-4 pb-4">
+      <div className="absolute inset-x-0 bottom-0 z-30 px-4 pb-10">
         <div className="mx-auto w-[min(560px,calc(100vw-32px))]">
           <PromptBar
             status={status}
             onStatusChange={setStatus}
             onAnswer={setLastAnswer}
+            files={files}
+            onSelectFile={(f) => {
+              setSelectedEdge(null);
+              setSelectedFile(f);
+            }}
           />
         </div>
       </div>

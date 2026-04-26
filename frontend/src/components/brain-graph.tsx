@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Minus, Plus, RotateCcw, Search, X } from "lucide-react";
+import { Minus, Plus, RotateCcw, X } from "lucide-react";
 
 import type { GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
 import type { Relevance } from "@/lib/brian/scenarios";
@@ -288,11 +288,8 @@ export function BrainGraph({
   const sizeRef = useRef({ w: 800, h: 600 });
   const dprRef = useRef(1);
 
-  // Search & filter state
-  const [searchQuery, setSearchQuery] = useState("");
+  // Filter state (search moved out of this component into the prompt bar)
   const [filterType, setFilterType] = useState<string | null>(null);
-  const [showSearch, setShowSearch] = useState(false);
-  const searchQueryRef = useRef("");
   const filterTypeRef2 = useRef<string | null>(null);
 
   const nodesRef = useRef<SimNode[]>([]);
@@ -362,7 +359,6 @@ export function BrainGraph({
       if (node) panTargetRef.current = { x: node.x, y: node.y };
     }
   }, [updateVisu?.active?.path]);
-  useEffect(() => { searchQueryRef.current = searchQuery; }, [searchQuery]);
   useEffect(() => { filterTypeRef2.current = filterType; }, [filterType]);
 
   useLayoutEffect(() => {
@@ -404,7 +400,7 @@ export function BrainGraph({
     const hovId = hoverIdRef.current;
     const selId = selectedIdRef.current;
     const hmap = highlightMapRef.current;
-    const searchQ = searchQueryRef.current.toLowerCase().trim();
+    const searchQ = "";
     const fType = filterTypeRef2.current;
     const hovConnected = hovConnectedRef.current;
     const selEdge = selectedEdgeRef.current;
@@ -1097,59 +1093,9 @@ export function BrainGraph({
         onClick={onClick}
       />
 
-      {/* ── Search bar ────────────────────────────────────────────────────── */}
-      <div className="absolute left-4 top-4 flex items-center gap-2">
-        {showSearch ? (
-          <div
-            className={cn(
-              "flex items-center gap-2 rounded-2xl border px-3 py-2 shadow-md backdrop-blur-2xl",
-              isDark ? "border-white/10 bg-white/[0.04]" : "border-white/80 bg-white/90",
-            )}
-          >
-            <Search size={13} className={cn("flex-shrink-0", isDark ? "text-white/55" : "text-slate-400")} />
-            <input
-              autoFocus
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search nodes…"
-              className={cn(
-                "w-44 bg-transparent text-sm outline-none",
-                isDark ? "text-white/85 placeholder:text-white/35" : "text-slate-700 placeholder:text-slate-400",
-              )}
-            />
-            {searchQuery && (
-              <button
-                onClick={() => setSearchQuery("")}
-                className={cn(isDark ? "text-white/45 hover:text-white/70" : "text-slate-400 hover:text-slate-600")}
-              >
-                <X size={12} />
-              </button>
-            )}
-            <button
-              onClick={() => { setSearchQuery(""); setShowSearch(false); }}
-              className={cn(
-                "ml-1 rounded-lg p-0.5 transition",
-                isDark ? "text-white/45 hover:bg-white/[0.06] hover:text-white/75" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600",
-              )}
-            >
-              <X size={13} />
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setShowSearch(true)}
-            className={cn(
-              "flex items-center gap-1.5 rounded-2xl border px-3 py-2 text-xs shadow-sm backdrop-blur-2xl transition",
-              isDark
-                ? "border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.06] hover:text-white/80"
-                : "border-white/80 bg-white/80 text-slate-500 hover:bg-white/95 hover:text-slate-700",
-            )}
-          >
-            <Search size={13} />
-            Search
-          </button>
-        )}
-        {filterType && (
+      {/* ── Active type filter chip ───────────────────────────────────────── */}
+      {filterType && (
+        <div className="absolute left-4 top-4 flex items-center gap-2">
           <div className="flex items-center gap-1.5 rounded-2xl border border-white/80 bg-white/90 px-3 py-2 shadow-sm backdrop-blur-2xl">
             <div className="h-2 w-2 rounded-full" style={{ backgroundColor: nodeColor(filterType) }} />
             <span className="text-xs font-medium capitalize text-slate-600">{filterType.replace(/_/g, " ")}</span>
@@ -1157,8 +1103,8 @@ export function BrainGraph({
               <X size={11} />
             </button>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ── Legend (clickable type filter) ────────────────────────────────── */}
       {!minimal && (

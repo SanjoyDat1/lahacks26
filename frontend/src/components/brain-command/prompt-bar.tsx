@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Send } from "lucide-react";
+import { FileText, Loader2, Send } from "lucide-react";
 
+import type { BrianFile } from "@/lib/brian/reader";
 import { cn } from "@/lib/utils";
 
 type Answer = { markdown: string; sources: string[] };
@@ -12,25 +13,30 @@ type Message = {
   content: string;
 };
 
-function statusLabel(s: string) {
-  if (s === "classifying") return "Determining intent…";
-  if (s === "chatting") return "Answering…";
-  if (s === "updating") return "Preparing update…";
-  if (s === "done") return "Done";
-  if (s === "error") return "Error";
-  return "Ready";
+const MAX_SEARCH_RESULTS = 6;
+
+function fileTitle(f: BrianFile): string {
+  const t = f.frontmatter.title?.trim();
+  if (t) return t;
+  const base = f.path.split("/").pop()?.replace(/\.md$/i, "") ?? f.path;
+  return base;
 }
 
 export function PromptBar({
   status,
   onStatusChange,
   onAnswer,
+  files,
+  onSelectFile,
 }: {
   status: "idle" | "classifying" | "chatting" | "updating" | "done" | "error";
   onStatusChange: (s: "idle" | "classifying" | "chatting" | "updating" | "done" | "error") => void;
   onAnswer: (a: Answer | null) => void;
+  files: BrianFile[];
+  onSelectFile: (file: BrianFile) => void;
 }) {
   const [text, setText] = useState("");
+  const [showResults, setShowResults] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
@@ -45,11 +51,26 @@ export function PromptBar({
     return text.trim().length > 0 && !streaming && status !== "classifying" && status !== "updating";
   }, [text, streaming, status]);
 
+  const searchResults = useMemo(() => {
+    const q = text.trim().toLowerCase();
+    if (!q) return [] as BrianFile[];
+    const matches: BrianFile[] = [];
+    for (const f of files) {
+      if (fileTitle(f).toLowerCase().includes(q)) {
+        matches.push(f);
+        if (matches.length >= MAX_SEARCH_RESULTS) break;
+      }
+    }
+    return matches;
+  }, [text, files]);
+
+  const showSearchPanel = showResults && searchResults.length > 0 && !streaming;
+
   useEffect(() => {
     const ta = taRef.current;
     if (!ta) return;
     ta.style.height = "0px";
-    const next = Math.min(140, Math.max(48, ta.scrollHeight));
+    const next = Math.min(160, Math.max(36, ta.scrollHeight));
     ta.style.height = `${next}px`;
   }, [text]);
 
@@ -189,66 +210,116 @@ export function PromptBar({
   }, [onAnswer, onStatusChange, pendingUpdate]);
 
   return (
-    <div className="glass px-4 py-3">
-      <div className="flex items-end gap-3">
+    <div className="relative">
+      {showSearchPanel && (
+        <div className="absolute bottom-full left-0 right-0 mb-2 overflow-hidden rounded-2xl border border-black/10 bg-white/95 shadow-xl backdrop-blur-md">
+          <div className="border-b border-black/[0.06] px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/45">
+            Pages matching “{text.trim()}”
+          </div>
+          <ul className="max-h-72 overflow-y-auto py-1">
+            {searchResults.map((f) => {
+              const title = fileTitle(f);
+              return (
+                <li key={f.path}>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => {
+                      onSelectFile(f);
+                      setText("");
+                      setShowResults(false);
+                    }}
+                    className="flex w-full items-start gap-2 px-3 py-2 text-left transition hover:bg-black/[0.05]"
+                  >
+                    <FileText size={14} className="mt-0.5 flex-shrink-0 text-black/55" />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] leading-tight text-black">
+                        {title}
+                      </span>
+                      <span className="mt-0.5 block truncate font-mono text-[10px] leading-tight text-black/50">
+                        {f.path}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
+      <div
+        className={cn(
+          "flex items-end gap-2 rounded-2xl border border-black/10 bg-white/85 py-2 pl-4 pr-2 shadow-lg backdrop-blur-md transition",
+          "focus-within:border-black/25 focus-within:bg-white/95",
+        )}
+      >
         <textarea
           ref={taRef}
           value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Ask anything or describe an update…"
+          onChange={(e) => {
+            setText(e.target.value);
+            setShowResults(true);
+          }}
+          placeholder="Ask, search pages, or describe an update…"
           className={cn(
-            "min-h-12 w-full resize-none rounded-2xl border border-black/10 bg-white/70 px-4 py-3",
+            "min-h-9 w-full resize-none border-0 bg-transparent py-2",
             "text-[13px] leading-6 text-black placeholder:text-black/40 outline-none",
-            "focus:border-black/25 focus:bg-white/90",
           )}
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            if (e.key === "Escape" && showSearchPanel) {
+              setShowResults(false);
+              return;
+            }
+            if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
+              setShowResults(false);
               void submit();
             }
           }}
         />
+
+        {!text && (
+          <span
+            className="pointer-events-none hidden flex-shrink-0 select-none self-center whitespace-nowrap text-[10px] font-medium text-black/40 sm:inline"
+            aria-hidden
+          >
+            ⌘ + Enter
+          </span>
+        )}
 
         <button
           type="button"
           onClick={() => void submit()}
           disabled={!canSend}
           className={cn(
-            "inline-flex h-12 w-12 items-center justify-center rounded-2xl border transition",
+            "mb-0.5 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border transition",
             canSend
               ? "border-transparent bg-[color:var(--accent-600)] text-white hover:bg-[color:var(--accent-700)]"
               : "border-black/10 bg-white/60 text-black/35",
           )}
-          title="Send (⌘/Ctrl + Enter)"
+          title="Send (Enter)"
         >
           {streaming || status === "classifying" || status === "updating" ? (
-            <Loader2 size={16} className="animate-spin" />
+            <Loader2 size={14} className="animate-spin" />
           ) : (
-            <Send size={16} />
+            <Send size={14} />
           )}
         </button>
       </div>
 
-      <div className="mt-2 flex items-center justify-between gap-3 px-1">
-        <p className="text-[10px] font-medium text-black/55">
-          {statusLabel(status)}
-        </p>
-        <div className="flex items-center gap-2">
-          {pendingUpdate && (
-            <button
-              type="button"
-              onClick={() => void applyPending()}
-              className="rounded-full bg-black/[0.06] px-3 py-1 text-[10px] font-semibold text-black/80 transition hover:bg-black/[0.10] hover:text-black"
-              title={`Apply update to ${pendingUpdate.file}`}
-            >
-              Apply update
-            </button>
-          )}
-          <p className="text-[10px] text-black/40">
-            ⌘/Ctrl + Enter to submit
-          </p>
+      {pendingUpdate && (
+        <div className="mt-2 flex justify-end px-2">
+          <button
+            type="button"
+            onClick={() => void applyPending()}
+            className="rounded-full bg-black/[0.06] px-3 py-1 text-[10px] font-semibold text-black/80 transition hover:bg-black/[0.10] hover:text-black"
+            title={`Apply update to ${pendingUpdate.file}`}
+          >
+            Apply update
+          </button>
         </div>
-      </div>
+      )}
     </div>
   );
 }
