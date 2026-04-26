@@ -9,7 +9,13 @@ import {
   buildBrianPathLookup,
   resolveBrainLinkHref,
 } from "@/lib/brian/resolve-markdown-link";
-import { categoryOf, categoryShade, type BrainCategory } from "@/lib/brain/categories";
+import { uniqueBrainFileLabels } from "@/lib/brain/brain-file-label";
+import {
+  divisionKeyForPath,
+  listDivisionFilterOptions,
+  tintForDivisionKey,
+} from "@/lib/brain/divisions";
+import type { GraphNode } from "@/lib/brian/reader";
 import { addGraphLink, removeGraphLink } from "@/lib/brain/graph-link-mutations";
 import { cn } from "@/lib/utils";
 
@@ -43,13 +49,11 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
 
   const { files, graphData } = bundle;
 
-  const categories = useMemo(() => {
-    const set = new Set<BrainCategory>();
-    for (const f of files) set.add(categoryOf(f.path));
-    return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [files]);
+  const labelByPath = useMemo(() => uniqueBrainFileLabels(files), [files]);
 
-  const [activeCategories, setActiveCategories] = useState<Set<BrainCategory>>(
+  const divisionOptions = useMemo(() => listDivisionFilterOptions(files), [files]);
+
+  const [activeDivisions, setActiveDivisions] = useState<Set<string>>(
     () => new Set(),
   );
   const [selectedFile, setSelectedFile] = useState<BrianFile | null>(() => serverFiles[0] ?? null);
@@ -81,20 +85,21 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
   }, []);
 
   const filteredFiles = useMemo(() => {
-    if (activeCategories.size === 0) return files;
-    return files.filter((f) => activeCategories.has(categoryOf(f.path)));
-  }, [files, activeCategories]);
+    if (activeDivisions.size === 0) return files;
+    return files.filter((f) => activeDivisions.has(divisionKeyForPath(f.path)));
+  }, [files, activeDivisions]);
 
   const visibleFilter = useMemo(() => {
-    return (node: { path?: string }) => {
+    return (node: GraphNode) => {
       const p = node.path ?? "";
-      const cat = categoryOf(p);
-      return activeCategories.size === 0 ? true : activeCategories.has(cat);
+      const k = node.divisionKey ?? (p ? divisionKeyForPath(p) : null);
+      if (!k) return true;
+      return activeDivisions.size === 0 ? true : activeDivisions.has(k);
     };
-  }, [activeCategories]);
+  }, [activeDivisions]);
 
   const colorOverride = useMemo(() => {
-    return (node: { path?: string }) => categoryShade(node.path ?? "");
+    return (node: GraphNode) => tintForDivisionKey(node.divisionKey ?? divisionKeyForPath(node.path));
   }, []);
 
   const highlightMap = useMemo<Map<string, Relevance> | undefined>(() => {
@@ -279,9 +284,9 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
       {/* Top floating filter chips */}
       <div className="absolute left-1/2 top-4 z-20 w-[min(1040px,calc(100vw-32px))] -translate-x-1/2">
         <FilterChips
-          categories={categories}
-          active={activeCategories}
-          onChange={setActiveCategories}
+          options={divisionOptions}
+          active={activeDivisions}
+          onChange={setActiveDivisions}
         />
       </div>
 
@@ -296,7 +301,7 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
               setSelectedEdge(null);
               setSelectedFile(f);
             }}
-            getTint={(p) => categoryShade(p)}
+            getTint={(p) => tintForDivisionKey(divisionKeyForPath(p))}
           />
         </section>
 
@@ -319,7 +324,7 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
                 );
               if (f) setSelectedFile(f);
             }}
-            accentForPath={(p) => categoryShade(p)}
+            accentForPath={(p) => tintForDivisionKey(divisionKeyForPath(p))}
           />
         </section>
       </div>
@@ -334,9 +339,17 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
             <div className="min-w-0 flex-1">
               <div className="font-semibold text-black/90">Selected link</div>
               <div className="truncate text-black/60">
-                {edgeSourceFile?.frontmatter.title ?? edgeSourceFile?.path ?? selectedEdge.source}
+                {edgeSourceFile
+                  ? labelByPath.get(edgeSourceFile.path) ??
+                    edgeSourceFile.frontmatter.title ??
+                    edgeSourceFile.path
+                  : selectedEdge.source}
                 <span className="mx-1.5 text-black/35">→</span>
-                {edgeTargetFile?.frontmatter.title ?? edgeTargetFile?.path ?? selectedEdge.target}
+                {edgeTargetFile
+                  ? labelByPath.get(edgeTargetFile.path) ??
+                    edgeTargetFile.frontmatter.title ??
+                    edgeTargetFile.path
+                  : selectedEdge.target}
               </div>
             </div>
             <button
@@ -383,7 +396,7 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
                   setSelectedFile(f);
                 }
               }}
-              accentForPath={(p) => categoryShade(p)}
+              accentForPath={(p) => tintForDivisionKey(divisionKeyForPath(p))}
             />
           ) : null}
           <PromptBar

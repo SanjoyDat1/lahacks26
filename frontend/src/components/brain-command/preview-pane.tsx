@@ -17,12 +17,14 @@ import {
 
 import type { Components } from "react-markdown";
 
+import { uniqueBrainFileLabels } from "@/lib/brain/brain-file-label";
 import type { BrianFile } from "@/lib/brian/reader";
 import {
   buildBrianPathLookup,
   isExternalOrNonBrainHref,
   resolveBrainLinkHref,
 } from "@/lib/brian/resolve-markdown-link";
+import { divisionKeyForPath, divisionTodosPathForKey } from "@/lib/brain/divisions";
 import { cn } from "@/lib/utils";
 import { mdComponents, useExpandedModal } from "./markdown-components";
 
@@ -30,19 +32,6 @@ type ConnectedPage = {
   file: BrianFile;
   direction: "out" | "in";
 };
-
-function fileTitle(f: BrianFile): string {
-  return (
-    f.frontmatter.title ??
-    f.path
-      .split("/")
-      .pop()
-      ?.replace(/\.md$/, "")
-      .replace(/[_-]/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase()) ??
-    f.path
-  );
-}
 
 function buildLookup(files: BrianFile[]) {
   const map = new Map<string, BrianFile>();
@@ -109,10 +98,12 @@ function ConnectedPagesList({
   pages,
   accentForPath,
   onSelect,
+  labelByPath,
 }: {
   pages: ConnectedPage[];
   accentForPath: (path: string) => string;
   onSelect: (path: string) => void;
+  labelByPath: Map<string, string>;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -194,7 +185,7 @@ function ConnectedPagesList({
         style={maxHeight ? { maxHeight } : undefined}
       >
         {pages.map(({ file: linked, direction }) => {
-          const label = fileTitle(linked);
+          const label = labelByPath.get(linked.path) ?? linked.path;
           return (
             <button
               key={`${direction}:${linked.path}`}
@@ -258,7 +249,20 @@ export function PreviewPane({
     [file, allFiles],
   );
 
+  const divisionTodo = useMemo(() => {
+    if (!file) return null;
+    const todoPath = divisionTodosPathForKey(divisionKeyForPath(file.path));
+    if (!todoPath) return null;
+    const f = allFiles.find((x) => x.path === todoPath) ?? null;
+    if (!f || f.path === file.path) return null;
+    return f;
+  }, [file, allFiles]);
+
   const pathLookup = useMemo(() => buildBrianPathLookup(allFiles), [allFiles]);
+  const labelByPath = useMemo(
+    () => uniqueBrainFileLabels(allFiles.length ? allFiles : file ? [file] : []),
+    [allFiles, file],
+  );
 
   const previewMarkdownComponents = useMemo<Components>(
     () => ({
@@ -327,10 +331,41 @@ export function PreviewPane({
               </h1>
             ) : null}
 
+            {divisionTodo ? (
+              <div
+                className="mb-5 rounded-2xl border border-violet-200/80 bg-violet-50/60 px-4 py-3"
+                style={{ boxShadow: `inset 0 0 0 1px ${accentForPath(divisionTodo.path)}22` }}
+              >
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-900/80">
+                    Division checklist
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => onSelectSource(divisionTodo.path)}
+                    className="shrink-0 text-[10px] font-semibold text-violet-800 underline decoration-violet-300 underline-offset-2 hover:text-violet-950"
+                  >
+                    Open full
+                  </button>
+                </div>
+                <div className="max-h-32 overflow-y-auto text-[12px] leading-relaxed text-black/80 [&_ul]:my-0 [&_li]:text-black/80">
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      ...previewMarkdownComponents,
+                    }}
+                  >
+                    {divisionTodo.content.replace(/^---[\s\S]*?---\s*/m, "").trimStart()}
+                  </ReactMarkdown>
+                </div>
+              </div>
+            ) : null}
+
             <ConnectedPagesList
               pages={connectedPages}
               accentForPath={accentForPath}
               onSelect={onSelectSource}
+              labelByPath={labelByPath}
             />
 
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewMarkdownComponents}>

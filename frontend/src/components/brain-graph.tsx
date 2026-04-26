@@ -4,12 +4,16 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Minus, Plus, RotateCcw, X } from "lucide-react";
 
 import type { GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
+import { divisionKeyForPath } from "@/lib/brain/divisions";
 import type { Relevance } from "@/lib/brian/scenarios";
 import { cn } from "@/lib/utils";
 
 // ─── visual constants ──────────────────────────────────────────────────────────
 
 const TYPE_COLORS: Record<string, string> = {
+  company: "#6366f1",
+  division: "#8b5cf6",
+  shared: "#a78bfa",
   index: "#f59e0b",
   architecture: "#3b82f6",
   decision: "#ef4444",
@@ -41,14 +45,61 @@ const ARROW_HEAD_HALF_ANGLE = 0.42;
 type SimNode = GraphNode & { x: number; y: number; vx: number; vy: number };
 type SimLink = { source: SimNode; target: SimNode };
 
+function isLedgerHub(n: GraphNode) {
+  return n.type === "company" || n.type === "division" || n.type === "shared";
+}
+
+/** Deterministic per-key angle so a division's files start near their hub. */
+function keyAngle(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 33 + key.charCodeAt(i)) | 0;
+  return ((Math.abs(h) % 360) * Math.PI) / 180;
+}
+
 function initNodes(nodes: GraphNode[]): SimNode[] {
-  // Seed on a wider ring so the simulation expands outward to fill space
-  // rather than starting tightly bunched around the origin.
-  const baseR = 240 + Math.min(180, nodes.length * 6);
-  return nodes.map((n, i) => {
-    const angle = (2 * Math.PI * i) / nodes.length;
-    const r = baseR + Math.random() * 60;
-    return { ...n, x: r * Math.cos(angle), y: r * Math.sin(angle), vx: 0, vy: 0 };
+  if (!nodes.length) return [];
+  if (!nodes.some((n) => isLedgerHub(n))) {
+    const baseR = 240 + Math.min(180, nodes.length * 6);
+    return nodes.map((n, i) => {
+      const angle = (2 * Math.PI * i) / nodes.length;
+      const r = baseR + Math.random() * 60;
+      return { ...n, x: r * Math.cos(angle), y: r * Math.sin(angle), vx: 0, vy: 0 };
+    });
+  }
+
+  const byKey = new Map<string, GraphNode[]>();
+  for (const n of nodes) {
+    const k = n.divisionKey ?? divisionKeyForPath(n.path);
+    if (!byKey.has(k)) byKey.set(k, []);
+    byKey.get(k)!.push(n);
+  }
+  const keys = [...byKey.keys()].sort((a, b) => a.localeCompare(b, "en"));
+  const nKeys = Math.max(1, keys.length);
+  const rHub = 200;
+
+  const centerForKey = (k: string) => {
+    const i = keys.indexOf(k);
+    const t = nKeys > 0 ? (2 * Math.PI * i) / nKeys : 0;
+    if (k === "q:org") return { x: 0, y: 0 };
+    return { x: rHub * Math.cos(t + keyAngle(k) * 0.08), y: rHub * Math.sin(t + keyAngle(k) * 0.08) };
+  };
+
+  return nodes.map((n) => {
+    const k = n.divisionKey ?? divisionKeyForPath(n.path);
+    const c = centerForKey(k);
+    if (isLedgerHub(n)) {
+      if (n.type === "company") {
+        return { ...n, x: 0, y: 0, vx: 0, vy: 0 };
+      }
+      return { ...n, x: c.x, y: c.y, vx: 0, vy: 0 };
+    }
+    const peers = (byKey.get(k) ?? []).filter((x) => !isLedgerHub(x));
+    const j = Math.max(0, peers.findIndex((x) => x.id === n.id));
+    const m = Math.max(1, peers.length);
+    const spread = (j + 0.5) / m - 0.5;
+    const rOff = 95 + (j % 4) * 12;
+    const base = Math.atan2(c.y, c.x) + spread * 1.8;
+    return { ...n, x: c.x + rOff * Math.cos(base), y: c.y + rOff * Math.sin(base), vx: 0, vy: 0 };
   });
 }
 
@@ -935,8 +986,11 @@ export function BrainGraph({
     if (onLinkCreate) {
       const bodyNode = findNode(cx, cy);
       if (bodyNode) {
-        connectAnchorRef.current = bodyNode;
-        return;
+        if ((bodyNode as GraphNode & { linkable?: boolean }).linkable !== false) {
+          connectAnchorRef.current = bodyNode;
+          return;
+        }
+        // Hubs: allow pan/selection without starting a link drag.
       }
     }
 

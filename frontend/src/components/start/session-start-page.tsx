@@ -4,13 +4,11 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
-  ArrowRight,
   Brain,
   Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Cpu,
   FileSpreadsheet,
   FileText,
   Folder,
@@ -23,6 +21,15 @@ import {
 } from "lucide-react";
 
 import { normalizeBootstrapWsUrlForBrowser } from "@/lib/bootstrap-ws-url";
+import {
+  fileLabelForConstruction,
+  parseFrontmatterTitle,
+} from "@/lib/brain/construction-file-label";
+import {
+  buildPathTreeFromFiles,
+  countPathDirectoryNodes,
+  layoutPathTree,
+} from "@/lib/brain/construction-tree-layout";
 import {
   buildGhostScaffoldFiles,
   chunkGhostBatches,
@@ -285,16 +292,27 @@ export function SessionStartPage() {
       const body = (await res.json()) as AgentFilesResponse | { error?: string };
       if (!("files" in body) || !Array.isArray(body.files)) return;
 
-      const nextFiles: CreatedFile[] = body.files.map((file) => ({
-        path: file.path,
-        title: file.path.split("/").pop() ?? file.path,
-        preview:
-          typeof file.content === "string" && file.content.trim().length > 0
-            ? file.content.trim().slice(0, 180)
-            : undefined,
-        status: "done",
-        isGhost: false,
-      }));
+      const nextFiles: CreatedFile[] = body.files.map((file) => {
+        const fm = file.frontmatter as { title?: unknown };
+        const t =
+          typeof fm?.title === "string" && fm.title.trim()
+            ? fm.title.trim()
+            : parseFrontmatterTitle(file.content) ?? null;
+        const title = fileLabelForConstruction(file.path, {
+          title: t,
+          content: file.content,
+        });
+        return {
+          path: file.path,
+          title,
+          preview:
+            typeof file.content === "string" && file.content.trim().length > 0
+              ? file.content.trim().slice(0, 180)
+              : undefined,
+          status: "done" as const,
+          isGhost: false,
+        };
+      });
 
       setCreatedFiles(nextFiles);
       setTree(pathsToVirtualTree(nextFiles.map((file) => file.path)));
@@ -342,10 +360,19 @@ export function SessionStartPage() {
 		() => docs.reduce((sum, doc) => sum + doc.chars, 0),
 		[docs],
 	);
-	const githubApiList = useMemo(
+  const githubApiList = useMemo(
 		() => githubReposForApi(githubRepos),
 		[githubRepos],
 	);
+  const workspacePill = useMemo(() => {
+    const u = githubApiList[0]?.repo_url?.trim();
+    if (!u) return "Workspace";
+    return shortGithubRepoPill(u);
+  }, [githubApiList]);
+  const pathDirCount = useMemo(
+    () => countPathDirectoryNodes(createdFiles),
+    [createdFiles],
+  );
   const pillDocIdSet = useMemo(
     () => new Set(contextPills.flatMap((p) => p.docIds)),
     [contextPills],
@@ -869,15 +896,44 @@ export function SessionStartPage() {
             `Response received. Animating ${written.length} file${written.length === 1 ? "" : "s"} into the construction graph.`,
           ]);
 
+          const detailByPath = new Map<string, { title: string; content: string }>();
+          try {
+            const pres = await fetch("/api/agent/files", { cache: "no-store" });
+            if (pres.ok) {
+              const data = (await pres.json()) as {
+                files?: Array<{
+                  path: string;
+                  content: string;
+                  frontmatter: Record<string, unknown>;
+                }>;
+              };
+              for (const f of data.files ?? []) {
+                const raw =
+                  typeof f.frontmatter?.title === "string" && f.frontmatter.title.trim()
+                    ? f.frontmatter.title.trim()
+                    : null;
+                const title = fileLabelForConstruction(f.path, {
+                  title: raw,
+                  content: f.content,
+                });
+                detailByPath.set(f.path, { title, content: f.content });
+              }
+            }
+          } catch {
+            // Fall back to path-based labels for each file.
+          }
+
           let delay = 320;
           const step = 155;
           for (const path of written) {
             const rel = path;
+            const d = detailByPath.get(rel);
+            const fileTitle = d?.title ?? fileLabelForConstruction(rel, { content: d?.content });
             scheduleRest(delay, () => {
               setCreatedFiles((prev) =>
                 upsertFile(prev, {
                   path: rel,
-                  title: rel.split("/").pop(),
+                  title: fileTitle,
                   status: "planned",
                   isGhost: false,
                 }),
@@ -1176,6 +1232,7 @@ export function SessionStartPage() {
                 <BuildFileTreeView
                   tree={tree}
                   files={createdFiles}
+                  workspacePill={workspacePill}
                 />
               </section>
 
@@ -1188,7 +1245,9 @@ export function SessionStartPage() {
                     </p>
                     <p className="text-[11px] text-black/70">
                       {createdFiles.length > 0
-                        ? `${createdFiles.length} node${createdFiles.length === 1 ? "" : "s"} forming`
+                        ? `${pathDirCount} dir · ${createdFiles.length} file${
+                            createdFiles.length === 1 ? "" : "s"
+                          } in tree`
                         : "Waiting for first files"}
                     </p>
                   </div>
@@ -1223,6 +1282,7 @@ export function SessionStartPage() {
                   <BootstrapLiveGraph
                     files={createdFiles}
                     isRunning={isRunning}
+                    centerTitle={workspacePill}
                   />
                 </div>
               </section>
@@ -1759,12 +1819,43 @@ function VerticalBootstrapTimeline({
   );
 }
 
+/**
+ * Resolves a frontmatter `links` entry to a node on the construction canvas
+ * (paths may be shorthand like `index.md` or match a single file by basename).
+ */
+function resolveCrossLinkFNode(
+  link: string,
+  posByPath: Map<string, { file: CreatedFile; x: number; y: number; order: number }>,
+  knownPaths: string[],
+): { file: CreatedFile; x: number; y: number; order: number } | null {
+  const t = link.trim();
+  if (!t) return null;
+  if (posByPath.has(t)) return posByPath.get(t)!;
+  const withMd = /\.mdx?$/i.test(t) ? t : `${t}.md`;
+  if (posByPath.has(withMd)) return posByPath.get(withMd)!;
+  const base = t.split("/").pop()?.replace(/\.mdx?$/i, "") ?? "";
+  if (!base) return null;
+  const matches = knownPaths.filter(
+    (p) =>
+      p === t ||
+      p === withMd ||
+      p.endsWith(`/${base}.md`) ||
+      p === `${base}.md`,
+  );
+  const uniq = [...new Set(matches)];
+  if (uniq.length === 1) return posByPath.get(uniq[0]!) ?? null;
+  return null;
+}
+
 function BootstrapLiveGraph({
   files,
   isRunning,
+  centerTitle,
 }: {
   files: CreatedFile[];
   isRunning: boolean;
+  /** e.g. `owner/repo` for the active GitHub source — not a generic logo label. */
+  centerTitle: string;
 }) {
   const arrivalRef = useRef<Map<string, number>>(new Map());
   const startRef = useRef<number>(0);
@@ -1778,82 +1869,53 @@ function BootstrapLiveGraph({
     }
   }, [files]);
 
-  const visible = files.slice(0, 28);
-	const doneCount = visible.filter(
+  const visible = files.slice(0, 56);
+  const doneCount = visible.filter(
 		(f) => f.status === "done" && !f.isGhost,
 	).length;
-  const dirSet = new Set(visible.map((f) => directoryOf(f.path)));
-  const dirNames = Array.from(dirSet).sort((a, b) => {
-    if (a === "brain") return -1;
-    if (b === "brain") return 1;
-    return a.localeCompare(b);
-  });
+  const topTitle =
+    (centerTitle || "Workspace").length > 22
+      ? `${(centerTitle || "WS").slice(0, 20)}…`
+      : centerTitle || "Workspace";
 
   const VIEW_MIN = 920;
-  const BRAIN_Y = 48;
-  const DIR_Y = 158;
-  const FILE_Y0 = 272;
-  const FILE_ROW = 76;
-
   const NODE_STAGGER = 0.35;
-  const DIR_STAGGER = 0.5;
-  const LINK_STAGGER = 0.25;
+  const DIR_STAGGER = 0.45;
   const POP_DUR = 0.7;
   const DRAW_DUR = 0.8;
 
-	const {
-		width: W,
-		dirX,
-		pillHalfW,
-	} = layoutBootstrapDirectoryRow(dirNames, VIEW_MIN);
+  const pathTree = buildPathTreeFromFiles(visible);
+  const L = layoutPathTree(pathTree, VIEW_MIN);
+  const W = L.width;
+  const H = L.height;
+  const cx0 = L.centerX;
+  const cy0 = L.centerY;
 
-  const byDir = new Map<string, CreatedFile[]>();
-  for (const f of visible) {
-    const d = directoryOf(f.path);
-    if (!byDir.has(d)) byDir.set(d, []);
-    byDir.get(d)!.push(f);
-  }
-
-  const dirOrder = new Map<string, number>();
-  dirNames.forEach((d, i) => dirOrder.set(d, i));
-
-  function fileGridCols(n: number): number {
-    if (n <= 6) return 1;
-    if (n <= 14) return 2;
-    return 3;
-  }
-
-  function fileColGap(cols: number): number {
-    if (cols <= 1) return 0;
-    if (cols === 2) return 96;
-    return 82;
-  }
+  const dirOrdered = [...L.dirs].sort(
+    (a, b) => a.y - b.y || a.x - b.x || a.path.localeCompare(b.path, "en"),
+  );
+  const dirOrder = new Map(dirOrdered.map((d, i) => [d.path, i]));
 
   type FNode = { file: CreatedFile; x: number; y: number; order: number };
-  const fnodes: FNode[] = [];
-  let order = 0;
-  for (const f of visible) {
-    const d = directoryOf(f.path);
-    const cx = dirX.get(d) ?? W / 2;
-    const sibs = byDir.get(d)!;
-    const si = sibs.indexOf(f);
-    const cols = fileGridCols(sibs.length);
-    const colGap = fileColGap(cols);
-    const col = si % cols;
-    const row = Math.floor(si / cols);
-    const x = cx + (col - (cols - 1) / 2) * colGap;
-    const y = FILE_Y0 + row * FILE_ROW;
-    fnodes.push({ file: f, x, y, order: order++ });
-  }
+  const fnodes: FNode[] = L.files.map((p) => ({
+    file: p.file as CreatedFile,
+    x: p.x,
+    y: p.y,
+    order: p.order,
+  }));
 
-	const posByPath = new Map<string, FNode>(
+  const posByPath = new Map<string, FNode>(
 		fnodes.map((fn) => [fn.file.path, fn]),
-	);
+  );
   const crossLinks: { from: FNode; to: FNode; ghostly: boolean }[] = [];
   const linkSeen = new Set<string>();
   for (const fn of fnodes) {
     for (const tp of fn.file.links ?? []) {
-      const toNode = posByPath.get(tp);
+      const toNode = resolveCrossLinkFNode(
+        tp,
+        posByPath,
+        files.map((f) => f.path),
+      );
       if (!toNode) continue;
       const a = fn.file.path;
       const b = toNode.file.path;
@@ -1868,23 +1930,17 @@ function BootstrapLiveGraph({
     }
   }
 
-  let maxRows = 1;
-  byDir.forEach((children) => {
-    const c = fileGridCols(children.length);
-    maxRows = Math.max(maxRows, Math.ceil(children.length / c));
-  });
-  const H = Math.max(480, FILE_Y0 + maxRows * FILE_ROW + 64);
-
   const hasBrain = visible.length > 0;
+  const fileWord = L.fileCount === 1 ? "file" : "files";
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-[1.75rem] border border-slate-200/60 bg-gradient-to-b from-slate-50 to-white">
+    <div className="relative min-h-0 flex-1 overflow-auto rounded-[1.75rem] border border-slate-200/60 bg-gradient-to-b from-slate-50 to-white">
       <div className="pointer-events-none absolute inset-0 opacity-[.18] [background-image:radial-gradient(circle,rgba(148,163,184,.18)_1px,transparent_1px)] [background-size:22px_22px]" />
 
       <div className="pointer-events-none absolute left-4 top-4 z-10 flex gap-2">
         <span className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500 shadow-sm backdrop-blur">
 					{hasBrain
-						? `${dirNames.length} dir · ${visible.length} nodes`
+						? `${L.dirCount} dir · ${L.fileCount} ${fileWord}`
 						: "Waiting"}
         </span>
         {doneCount > 0 && (
@@ -1896,7 +1952,7 @@ function BootstrapLiveGraph({
 
       <svg
         viewBox={`0 0 ${W} ${H}`}
-        className="h-full w-full"
+        className="h-full w-full min-w-full"
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
@@ -1922,74 +1978,67 @@ function BootstrapLiveGraph({
 
         {hasBrain ? (
           <>
-            {/* brain root node */}
             <g className="cg-pop" style={{ animationDelay: "0s" }}>
 							<circle
-								cx={W / 2}
-								cy={BRAIN_Y}
+								cx={cx0}
+								cy={cy0}
 								r="22"
 								fill="#ede9fe"
 								stroke="#8b5cf6"
 								strokeWidth="2.2"
 							/>
 							<circle
-								cx={W / 2}
-								cy={BRAIN_Y}
+								cx={cx0}
+								cy={cy0}
 								r="6"
 								fill="#7c3aed"
 							/>
 							<text
-								x={W / 2}
-								y={BRAIN_Y + 40}
+								x={cx0}
+								y={cy0 + 40}
 								textAnchor="middle"
 								fontSize="11"
 								fontWeight="700"
 								fontFamily="ui-sans-serif,system-ui,sans-serif"
 								fill="#4c1d95"
 							>
-                Brian/
+                {topTitle}
               </text>
             </g>
 
-            {/* curves from brain root to directories */}
-            {dirNames.map((d, i) => {
-              const dx = dirX.get(d)!;
-              const midY = (BRAIN_Y + DIR_Y) / 2 + 12;
-              const delay = 0.3 + i * DIR_STAGGER;
-              const pull = (dx - W / 2) * 0.22;
-              const c1x = W / 2 + pull;
-              const c2x = dx - pull * 0.35;
+            {L.treeEdges.map((e, i) => {
+              const delay = 0.22 + (i % 32) * 0.04;
               return (
-                <path
-                  key={`br-${d}`}
-                  d={`M${W / 2},${BRAIN_Y + 22} C${c1x},${midY} ${c2x},${midY} ${dx},${DIR_Y - 18}`}
-                  fill="none"
+                <line
+                  key={`te-${e.x1}-${e.y1}-${e.x2}-${e.y2}-${i}`}
+                  x1={e.x1}
+                  y1={e.y1}
+                  x2={e.x2}
+                  y2={e.y2}
                   stroke="#c7d2fe"
-                  strokeWidth="1.5"
+                  strokeWidth="1.4"
                   className="cg-draw"
                   style={{ animationDelay: `${delay}s` }}
                 />
               );
             })}
 
-            {/* directory nodes */}
-            {dirNames.map((d, i) => {
-              const dx = dirX.get(d)!;
-							const hw =
-								pillHalfW.get(d) ??
-								Math.max(40, d.length * 5.6 + 24);
-              const w = hw * 2;
-              const delay = 0.4 + i * DIR_STAGGER;
+            {L.dirs.map((d) => {
+              const hw = Math.max(44, d.name.length * 5.2 + 22);
+              const w = Math.min(220, hw * 2);
+              const ph = w / 2;
+              const di = dirOrder.get(d.path) ?? 0;
+              const delay = 0.35 + di * DIR_STAGGER;
               return (
 								<g
-									key={`d-${d}`}
+									key={`d-${d.path}`}
 									className="cg-pop"
 									style={{ animationDelay: `${delay}s` }}
 								>
-                  <title>{`${d}/`}</title>
+                  <title>{`${d.path}/`}</title>
 									<rect
-										x={dx - hw}
-										y={DIR_Y - 16}
+										x={d.x - ph}
+										y={d.y - 16}
 										width={w}
 										height="32"
 										rx="10"
@@ -1998,74 +2047,33 @@ function BootstrapLiveGraph({
 										strokeWidth="1.4"
 									/>
 									<text
-										x={dx}
-										y={DIR_Y + 5}
+										x={d.x}
+										y={d.y + 5}
 										textAnchor="middle"
 										fontSize="10"
 										fontWeight="700"
 										fontFamily="ui-sans-serif,system-ui,sans-serif"
 										fill="#4338ca"
 									>
-										{d.length > 18
-											? `${d.slice(0, 16)}\u2026`
-											: d}
+										{d.name.length > 20
+                      ? `${d.name.slice(0, 18)}\u2026`
+                      : d.name}
                   </text>
                 </g>
-              );
-            })}
-
-            {/* connector lines from directory to file node */}
-            {fnodes.map(({ file, x, y, order: o }) => {
-              const d = directoryOf(file.path);
-              const dx = dirX.get(d) ?? W / 2;
-              const done = file.status === "done";
-              const writ = file.status === "writing";
-              const ghost = file.isGhost === true;
-              const dIdx = dirOrder.get(d) ?? 0;
-              const baseDelay = 0.6 + dIdx * DIR_STAGGER;
-              const delay = baseDelay + o * LINK_STAGGER;
-              return (
-                <line
-                  key={`ln-${file.path}`}
-                  x1={dx}
-                  y1={DIR_Y + 18}
-                  x2={x}
-                  y2={y - 14}
-									stroke={
-										ghost
-											? "#ddd6fe"
-											: done
-												? "#86efac"
-												: writ
-													? "#c4b5fd"
-													: "#e2e8f0"
-									}
-                  strokeWidth={writ ? 1.8 : 1.2}
-									strokeDasharray={
-										ghost ? "4 4" : done ? "none" : "5 5"
-									}
-                  opacity={ghost ? 0.65 : 1}
-                  className={writ ? "cg-flow" : "cg-draw"}
-									style={
-										!writ
-											? { animationDelay: `${delay}s` }
-											: undefined
-									}
-                />
               );
             })}
 
             {crossLinks.map(({ from, to, ghostly }, li) => {
               const { x: x1, y: y1 } = from;
               const { x: x2, y: y2 } = to;
-              const dx = x2 - x1;
-              const dy = y2 - y1;
-              const dist = Math.hypot(dx, dy) || 1;
+              const ddx = x2 - x1;
+              const ddy = y2 - y1;
+              const dist = Math.hypot(ddx, ddy) || 1;
               const off = Math.min(36, 14 + dist * 0.08);
-              const midX = (x1 + x2) / 2 - (dy / dist) * off;
+              const midX = (x1 + x2) / 2 - (ddy / dist) * off;
 							const midY =
-								(y1 + y2) / 2 + (dx / dist) * off * 0.55;
-              const delay = 0.82 + li * 0.035;
+								(y1 + y2) / 2 + (ddx / dist) * off * 0.55;
+              const delay = 0.72 + li * 0.035;
               return (
                 <path
                   key={`xlink-${from.file.path}-${to.file.path}`}
@@ -2082,7 +2090,6 @@ function BootstrapLiveGraph({
               );
             })}
 
-            {/* file nodes */}
             {fnodes.map(({ file, x, y, order: o }) => {
               const writ = file.status === "writing";
               const done = file.status === "done";
@@ -2092,15 +2099,18 @@ function BootstrapLiveGraph({
 								file.path === "index.md" ||
 								file.path === "map.md";
               const r = special ? 14 : 11;
-							const baseName =
-								file.path
-									.split("/")
-									.pop()
-									?.replace(/\.mdx?$/i, "") ?? "";
-              const name = truncateFileLabel(baseName, 17);
-              const d = directoryOf(file.path);
-              const dIdx = dirOrder.get(d) ?? 0;
-              const baseDelay = 0.7 + dIdx * DIR_STAGGER;
+              const rawLabel = file.title?.trim()
+                ? file.title.trim()
+                : fileLabelForConstruction(file.path, { content: file.preview });
+              const name = truncateFileLabel(rawLabel, 24);
+              const parentPath =
+                file.path.split("/").length > 1
+                  ? file.path.split("/").slice(0, -1).join("/")
+                  : "";
+              const dIdx = parentPath
+                ? (dirOrder.get(parentPath) ?? 0)
+                : -1;
+              const baseDelay = 0.55 + Math.max(0, dIdx) * DIR_STAGGER;
               const delay = baseDelay + o * NODE_STAGGER;
               return (
 								<g
@@ -2294,9 +2304,11 @@ function pathsToVirtualTree(paths: string[]): BrainTreeNode[] {
 function BuildFileTreeView({
   tree,
   files,
+  workspacePill,
 }: {
   tree: BrainTreeNode[];
   files: CreatedFile[];
+  workspacePill: string;
 }) {
   const virtualTree = useMemo(
     () => pathsToVirtualTree(files.map((f) => f.path)),
@@ -2310,6 +2322,10 @@ function BuildFileTreeView({
   const fileCount = files.filter(
     (f) => f.path && !f.path.endsWith("/"),
   ).length;
+  const pathDirCount = useMemo(
+    () => countPathDirectoryNodes(files),
+    [files],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -2321,11 +2337,16 @@ function BuildFileTreeView({
           <p className="text-[11px] text-black/70">
             {fileCount === 0
               ? "Waiting for first files"
-              : `${fileCount} node${fileCount === 1 ? "" : "s"} forming`}
+              : `${pathDirCount} dir · ${fileCount} file${
+                  fileCount === 1 ? "" : "s"
+                } in tree`}
           </p>
         </div>
-        <span className="rounded-full bg-black/[0.06] px-2.5 py-1 font-mono text-[10px] text-black/70">
-          Brian/
+        <span
+          className="max-w-[min(200px,45%)] truncate rounded-full bg-black/[0.06] px-2.5 py-1 text-center font-mono text-[10px] text-black/70"
+          title={workspacePill}
+        >
+          {workspacePill}/
         </span>
       </div>
 
@@ -2428,9 +2449,11 @@ function BuildTreeNode({
                 : "text-black/65",
         )}
       />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-[11px] leading-tight text-black/80">
-          {node.name}
+      <span className="min-w-0 flex-1" title={node.path}>
+        <span className="block truncate text-[11px] font-medium leading-tight text-black/85">
+          {hint
+            ? hint.title?.trim() || fileLabelForConstruction(hint.path, { content: hint.preview })
+            : node.name}
         </span>
       </span>
       {writing ? (
@@ -2499,14 +2522,6 @@ function CompletionBar({
 				>
           <Brain size={13} />
           View Brian map
-        </Link>
-				<Link
-					href="/agent"
-					className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-violet-200/70 transition hover:bg-violet-700"
-				>
-          <Cpu size={13} />
-          Watch Agent
-          <ArrowRight size={12} />
         </Link>
       </div>
     </div>
@@ -2580,9 +2595,12 @@ function upsertFile(files: CreatedFile[], next: CreatedFile) {
   );
 }
 
-function directoryOf(path: string) {
-  const parts = path.split("/").filter(Boolean);
-  return parts.length > 1 ? parts[0] : "Brian";
+/** e.g. `acme/frontend` for graph center / badge when a GitHub repo is selected. */
+function shortGithubRepoPill(url: string | undefined | null): string {
+  if (!url?.trim()) return "";
+  const m = url.trim().match(/github\.com\/([^/]+)\/([^/?#]+)/i);
+  if (!m) return "Workspace";
+  return `${m[1]}/${m[2]!.replace(/\.git$/i, "")}`.slice(0, 36);
 }
 
 /** Short label for SVG nodes; keeps more characters for mono filenames. */
@@ -2592,57 +2610,6 @@ function truncateFileLabel(s: string, max = 16): string {
   const left = Math.ceil(inner / 2);
   const right = Math.floor(inner / 2);
   return `${s.slice(0, left)}\u2026${s.slice(s.length - right)}`;
-}
-
-/**
- * Pack directory pills on one row with minimum gaps so rounded rects do not overlap.
- * Returns canvas width ≥ viewMin when the row needs more horizontal space.
- */
-function layoutBootstrapDirectoryRow(
-  dirNames: string[],
-  viewMin: number,
-): {
-	width: number;
-	dirX: Map<string, number>;
-	pillHalfW: Map<string, number>;
-} {
-  const sidePad = 44;
-  const minBetween = 16;
-  const pillPadX = 24;
-	const halfWidths = dirNames.map((d) =>
-		Math.max(40, d.length * 5.6 + pillPadX),
-	);
-  const pillHalfW = new Map<string, number>();
-  dirNames.forEach((d, i) => pillHalfW.set(d, halfWidths[i]!));
-
-  if (dirNames.length === 0) {
-    return { width: viewMin, dirX: new Map(), pillHalfW };
-  }
-  if (dirNames.length === 1) {
-    const d0 = dirNames[0]!;
-		return {
-			width: viewMin,
-			dirX: new Map([[d0, viewMin / 2]]),
-			pillHalfW,
-		};
-  }
-
-  const centers: number[] = [];
-  let x = sidePad + halfWidths[0]!;
-  centers.push(x);
-  for (let i = 1; i < dirNames.length; i++) {
-    x = centers[i - 1]! + halfWidths[i - 1]! + minBetween + halfWidths[i]!;
-    centers.push(x);
-  }
-	const rawRight =
-		centers[centers.length - 1]! +
-		halfWidths[halfWidths.length - 1]! +
-		sidePad;
-  const width = Math.max(viewMin, Math.ceil(rawRight + 8));
-  const shift = (width - rawRight) / 2;
-  const dirX = new Map<string, number>();
-  dirNames.forEach((d, i) => dirX.set(d, centers[i]! + shift));
-  return { width, dirX, pillHalfW };
 }
 
 function readFileAsDataUrl(file: File) {

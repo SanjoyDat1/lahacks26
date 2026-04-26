@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, Loader2, Send } from "lucide-react";
 
+import { uniqueBrainFileLabels } from "@/lib/brain/brain-file-label";
 import type { BrianFile } from "@/lib/brian/reader";
 import { cn } from "@/lib/utils";
 
@@ -14,13 +15,6 @@ type Message = {
 };
 
 const MAX_SEARCH_RESULTS = 6;
-
-function fileTitle(f: BrianFile): string {
-  const t = f.frontmatter.title?.trim();
-  if (t) return t;
-  const base = f.path.split("/").pop()?.replace(/\.md$/i, "") ?? f.path;
-  return base;
-}
 
 export function PromptBar({
   status,
@@ -55,18 +49,21 @@ export function PromptBar({
     return text.trim().length > 0 && !streaming && status !== "classifying" && status !== "updating";
   }, [text, streaming, status]);
 
+  const labelByPath = useMemo(() => uniqueBrainFileLabels(files), [files]);
+
   const searchResults = useMemo(() => {
     const q = text.trim().toLowerCase();
     if (!q) return [] as BrianFile[];
     const matches: BrianFile[] = [];
     for (const f of files) {
-      if (fileTitle(f).toLowerCase().includes(q)) {
+      const display = (labelByPath.get(f.path) ?? f.path).toLowerCase();
+      if (display.includes(q) || f.path.toLowerCase().includes(q)) {
         matches.push(f);
         if (matches.length >= MAX_SEARCH_RESULTS) break;
       }
     }
     return matches;
-  }, [text, files]);
+  }, [text, files, labelByPath]);
 
   const showSearchPanel = showResults && searchResults.length > 0 && !streaming;
 
@@ -240,7 +237,7 @@ export function PromptBar({
           </div>
           <ul className="max-h-72 overflow-y-auto py-1">
             {searchResults.map((f) => {
-              const title = fileTitle(f);
+              const title = labelByPath.get(f.path) ?? f.path;
               return (
                 <li key={f.path}>
                   <button

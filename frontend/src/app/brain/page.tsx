@@ -41,6 +41,8 @@ function normalizeFrontmatter(fm: Record<string, unknown>): BrianFrontmatter {
     out.importance = fm.importance;
   }
   if (Array.isArray(fm.links)) out.links = fm.links.filter((x): x is string => typeof x === "string");
+  if (Array.isArray(fm.context_links))
+    out.context_links = fm.context_links.filter((x): x is string => typeof x === "string");
   if (Array.isArray(fm.keywords))
     out.keywords = fm.keywords.filter((x): x is string => typeof x === "string");
   return out;

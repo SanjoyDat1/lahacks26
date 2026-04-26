@@ -46,7 +46,7 @@ MAX_PARALLEL_BATCHES = 3
 BOOTSTRAP_PLAN_MAX_TOKENS = 6_000
 BOOTSTRAP_GENERATION_MAX_TOKENS = 16_384
 INDEX_PATH = "index.md"
-MIN_RICH_BOOTSTRAP_FILES = 8
+MIN_RICH_BOOTSTRAP_FILES = 10
 REQUIRED_BOOTSTRAP_PATHS = [
     "index.md",
     "map.md",
@@ -361,27 +361,32 @@ def _plan_brain_files(
 
     minimum_files = min(max_files, MIN_RICH_BOOTSTRAP_FILES)
     system = SystemMessage(
-        "You plan interlinked Markdown files for an **enterprise company brain**: one **directory per company section** "
-        "(department / function) when sources support it, with rich **inner links** between sections so the org is navigable "
-        "as Markdown + graph. Agents need to see how Engineering, Finance, Marketing, etc. connect. "
-        "Infer sections only from INITIAL PROMPT + SOURCE DOCUMENTS. "
+        "You plan interlinked Markdown files for an **enterprise company brain**: one **directory per org section** "
+        "(`divisions/<slug>/` or `company/<slug>/`, pick one convention) when sources support it. Within each section, add "
+        "**nested subfolders** (e.g. `divisions/eng/delivery/milestones.md`) when the material warrants depth—not only a flat set of files. "
+        "Rich **cross-section** links so the org is navigable as Markdown + graph. "
+        "Infer structure only from INITIAL PROMPT + SOURCE DOCUMENTS. "
         "Not the Brian documentation product or this repo's tooling unless sources discuss them. Reference catalog is layout-only. Return only JSON."
     )
     user = HumanMessage(
         f"""Plan the Markdown files for this working brain from the sources below.
 
-## Company directory layout (primary)
+## Org section layout (primary): `divisions/<slug>/` and/or `company/<slug>/`
 - Always include `index.md`, `map.md`, and `summaries/project_summary.md`.
-- **Default:** put each distinct company function under its **own directory**: `company/<section-slug>/` where `<slug>` is lowercase hyphenated (e.g. `engineering`, `product`, `design`, `marketing`, `sales`, `finance`, `legal`, `security`, `operations`, `people`, `customer-success`). Only create a section folder when sources justify it.
-- **Every active section** MUST include `company/<slug>/overview.md` as the hub for that part of the org.
-- Add more files **inside the same section directory** when sources support them (e.g. `company/marketing/positioning.md`, `company/finance/budget-signals.md`, `company/engineering/architecture-notes.md`)—keep related material **together** under that section.
-- **Inner company links:** In every `company/<slug>/overview.md` plan, `links` MUST include the spine (`index.md`, `summaries/project_summary.md`) plus **at least two** other planned paths: peer `company/*/overview.md` files and/or `projects/*` or `governance/*` when dependencies exist. Show how sections hand off work to each other.
-- **`map.md`** will visualize the company: plan it with `links` to **every** `company/*/overview.md` and to `projects/*/overview.md` hubs so the map is the single diagrammatic entry to org structure.
-- **`index.md`** must include a clear **## Company sections** (or equivalent) listing every `company/<slug>/overview.md` with one-line intent per section, plus links to `map.md`, summary, and code hubs under `projects/` when present.
-- When **GitHub repos** matter, keep **`projects/<repo-slug>/`** for repo depth (overview, architecture, …) **and** link those project overviews from the relevant **`company/<section>/overview.md`** (e.g. engineering section ↔ monorepo project).
-- If imports are **only one codebase**, a single **`company/engineering/overview.md`** (or one section) plus `projects/<slug>/` is enough—do **not** fabricate empty Finance/Marketing trees.
-- Optional: `company/cross-cutting/` for org-wide topics that are not one department (e.g. `company/cross-cutting/strategic-priorities.md`) only when sources support it.
-- Legacy path `context/<slug>/` is discouraged—prefer **`company/<slug>/`** for the same role when planning new files.
+- **Pick one top-level convention** for department/org units: **`divisions/<section-slug>/`** (matches the in-app “division” graph) **or** the legacy-style **`company/<section-slug>/`**. Do not mix them for the *same* org unit; prefer **`divisions/<slug>/`** for new plans unless the sources already use `company/`.
+- **Every active org section** MUST include *either* `divisions/<slug>/overview.md` *or* `company/<slug>/overview.md` as the hub. Slug: lowercase, hyphenated (e.g. `engineering`, `product`, `marketing`, `people`).
+- **Multi-layer (when context permits):** add **nested subfolders** under that section, not just flat files. Examples (only with evidence):
+  - `divisions/<slug>/delivery/milestones.md`, `divisions/<slug>/delivery/dependencies.md`
+  - `divisions/<slug>/people/team.md`, `divisions/<slug>/risks/tracker.md` (or flat `.../risks.md` if shallow)
+  - `company/<slug>/roadmap/now-next-later.md` (same idea under `company/`)
+- Aim for **at least 3 files per org section** when sources are rich (hub overview + 2+ supporting pages). Weak sources → one hub + `open_questions.md` (or `notes/capture.md`) only.
+- **Peer links:** The section hub’s `links` must include the spine plus **at least two** other planned paths: peer `divisions/*/overview.md` or `company/*/overview.md`, and/or `projects/*` or `governance/*` when dependencies exist. Show how sections hand off work.
+- **`map.md`:** `links` to **every** section hub you planned (`divisions/*/overview.md` and/or `company/*/overview.md`) and to `projects/*/overview.md` when present.
+- **`index.md`:** a **## Org sections** (or **## Company sections**) block listing every section hub with one line each, plus `map.md`, summary, and `projects/` when present.
+- **GitHub / code:** `projects/<repo-slug>/` for repo depth; link from the relevant **section hub** (e.g. `divisions/engineering/overview.md` ↔ `projects/<repo>/overview.md`).
+- If imports are **only one codebase**, a single **section** (e.g. `divisions/engineering/`) plus `projects/<slug>/` is enough—do **not** fabricate empty trees.
+- Optional cross-org topics: `divisions/cross-cutting/` or `company/cross-cutting/` only when sources support it.
+- Legacy `context/<slug>/` is discouraged; prefer `divisions/<slug>/` or `company/<slug>/`.
 - Optional spine: `meta/using_this_brain.md`, `governance/agent_guardrails.md` (at most one each).
 - `summaries/project_summary.md`: executive view of the **whole company / initiative** with bullets for each section and **explicit markdown links** to every section overview—evidence-backed only.
 
@@ -394,11 +399,14 @@ def _plan_brain_files(
 - Each file plan's `links`: **2–6** paths from this plan. Prefer **cross-section** links (Product ↔ Engineering ↔ Finance) grounded in sources.
 - `template_path` only when a reference file helps structure.
 
+## Titles (YAML `title` in generated frontmatter)
+- Every planned `title` must be **distinct** across the brain when sources allow—**do not** give every `company/<slug>/overview.md` (or `divisions/<slug>/overview.md`) the same generic string like `"Overview"`. Use **section-specific** names (e.g. `"Engineering org overview"`, `"Finance org overview"`, `"Product area overview"`) so navigation and graph search stay unambiguous.
+
 ## Output shape
-- `"context_domains"`: array of `{{"slug": "engineering", "rationale": "…"}}` for each **`company/<slug>/`** hub (same schema as before; slug is the folder name under `company/`).
+- `"context_domains"`: array of `{{"slug": "engineering", "rationale": "…"}}` for each org-section hub; slug is the **folder name** under `divisions/<slug>/` or `company/<slug>/` (one entry per active section).
 - `"files"`, `"rationale"` as before.
-- Example (abbreviated):
-  {{"context_domains": [{{"slug": "engineering", "rationale": "Repo + technical docs"}}], "files": [{{"path": "index.md", "title": "Company brain index", "purpose": "Entry point; lists all company sections", "template_path": "index.md", "evidence": ["…"], "links": ["summaries/project_summary.md", "map.md", "company/engineering/overview.md"]}}], "rationale": "…"}}
+- Example (abbreviated, divisions + nested file):
+  {{"context_domains": [{{"slug": "engineering", "rationale": "Engineering from repo + product docs"}}], "files": [{{"path": "index.md", "title": "Brain index", "purpose": "Entry; lists org sections", "template_path": "index.md", "evidence": ["…"], "links": ["summaries/project_summary.md", "map.md", "divisions/engineering/overview.md"]}}, {{"path": "divisions/engineering/delivery/milestones.md", "title": "Milestones", "purpose": "Delivery schedule grounded in sources", "template_path": "", "evidence": ["…"], "links": ["divisions/engineering/overview.md", "map.md"]}}], "rationale": "…"}}
 
 ## Budget
 - Plan at least {minimum_files} files and at most {max_files} files total.
@@ -458,6 +466,8 @@ SOURCE DOCUMENTS:
         fallback_paths = [
             "company/cross-cutting/key_facts.md",
             "company/cross-cutting/open_questions.md",
+            "divisions/cross-cutting/key_context.md",
+            "divisions/cross-cutting/open_questions.md",
         ]
         for fallback_path in fallback_paths:
             if len(plans) >= min(max_files, minimum_files):
@@ -502,6 +512,37 @@ def _cousin_company_section_paths(relative_path: str, selected_paths: list[str],
         )
         if not ovs:
             ovs = sorted(p for p in selected_paths if p.startswith(f"company/{slug}/"))
+        if ovs:
+            out.append(ovs[0])
+        if len(out) >= max_cousins:
+            break
+    return out
+
+
+def _cousin_division_section_paths(relative_path: str, selected_paths: list[str], *, max_cousins: int = 5) -> list[str]:
+    """Other `divisions/<slug>/` hubs (prefer overview.md) for cross-division graph edges."""
+    parts = relative_path.split("/")
+    if len(parts) < 2 or parts[0] != "divisions":
+        return []
+    my_slug = parts[1]
+    slugs = sorted(
+        {
+            p.split("/")[1]
+            for p in selected_paths
+            if p.startswith("divisions/") and len(p.split("/")) > 1 and p.split("/")[1] != "cross-cutting"
+        }
+    )
+    out: list[str] = []
+    for slug in slugs:
+        if slug == my_slug:
+            continue
+        ovs = sorted(
+            p
+            for p in selected_paths
+            if p.startswith(f"divisions/{slug}/") and p.endswith("overview.md")
+        )
+        if not ovs:
+            ovs = sorted(p for p in selected_paths if p.startswith(f"divisions/{slug}/"))
         if ovs:
             out.append(ovs[0])
         if len(out) >= max_cousins:
@@ -572,6 +613,7 @@ def _ensure_frontmatter_links(content: str, relative_path: str, selected_paths: 
     cousin_extra = [
         *_cousin_project_paths(relative_path, selected_paths),
         *_cousin_company_section_paths(relative_path, selected_paths),
+        *_cousin_division_section_paths(relative_path, selected_paths),
     ]
     merged = list(dict.fromkeys([*valid_links, *hub_extra, *cousin_extra]))[:10]
     valid_links = merged

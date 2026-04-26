@@ -15,6 +15,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 
+import { uniqueBrainFileLabels } from "@/lib/brain/brain-file-label";
 import type { BrianFile } from "@/lib/brian/reader";
 import { cn } from "@/lib/utils";
 
@@ -71,13 +72,6 @@ function humanizePathSegment(segment: string): string {
   return spaced.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-function filePrimaryLabel(file: BrianFile): string {
-  const t = file.frontmatter.title?.trim();
-  if (t) return t;
-  const base = file.path.split("/").pop()?.replace(/\.md$/i, "") ?? file.path;
-  return humanizePathSegment(base);
-}
-
 function fileContextPath(file: BrianFile): string {
   const i = file.path.lastIndexOf("/");
   if (i <= 0) return "";
@@ -108,13 +102,15 @@ function SidebarFileButton({
   active,
   onSelect,
   tint,
+  displayLabel,
 }: {
   file: BrianFile;
   active: boolean;
   onSelect: () => void;
   tint: string;
+  displayLabel: string;
 }) {
-  const primary = filePrimaryLabel(file);
+  const primary = displayLabel;
   const ctx = fileContextPath(file);
   return (
     <button
@@ -219,6 +215,7 @@ function FolderSubtree({
   onToggleFolder,
   onSelectFile,
   getTint,
+  labelByPath,
 }: {
   node: FileTreeNode;
   selectedPath?: string;
@@ -226,6 +223,7 @@ function FolderSubtree({
   onToggleFolder: (pathKey: string) => void;
   onSelectFile: (file: BrianFile) => void;
   getTint: (path: string) => string;
+  labelByPath: Map<string, string>;
 }) {
   const expanded = navExpanded[node.pathKey] !== false;
   const total = countFilesInSubtree(node);
@@ -252,6 +250,7 @@ function FolderSubtree({
                   active={selectedPath === file.path}
                   onSelect={() => onSelectFile(file)}
                   tint={getTint(file.path)}
+                  displayLabel={labelByPath.get(file.path) ?? file.path}
                 />
               </ElbowRow>
             );
@@ -267,6 +266,7 @@ function FolderSubtree({
                   onToggleFolder={onToggleFolder}
                   onSelectFile={onSelectFile}
                   getTint={getTint}
+                  labelByPath={labelByPath}
                 />
               </ElbowRow>
             );
@@ -284,6 +284,7 @@ function Tree({
   onToggleFolder,
   onSelectFile,
   getTint,
+  labelByPath,
 }: {
   node: FileTreeNode;
   selectedPath?: string;
@@ -291,6 +292,7 @@ function Tree({
   onToggleFolder: (pathKey: string) => void;
   onSelectFile: (file: BrianFile) => void;
   getTint: (path: string) => string;
+  labelByPath: Map<string, string>;
 }) {
   return (
     <div className="pl-1">
@@ -306,6 +308,7 @@ function Tree({
               active={selectedPath === file.path}
               onSelect={() => onSelectFile(file)}
               tint={getTint(file.path)}
+              displayLabel={labelByPath.get(file.path) ?? file.path}
             />
           ))}
         </div>
@@ -320,6 +323,7 @@ function Tree({
           onToggleFolder={onToggleFolder}
           onSelectFile={onSelectFile}
           getTint={getTint}
+          labelByPath={labelByPath}
         />
       ))}
     </div>
@@ -338,6 +342,7 @@ export function FileTree({
   getTint: (path: string) => string;
 }) {
   const fileTree = useMemo(() => buildFileTree(files), [files]);
+  const labelByPath = useMemo(() => uniqueBrainFileLabels(files), [files]);
   const [navExpanded, setNavExpanded] = useState<Record<string, boolean>>({});
 
   return (
@@ -366,6 +371,7 @@ export function FileTree({
           }
           onSelectFile={onSelect}
           getTint={getTint}
+          labelByPath={labelByPath}
         />
       </div>
     </div>

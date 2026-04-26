@@ -26,8 +26,8 @@ export function GraphCanvas({
   onEdgeSelect?: (edge: GraphLink | null) => void;
   onEdgeDelete?: (edge: GraphLink) => void;
   onLinkCreate?: (sourceId: string, targetId: string) => Promise<void>;
-  visibleFilter: (node: { id: string; path?: string }) => boolean;
-  colorOverride: (node: { id: string; path?: string }) => string;
+  visibleFilter: (node: GraphNode) => boolean;
+  colorOverride: (node: GraphNode) => string;
 }) {
   return (
     <div className="relative h-full">

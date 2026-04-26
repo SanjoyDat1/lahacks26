@@ -5,7 +5,15 @@
  * building, but the graph view now needs to render in the browser from the
  * live agent's `GET /files` payload. Anything that touches `node:fs` is kept
  * in `reader.ts`; anything safe to bundle for the client lives here.
+ *
+ * The graph models **company → division → file**: org hub, division hubs
+ * (divisions/*, company/*, projects/*, …), and member docs, with filter chips
+ * driven by the same division keys as `../brain/divisions`.
  */
+
+import { uniqueBrainFileLabels } from "@/lib/brain/brain-file-label";
+import { divisionKeyForPath, pickHubPathForKey } from "@/lib/brain/divisions";
+import { collectTodoContextLinkTargets } from "@/lib/brain/todo-context-links";
 
 export type BrianFrontmatter = {
   id?: string;
@@ -15,6 +23,8 @@ export type BrianFrontmatter = {
   importance?: "critical" | "high" | "medium" | "low";
   updated?: string;
   links?: string[];
+  /** Extra graph targets for `todos.md` (implementation context). Merged with inline body links. */
+  context_links?: string[];
   keywords?: string[];
 };
 
@@ -24,6 +34,8 @@ export type BrianFile = {
   frontmatter: BrianFrontmatter;
 };
 
+export type NodeRole = "file" | "company" | "division" | "shared";
+
 export type GraphNode = {
   id: string;
   label: string;
@@ -32,6 +44,15 @@ export type GraphNode = {
   path: string;
   val: number;
   keywords: string[];
+  /** Filter / styling key from `divisionKeyForPath` (e.g. `q:org`, `p:acme`). */
+  divisionKey?: string;
+  /** Company / division / shared hub vs regular doc. */
+  nodeRole?: NodeRole;
+  /**
+   * When `false`, link-drag to create a new graph edge cannot start on this
+   * node (hubs are structural anchors, not wiring endpoints by default).
+   */
+  linkable?: boolean;
 };
 
 export type GraphLink = {
@@ -105,11 +126,14 @@ function collectProjectHubIds(files: BrianFile[]): string[] {
   return hubs;
 }
 
+type EnrichOpts = { skipCliqueRings: boolean };
+
 function enrichGraphConnectivity(
   nodes: GraphNode[],
   files: BrianFile[],
   links: GraphLink[],
   seen: Set<string>,
+  opts: EnrichOpts = { skipCliqueRings: false },
 ): void {
   const addLink = (source: string, target: string) => {
     if (source === target) return;
@@ -148,7 +172,7 @@ function enrichGraphConnectivity(
     }
   }
 
-  if (projectHubIds.length >= 2) {
+  if (!opts.skipCliqueRings && projectHubIds.length >= 2) {
     for (let i = 0; i < projectHubIds.length; i++) {
       const a = projectHubIds[i]!;
       const b = projectHubIds[(i + 1) % projectHubIds.length]!;
@@ -160,6 +184,8 @@ function enrichGraphConnectivity(
     addLink(mapId, summaryId);
     addLink(summaryId, mapId);
   }
+
+  if (opts.skipCliqueRings) return;
 
   const otherPrefixes = new Map<string, BrianFile[]>();
   for (const f of files) {
@@ -193,17 +219,97 @@ function enrichGraphConnectivity(
   }
 }
 
+function valForHubRole(role: NodeRole) {
+  if (role === "company") return 16;
+  if (role === "shared") return 12;
+  if (role === "division") return 10;
+  return 4;
+}
+
+/**
+ * After base nodes and doc-to-doc links exist, set division metadata and add
+ * structural org edges (company → division hub → members).
+ */
+function applyCompanyDivisionLayer(
+  nodes: GraphNode[],
+  files: BrianFile[],
+  links: GraphLink[],
+  seen: Set<string>,
+) {
+  const addLink = (source: string, target: string) => {
+    if (source === target) return;
+    const k = `${source}→${target}`;
+    if (seen.has(k)) return;
+    seen.add(k);
+    links.push({ source, target });
+  };
+
+  const keys = new Set<string>();
+  for (const f of files) keys.add(divisionKeyForPath(f.path));
+
+  const hubPathByKey = new Map<string, string>();
+  for (const k of keys) {
+    const hub = pickHubPathForKey(files, k);
+    if (hub) hubPathByKey.set(k, hub);
+  }
+
+  const byPath = new Map(nodes.map((n) => [n.path, n]));
+  for (const n of nodes) {
+    const f = files.find((x) => (x.frontmatter.id ?? x.path) === n.id || x.path === n.path);
+    if (!f) continue;
+    const key = divisionKeyForPath(f.path);
+    n.divisionKey = key;
+    const hubPath = hubPathByKey.get(key);
+    if (hubPath && f.path === hubPath) {
+      n.linkable = false;
+      if (key === "q:org") {
+        n.nodeRole = "company";
+        n.type = "company";
+        n.val = valForHubRole("company");
+      } else if (key === "q:shared") {
+        n.nodeRole = "shared";
+        n.type = "shared";
+        n.val = valForHubRole("shared");
+      } else {
+        n.nodeRole = "division";
+        n.type = "division";
+        n.val = valForHubRole("division");
+      }
+    } else {
+      n.nodeRole = "file";
+      n.linkable = true;
+    }
+  }
+
+  const hubIdByKey = new Map<string, string>();
+  for (const [key, hpath] of hubPathByKey) {
+    const node = byPath.get(hpath);
+    if (node) hubIdByKey.set(key, node.id);
+  }
+
+  const orgId = hubIdByKey.get("q:org");
+  if (orgId) {
+    for (const [key, hubId] of hubIdByKey) {
+      if (key === "q:org" || hubId === orgId) continue;
+      addLink(orgId, hubId);
+    }
+  }
+
+  for (const f of files) {
+    const key = divisionKeyForPath(f.path);
+    const hubId = hubIdByKey.get(key);
+    if (!hubId) continue;
+    const fileId = f.frontmatter.id ?? f.path;
+    if (fileId === hubId) continue;
+    addLink(hubId, fileId);
+  }
+}
+
 export function buildGraphData(files: BrianFile[]): GraphData {
+  const labelByPath = uniqueBrainFileLabels(files);
   const nodes: GraphNode[] = files.map((f) => ({
     id: f.frontmatter.id ?? f.path,
-    label:
-      f.frontmatter.title ??
-      f.path
-        .split("/")
-        .pop()
-        ?.replace(".md", "")
-        .replace(/_/g, " ") ??
-      f.path,
+    label: labelByPath.get(f.path) ?? f.path,
     type: f.frontmatter.type ?? "unknown",
     importance: f.frontmatter.importance ?? "medium",
     path: f.path,
@@ -236,6 +342,14 @@ export function buildGraphData(files: BrianFile[]): GraphData {
         links.push({ source: sourceId, target: targetId });
       }
     }
+    for (const target of collectTodoContextLinkTargets(file, files)) {
+      const targetId = target.frontmatter.id ?? target.path;
+      const key = `${sourceId}→${targetId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        links.push({ source: sourceId, target: targetId });
+      }
+    }
   }
 
   const byDir = new Map<string, BrianFile[]>();
@@ -257,7 +371,8 @@ export function buildGraphData(files: BrianFile[]): GraphData {
     }
   }
 
-  enrichGraphConnectivity(nodes, files, links, seen);
+  applyCompanyDivisionLayer(nodes, files, links, seen);
+  enrichGraphConnectivity(nodes, files, links, seen, { skipCliqueRings: true });
 
   return { nodes, links };
 }

@@ -1,39 +1,39 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import { CATEGORY_SHADES, type BrainCategory } from "@/lib/brain/categories";
+import type { DivisionFilterOption } from "@/lib/brain/divisions";
 
 export function FilterChips({
-  categories,
+  options,
   active,
   onChange,
 }: {
-  categories: BrainCategory[];
-  active: Set<BrainCategory>;
-  onChange: (next: Set<BrainCategory>) => void;
+  options: DivisionFilterOption[];
+  active: Set<string>;
+  onChange: (next: Set<string>) => void;
 }) {
   const noneSelected = active.size === 0;
 
-  function toggle(cat: BrainCategory) {
+  function toggle(id: string) {
     const next = new Set(active);
-    if (next.has(cat)) next.delete(cat);
-    else next.add(cat);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
     onChange(next);
   }
 
   return (
     <div className="flex flex-wrap items-center justify-center gap-2">
-      {categories.map((cat) => {
-        const on = active.has(cat);
+      {options.map((opt) => {
+        const on = active.has(opt.id);
         const dim = !noneSelected && !on;
-        const tint = CATEGORY_SHADES[cat] ?? CATEGORY_SHADES.other;
         return (
           <button
-            key={cat}
+            key={opt.id}
             type="button"
-            onClick={() => toggle(cat)}
+            onClick={() => toggle(opt.id)}
+            title={opt.id}
             className={cn(
-              "group inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium tracking-[-0.02em] transition",
+              "group inline-flex max-w-[200px] items-center gap-2 rounded-full border px-3 py-1 text-[11px] font-medium tracking-[-0.02em] transition",
               on
                 ? "border-black/15 bg-black/85 text-white"
                 : dim
@@ -43,12 +43,12 @@ export function FilterChips({
           >
             <span
               className={cn(
-                "h-1.5 w-1.5 rounded-full transition",
+                "h-1.5 w-1.5 shrink-0 rounded-full transition",
                 on ? "opacity-100" : dim ? "opacity-50" : "opacity-70 group-hover:opacity-90",
               )}
-              style={{ background: tint }}
+              style={{ background: opt.tint }}
             />
-            <span className="capitalize">{cat}</span>
+            <span className="min-w-0 truncate">{opt.label}</span>
           </button>
         );
       })}

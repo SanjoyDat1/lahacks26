@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ComponentType } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import { useRouter } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -35,6 +42,7 @@ import type { UpdateVisuState } from "@/components/brain-graph";
 import { ContextMapRebuildNotifier } from "@/components/context-map-rebuild-notifier";
 import { BrainUpdatePanel } from "@/components/brain-update-panel";
 import type { UpdateEvent } from "@/components/brain-update-panel";
+import { uniqueBrainFileLabels } from "@/lib/brain/brain-file-label";
 import type { BrianFile, GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
 import type { Relevance } from "@/lib/brian/scenarios";
 import { cn } from "@/lib/utils";
@@ -158,13 +166,6 @@ function buildFileTree(files: BrianFile[]): FileTreeNode {
   return root;
 }
 
-function filePrimaryLabel(file: BrianFile): string {
-  const t = file.frontmatter.title?.trim();
-  if (t) return t;
-  const base = file.path.split("/").pop()?.replace(/\.md$/i, "") ?? file.path;
-  return humanizePathSegment(base);
-}
-
 function fileContextPath(file: BrianFile): string {
   const i = file.path.lastIndexOf("/");
   if (i <= 0) return "";
@@ -215,6 +216,7 @@ function BrainSidebarTree({
   navExpanded,
   onToggleFolder,
   onSelectFile,
+  labelByPath,
 }: {
   node: FileTreeNode;
   depth: number;
@@ -222,6 +224,7 @@ function BrainSidebarTree({
   navExpanded: Record<string, boolean>;
   onToggleFolder: (pathKey: string) => void;
   onSelectFile: (file: BrianFile, tab?: Tab) => void;
+  labelByPath: Map<string, string>;
 }) {
   const pad = depth === 0 ? "pl-1" : depth === 1 ? "pl-2" : "pl-3";
 
@@ -238,6 +241,7 @@ function BrainSidebarTree({
               file={file}
               active={selectedPath === file.path}
               onSelect={() => onSelectFile(file)}
+              displayLabel={labelByPath.get(file.path) ?? file.path}
             />
           ))}
         </div>
@@ -277,6 +281,7 @@ function BrainSidebarTree({
                     file={file}
                     active={selectedPath === file.path}
                     onSelect={() => onSelectFile(file)}
+                    displayLabel={labelByPath.get(file.path) ?? file.path}
                   />
                 ))}
                 <BrainSidebarTree
@@ -286,6 +291,7 @@ function BrainSidebarTree({
                   navExpanded={navExpanded}
                   onToggleFolder={onToggleFolder}
                   onSelectFile={onSelectFile}
+                  labelByPath={labelByPath}
                 />
               </div>
             )}
@@ -306,12 +312,14 @@ function SidebarFileButton({
   file,
   active,
   onSelect,
+  displayLabel,
 }: {
   file: BrianFile;
   active: boolean;
   onSelect: () => void;
+  displayLabel: string;
 }) {
-  const primary = filePrimaryLabel(file);
+  const primary = displayLabel;
   const ctx = fileContextPath(file);
   return (
     <button
@@ -482,6 +490,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
     setTimeout(() => setSaveState("idle"), 1400);
   }
 
+  const labelByPath = useMemo(() => uniqueBrainFileLabels(files), [files]);
   const fileTree = buildFileTree(files);
   const selectedId =
     selectedFile?.frontmatter.id ?? selectedFile?.path ?? undefined;
@@ -531,6 +540,7 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
             navExpanded={navExpanded}
             onToggleFolder={toggleNavFolder}
             onSelectFile={openFile}
+            labelByPath={labelByPath}
           />
         </div>
       </aside>
