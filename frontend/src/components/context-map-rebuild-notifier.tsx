@@ -120,10 +120,13 @@ export function ContextMapRebuildNotifier({
 
       if (evt.type === "connected") {
         setLastMessage(evt.message);
+        // Do NOT auto-open the popup on stream connection. The agent may report
+        // an `active_run_id` from a stale/previous run; we only want the toast
+        // to appear when there's real rebuild activity (rebuild_started / error
+        // / done). If a rebuild is genuinely in-flight, those events will arrive
+        // immediately after connection and open the popup then.
         if (evt.active_run_id) {
           setActiveRunId(evt.active_run_id);
-          setStatus("running");
-          setOpen(true);
         }
         return;
       }
@@ -218,9 +221,11 @@ export function ContextMapRebuildNotifier({
     };
 
     ws.onerror = () => {
-      setStatus("error");
-      setOpen(true);
-      setLastMessage("Could not connect to rebuild stream (agent API offline?).");
+      // Don't surface a toast for transient/initial connection errors. The
+      // socket auto-recovers once the agent API is reachable, and real
+      // rebuild events (rebuild_started / error / rebuild_end / done) will
+      // open the popup on their own. Showing a chip here was producing a
+      // noisy "Context-map rebuild stream connected." card on every load.
       console.warn("[ctxmap] ws error");
     };
 

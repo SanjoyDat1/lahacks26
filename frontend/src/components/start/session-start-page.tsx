@@ -1,14 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
-  Brain,
   Calendar,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
   FileSpreadsheet,
   FileText,
   Folder,
@@ -25,11 +21,6 @@ import {
   fileLabelForConstruction,
   parseFrontmatterTitle,
 } from "@/lib/brain/construction-file-label";
-import {
-  buildPathTreeFromFiles,
-  countPathDirectoryNodes,
-  layoutPathTree,
-} from "@/lib/brain/construction-tree-layout";
 import {
   buildGhostScaffoldFiles,
   chunkGhostBatches,
@@ -248,6 +239,7 @@ const INITIAL_EDGES: GraphEdge[] = [
 ];
 
 export function SessionStartPage() {
+  const router = useRouter();
   const [docs, setDocs] = useState<UploadDoc[]>([]);
 	const [githubRepos, setGithubRepos] = useState<GithubRepoFormRow[]>(() => [
 		newGithubRepoRow(),
@@ -265,16 +257,14 @@ export function SessionStartPage() {
 	);
   const [, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
   const [, setEdges] = useState<GraphEdge[]>(INITIAL_EDGES);
-  const [tree, setTree] = useState<BrainTreeNode[]>([]);
+  const [, setTree] = useState<BrainTreeNode[]>([]);
   const [createdFiles, setCreatedFiles] = useState<CreatedFile[]>([]);
-  /** Live lines during bootstrap (build mode header only — no setup “session log” UI). */
-  const [thinking, setThinking] = useState<string[]>([]);
-  const [resultText, setResultText] = useState("");
+  const [, setThinking] = useState<string[]>([]);
+  const [, setResultText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
   /** From GET /api/agent/stream — matches server-side AGENT_API_URL on localhost when NEXT_PUBLIC_* is unset. */
   const bootstrapWsUrlRef = useRef<string | undefined>(undefined);
-  const thinkingEndRef = useRef<HTMLDivElement>(null);
   /** Browser timer ids (number); avoid NodeJS.Timeout from global setInterval typing. */
   const restBootstrapTimersRef = useRef<number[]>([]);
   const restProgressIntervalRef = useRef<number | null>(null);
@@ -315,7 +305,6 @@ export function SessionStartPage() {
       });
 
       setCreatedFiles(nextFiles);
-      setTree(pathsToVirtualTree(nextFiles.map((file) => file.path)));
     } catch {
       // Keep the bootstrap snapshot if the live agent isn't reachable.
     }
@@ -356,23 +345,10 @@ export function SessionStartPage() {
     };
   }, [isDone, isRunning, syncCreatedFilesFromAgent]);
 
-	const totalChars = useMemo(
-		() => docs.reduce((sum, doc) => sum + doc.chars, 0),
-		[docs],
-	);
   const githubApiList = useMemo(
 		() => githubReposForApi(githubRepos),
 		[githubRepos],
 	);
-  const workspacePill = useMemo(() => {
-    const u = githubApiList[0]?.repo_url?.trim();
-    if (!u) return "Workspace";
-    return shortGithubRepoPill(u);
-  }, [githubApiList]);
-  const pathDirCount = useMemo(
-    () => countPathDirectoryNodes(createdFiles),
-    [createdFiles],
-  );
   const pillDocIdSet = useMemo(
     () => new Set(contextPills.flatMap((p) => p.docIds)),
     [contextPills],
@@ -383,13 +359,24 @@ export function SessionStartPage() {
   );
   const hasBootstrapSource = docs.length > 0 || githubApiList.length > 0;
   const githubOnlyBootstrap = docs.length === 0 && githubApiList.length > 0;
-  const sourceCount = docs.length + githubApiList.length;
   const buildMode = isRunning || isDone || createdFiles.length > 0;
   const completedStages = useMemo(() => {
     if (isDone) return STAGES.length;
     const idx = STAGES.findIndex((item) => item.id === stage);
     return Math.max(0, idx);
   }, [isDone, stage]);
+
+  const progressPct = useMemo(() => {
+    if (githubRestPipeline) return Math.min(100, restProgress);
+    if (isDone) return 100;
+    return Math.round(((completedStages + (isRunning ? 0.5 : 0)) / STAGES.length) * 100);
+  }, [githubRestPipeline, restProgress, isDone, completedStages, isRunning]);
+
+  useEffect(() => {
+    if (isDone) {
+      router.push("/brain");
+    }
+  }, [isDone, router]);
 
   useEffect(() => {
     let cancelled = false;
@@ -416,10 +403,6 @@ export function SessionStartPage() {
       clearInterval(timer);
     };
   }, []);
-
-  useEffect(() => {
-    thinkingEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [thinking]);
 
   useEffect(() => {
     if (!googleAttachOpen) return;
@@ -510,28 +493,6 @@ export function SessionStartPage() {
     },
     [contextPills, removeContextPill],
   );
-
-  const resetRun = useCallback(() => {
-    cleanupRestBootstrap();
-    socketRef.current?.close();
-    socketRef.current = null;
-    setIsRunning(false);
-    setIsDone(false);
-    setError(null);
-    setStage("upload");
-    setStageLabel("Add a GitHub repo or uploads");
-    setNodes(INITIAL_NODES);
-    setEdges(INITIAL_EDGES);
-    setTree([]);
-    setCreatedFiles([]);
-    setResultText("");
-    setThinking([]);
-    setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
-    setGithubRepos([newGithubRepoRow()]);
-    setContextPills([]);
-    setGoogleAttachOpen(false);
-		setEntryText("");
-  }, [cleanupRestBootstrap]);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
     setError(null);
@@ -1208,147 +1169,30 @@ export function SessionStartPage() {
 					) : null}
         </section>
       ) : (
-        <>
-          <div className="pointer-events-none absolute inset-0 canvas-dots opacity-[0.18]" />
-          <section className={cn(
-              "relative mx-auto flex max-w-screen-2xl flex-col gap-3",
-              isDone ? "h-[calc(100vh-112px)]" : "h-[calc(100vh-24px)]",
-            )}>
-            <ThinkingHeader
-              stageLabel={stageLabel}
-              stage={stage}
-              completed={completedStages}
-              isRunning={isRunning}
-              isDone={isDone}
-              thinking={thinking}
-              endRef={thinkingEndRef}
-              githubRestPipeline={githubRestPipeline}
-              restProgress={restProgress}
+        <section className="relative mx-auto flex h-[calc(100vh-48px)] max-w-xl flex-col items-center justify-center gap-4">
+          <p className="text-center text-sm font-medium text-slate-700">
+            {isDone ? "Brian is ready. Opening map…" : stageLabel}
+          </p>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200">
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width] duration-700 ease-out",
+                isDone ? "bg-emerald-500" : "bg-[color:var(--accent-600)]",
+              )}
+              style={{ width: `${progressPct}%` }}
             />
-
-            <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr_320px]">
-              {/* Left: file tree styled like the main Brian map */}
-              <section className="glass min-h-0 overflow-hidden">
-                <BuildFileTreeView
-                  tree={tree}
-                  files={createdFiles}
-                  workspacePill={workspacePill}
-                />
-              </section>
-
-              {/* Center: construction graph */}
-              <section className="glass flex min-h-0 flex-col overflow-hidden">
-                <div className="flex items-center justify-between border-b border-black/10 px-4 py-3">
-                  <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-                      Construction graph
-                    </p>
-                    <p className="text-[11px] text-black/70">
-                      {createdFiles.length > 0
-                        ? `${pathDirCount} dir · ${createdFiles.length} file${
-                            createdFiles.length === 1 ? "" : "s"
-                          } in tree`
-                        : "Waiting for first files"}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold",
-                        isDone
-                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70"
-                          : "bg-black/[0.06] text-black/70",
-                      )}
-                    >
-                      {isDone ? (
-                        <CheckCircle2 size={11} />
-                      ) : (
-                        <Loader2 size={11} className="animate-spin" />
-                      )}
-                      {isDone ? "Ready" : "Building"}
-                    </span>
-                    {isDone && (
-                      <Link
-                        href="/brain"
-                        className="inline-flex items-center gap-1.5 rounded-full bg-black px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-black/85"
-                      >
-                        <Brain size={11} />
-                        Open Brian map
-                      </Link>
-                    )}
-                  </div>
-                </div>
-                <div className="relative min-h-0 flex-1">
-                  <BootstrapLiveGraph
-                    files={createdFiles}
-                    isRunning={isRunning}
-                    centerTitle={workspacePill}
-                  />
-                </div>
-              </section>
-
-              {/* Right: stages + metrics */}
-              <section className="glass flex min-h-0 flex-col overflow-hidden">
-                <div className="border-b border-black/10 px-4 py-3">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-                    Pipeline
-                  </p>
-                  <p className="text-[11px] text-black/70">
-                    {completedStages}/{STAGES.length} stages complete
-                  </p>
-                </div>
-                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
-                  <VerticalBootstrapTimeline
-                    current={stage}
-                    completed={completedStages}
-                  />
-                  {githubRestPipeline && (
-                    <div className="rounded-2xl border border-black/10 bg-white/70 p-3">
-                      <div className="mb-2 flex items-center justify-between">
-                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-black/70">
-                          <GitBranch size={11} />
-                          GitHub → Brian
-                        </span>
-                        <span className="font-mono text-[10px] font-bold tabular-nums text-black/65">
-                          {Math.min(100, Math.round(restProgress))}%
-                        </span>
-                      </div>
-                      <div className="relative h-1.5 overflow-hidden rounded-full bg-black/[0.07]">
-                        <div
-                          className="h-full rounded-full bg-[color:var(--accent-600)] transition-[width] duration-700 ease-out"
-                          style={{
-                            width: `${Math.min(100, restProgress)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-3 gap-2 pt-1">
-                    <Metric
-                      label="Sources"
-                      value={sourceCount.toString()}
-                    />
-                    <Metric
-                      label="Chars"
-                      value={formatCompact(totalChars)}
-                    />
-                    <Metric
-                      label="Files"
-                      value={createdFiles.length.toString()}
-                    />
-                  </div>
-                </div>
-              </section>
+          </div>
+          <p className="font-mono text-[10px] tabular-nums text-slate-400">
+            {progressPct}%
+          </p>
+          {error ? (
+            <div className="w-full">
+              <ErrorBanner message={error} />
             </div>
-
-            {error ? <ErrorBanner message={error} /> : null}
-          </section>
-        </>
+          ) : null}
+        </section>
       )}
 
-      {isDone && (
-        <CompletionBar resultText={resultText} onReset={resetRun} />
-      )}
     </main>
   );
 }
@@ -1614,866 +1458,6 @@ function AttachmentPill({
     </span>
   );
 }
-
-function ThinkingHeader({
-  stageLabel,
-  stage,
-  completed,
-  isRunning,
-  isDone,
-  thinking,
-  endRef,
-  githubRestPipeline,
-  restProgress,
-}: {
-  stageLabel: string;
-  stage: StageId;
-  completed: number;
-  isRunning: boolean;
-  isDone: boolean;
-  thinking: string[];
-  endRef: React.RefObject<HTMLDivElement | null>;
-  githubRestPipeline: boolean;
-  restProgress: number;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const stageIndex = STAGES.findIndex((s) => s.id === stage);
-  const totalStages = STAGES.length;
-  const progressPct = githubRestPipeline
-    ? Math.min(100, restProgress)
-    : isDone
-      ? 100
-      : Math.round(((completed + (isRunning ? 0.5 : 0)) / totalStages) * 100);
-  const latest = thinking[thinking.length - 1] ?? "";
-  const summary = isDone
-    ? "Done thinking"
-    : isRunning
-      ? `Thinking · ${stageLabel}${stageIndex >= 0 ? ` (${stageIndex + 1}/${totalStages})` : ""}`
-      : stageLabel;
-
-  return (
-    <div className="glass overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-black/[0.02]"
-      >
-        <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-black/[0.06]">
-          {isDone ? (
-            <CheckCircle2 size={14} className="text-emerald-600" />
-          ) : (
-            <>
-              <span className="absolute inset-0 animate-ping rounded-full bg-[color:var(--accent-400)]/30" />
-              <Brain size={14} className="relative text-[color:var(--accent-700)]" />
-            </>
-          )}
-        </span>
-
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <p className="truncate text-[13px] font-semibold text-black/90">
-              {summary}
-            </p>
-            {!isDone && isRunning ? (
-              <ShimmerDots />
-            ) : null}
-          </div>
-          {!expanded && latest ? (
-            <p className="mt-0.5 truncate text-[11px] text-black/55">
-              {latest}
-            </p>
-          ) : null}
-        </div>
-
-        <span className="hidden items-center gap-2 sm:flex">
-          <div className="h-1 w-28 overflow-hidden rounded-full bg-black/[0.06]">
-            <div
-              className={cn(
-                "h-full rounded-full transition-[width] duration-700 ease-out",
-                isDone
-                  ? "bg-emerald-500"
-                  : "bg-[color:var(--accent-600)]",
-              )}
-              style={{ width: `${progressPct}%` }}
-            />
-          </div>
-          <span className="font-mono text-[10px] tabular-nums text-black/55">
-            {progressPct}%
-          </span>
-        </span>
-
-        <span className="ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-black/55 transition hover:bg-black/[0.05] hover:text-black/80">
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </span>
-      </button>
-
-      {expanded ? (
-        <div className="border-t border-black/10">
-          <div className="max-h-56 space-y-1 overflow-y-auto px-4 py-3">
-            {thinking.map((line, index) => {
-              const isLast = index === thinking.length - 1;
-              return (
-                <div
-                  key={`${index}-${line.slice(0, 24)}`}
-                  className="flex gap-2 text-[12px] leading-5 text-black/70"
-                >
-                  <span
-                    className={cn(
-                      "mt-1.5 flex h-1.5 w-1.5 flex-shrink-0 rounded-full",
-                      isLast && isRunning && !isDone
-                        ? "bg-[color:var(--accent-500)] ring-2 ring-[color:var(--accent-200)]"
-                        : "bg-black/30",
-                    )}
-                  />
-                  <p className="min-w-0 flex-1">{line}</p>
-                </div>
-              );
-            })}
-            <div ref={endRef} />
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
-function ShimmerDots() {
-  return (
-    <span className="inline-flex items-center gap-0.5" aria-hidden>
-      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:0ms]" />
-      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:150ms]" />
-      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:300ms]" />
-    </span>
-  );
-}
-
-function VerticalBootstrapTimeline({
-  current,
-  completed,
-}: {
-  current: StageId;
-  completed: number;
-}) {
-  return (
-    <ol className="relative space-y-1.5">
-      {STAGES.map((step, index) => {
-        const active = current === step.id;
-        const done = current === "done" || index < completed;
-        const isLast = index === STAGES.length - 1;
-        return (
-          <li key={step.id} className="relative pl-7">
-            {!isLast ? (
-              <span
-                aria-hidden
-                className={cn(
-                  "absolute left-[11px] top-6 h-[calc(100%-12px)] w-px",
-                  done ? "bg-emerald-300/70" : "bg-black/10",
-                )}
-              />
-            ) : null}
-            <span
-              className={cn(
-                "absolute left-0 top-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[10px] font-bold transition",
-                done
-                  ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/70"
-                  : active
-                    ? "bg-[color:var(--accent-100)] text-[color:var(--accent-700)] ring-1 ring-[color:var(--accent-300)]"
-                    : "bg-black/[0.06] text-black/55",
-              )}
-            >
-              {done ? <CheckCircle2 size={11} /> : index + 1}
-            </span>
-            <div
-              className={cn(
-                "rounded-xl px-2.5 py-1.5 transition",
-                active && !done
-                  ? "bg-[color:var(--accent-50)] ring-1 ring-[color:var(--accent-200)]"
-                  : "",
-              )}
-            >
-              <p
-                className={cn(
-                  "text-[12px] font-semibold",
-                  done
-                    ? "text-emerald-700"
-                    : active
-                      ? "text-[color:var(--accent-800)]"
-                      : "text-black/75",
-                )}
-              >
-                {step.label}
-                {active && !done ? (
-                  <span className="ml-1.5 inline-flex">
-                    <ShimmerDots />
-                  </span>
-                ) : null}
-              </p>
-              <p className="text-[10px] leading-4 text-black/50">
-                {step.desc}
-              </p>
-            </div>
-          </li>
-        );
-      })}
-    </ol>
-  );
-}
-
-/**
- * Resolves a frontmatter `links` entry to a node on the construction canvas
- * (paths may be shorthand like `index.md` or match a single file by basename).
- */
-function resolveCrossLinkFNode(
-  link: string,
-  posByPath: Map<string, { file: CreatedFile; x: number; y: number; order: number }>,
-  knownPaths: string[],
-): { file: CreatedFile; x: number; y: number; order: number } | null {
-  const t = link.trim();
-  if (!t) return null;
-  if (posByPath.has(t)) return posByPath.get(t)!;
-  const withMd = /\.mdx?$/i.test(t) ? t : `${t}.md`;
-  if (posByPath.has(withMd)) return posByPath.get(withMd)!;
-  const base = t.split("/").pop()?.replace(/\.mdx?$/i, "") ?? "";
-  if (!base) return null;
-  const matches = knownPaths.filter(
-    (p) =>
-      p === t ||
-      p === withMd ||
-      p.endsWith(`/${base}.md`) ||
-      p === `${base}.md`,
-  );
-  const uniq = [...new Set(matches)];
-  if (uniq.length === 1) return posByPath.get(uniq[0]!) ?? null;
-  return null;
-}
-
-function BootstrapLiveGraph({
-  files,
-  isRunning,
-  centerTitle,
-}: {
-  files: CreatedFile[];
-  isRunning: boolean;
-  /** e.g. `owner/repo` for the active GitHub source — not a generic logo label. */
-  centerTitle: string;
-}) {
-  const arrivalRef = useRef<Map<string, number>>(new Map());
-  const startRef = useRef<number>(0);
-  useEffect(() => {
-		if (files.length > 0 && startRef.current === 0)
-			startRef.current = Date.now();
-    for (const f of files) {
-      if (!arrivalRef.current.has(f.path)) {
-        arrivalRef.current.set(f.path, Date.now());
-      }
-    }
-  }, [files]);
-
-  const visible = files.slice(0, 56);
-  const doneCount = visible.filter(
-		(f) => f.status === "done" && !f.isGhost,
-	).length;
-  const topTitle =
-    (centerTitle || "Workspace").length > 22
-      ? `${(centerTitle || "WS").slice(0, 20)}…`
-      : centerTitle || "Workspace";
-
-  const VIEW_MIN = 920;
-  const NODE_STAGGER = 0.35;
-  const DIR_STAGGER = 0.45;
-  const POP_DUR = 0.7;
-  const DRAW_DUR = 0.8;
-
-  const pathTree = buildPathTreeFromFiles(visible);
-  const L = layoutPathTree(pathTree, VIEW_MIN);
-  const W = L.width;
-  const H = L.height;
-  const cx0 = L.centerX;
-  const cy0 = L.centerY;
-
-  const dirOrdered = [...L.dirs].sort(
-    (a, b) => a.y - b.y || a.x - b.x || a.path.localeCompare(b.path, "en"),
-  );
-  const dirOrder = new Map(dirOrdered.map((d, i) => [d.path, i]));
-
-  type FNode = { file: CreatedFile; x: number; y: number; order: number };
-  const fnodes: FNode[] = L.files.map((p) => ({
-    file: p.file as CreatedFile,
-    x: p.x,
-    y: p.y,
-    order: p.order,
-  }));
-
-  const posByPath = new Map<string, FNode>(
-		fnodes.map((fn) => [fn.file.path, fn]),
-  );
-  const crossLinks: { from: FNode; to: FNode; ghostly: boolean }[] = [];
-  const linkSeen = new Set<string>();
-  for (const fn of fnodes) {
-    for (const tp of fn.file.links ?? []) {
-      const toNode = resolveCrossLinkFNode(
-        tp,
-        posByPath,
-        files.map((f) => f.path),
-      );
-      if (!toNode) continue;
-      const a = fn.file.path;
-      const b = toNode.file.path;
-      const key = a < b ? `${a}\0${b}` : `${b}\0${a}`;
-      if (linkSeen.has(key)) continue;
-      linkSeen.add(key);
-			crossLinks.push({
-				from: fn,
-				to: toNode,
-				ghostly: Boolean(fn.file.isGhost || toNode.file.isGhost),
-			});
-    }
-  }
-
-  const hasBrain = visible.length > 0;
-  const fileWord = L.fileCount === 1 ? "file" : "files";
-
-  return (
-    <div className="relative min-h-0 flex-1 overflow-auto rounded-[1.75rem] border border-slate-200/60 bg-gradient-to-b from-slate-50 to-white">
-      <div className="pointer-events-none absolute inset-0 opacity-[.18] [background-image:radial-gradient(circle,rgba(148,163,184,.18)_1px,transparent_1px)] [background-size:22px_22px]" />
-
-      <div className="pointer-events-none absolute left-4 top-4 z-10 flex gap-2">
-        <span className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500 shadow-sm backdrop-blur">
-					{hasBrain
-						? `${L.dirCount} dir · ${L.fileCount} ${fileWord}`
-						: "Waiting"}
-        </span>
-        {doneCount > 0 && (
-          <span className="rounded-full border border-emerald-200 bg-emerald-50/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-700 shadow-sm backdrop-blur">
-            {doneCount} materialized
-          </span>
-        )}
-      </div>
-
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="h-full w-full min-w-full"
-        preserveAspectRatio="xMidYMid meet"
-      >
-        <defs>
-          <style>{`
-            @keyframes cg-pop{
-              0%{opacity:0;transform:scale(0)}
-              50%{opacity:1;transform:scale(1.06)}
-              75%{transform:scale(.98)}
-              100%{opacity:1;transform:scale(1)}
-            }
-            @keyframes cg-ring{0%,100%{opacity:.25}50%{opacity:.06}}
-            @keyframes cg-draw{from{stroke-dashoffset:300}to{stroke-dashoffset:0}}
-            @keyframes cg-flow{to{stroke-dashoffset:-14}}
-            @keyframes cg-pulse{0%,100%{r:22;opacity:.18}50%{r:28;opacity:.06}}
-            @keyframes cg-fade-in{from{opacity:0}to{opacity:1}}
-            .cg-pop{transform-box:fill-box;transform-origin:center;animation:cg-pop ${POP_DUR}s cubic-bezier(.16,1,.3,1) both}
-            .cg-draw{stroke-dasharray:300;animation:cg-draw ${DRAW_DUR}s cubic-bezier(.4,0,.2,1) both}
-            .cg-flow{stroke-dasharray:5 4;animation:cg-flow .7s linear infinite}
-            .cg-ring{animation:cg-pulse 1.8s ease-in-out infinite}
-            .cg-fade{animation:cg-fade-in .5s ease-out both}
-          `}</style>
-        </defs>
-
-        {hasBrain ? (
-          <>
-            <g className="cg-pop" style={{ animationDelay: "0s" }}>
-							<circle
-								cx={cx0}
-								cy={cy0}
-								r="22"
-								fill="#ede9fe"
-								stroke="#8b5cf6"
-								strokeWidth="2.2"
-							/>
-							<circle
-								cx={cx0}
-								cy={cy0}
-								r="6"
-								fill="#7c3aed"
-							/>
-							<text
-								x={cx0}
-								y={cy0 + 40}
-								textAnchor="middle"
-								fontSize="11"
-								fontWeight="700"
-								fontFamily="ui-sans-serif,system-ui,sans-serif"
-								fill="#4c1d95"
-							>
-                {topTitle}
-              </text>
-            </g>
-
-            {L.treeEdges.map((e, i) => {
-              const delay = 0.22 + (i % 32) * 0.04;
-              return (
-                <line
-                  key={`te-${e.x1}-${e.y1}-${e.x2}-${e.y2}-${i}`}
-                  x1={e.x1}
-                  y1={e.y1}
-                  x2={e.x2}
-                  y2={e.y2}
-                  stroke="#c7d2fe"
-                  strokeWidth="1.4"
-                  className="cg-draw"
-                  style={{ animationDelay: `${delay}s` }}
-                />
-              );
-            })}
-
-            {L.dirs.map((d) => {
-              const hw = Math.max(44, d.name.length * 5.2 + 22);
-              const w = Math.min(220, hw * 2);
-              const ph = w / 2;
-              const di = dirOrder.get(d.path) ?? 0;
-              const delay = 0.35 + di * DIR_STAGGER;
-              return (
-								<g
-									key={`d-${d.path}`}
-									className="cg-pop"
-									style={{ animationDelay: `${delay}s` }}
-								>
-                  <title>{`${d.path}/`}</title>
-									<rect
-										x={d.x - ph}
-										y={d.y - 16}
-										width={w}
-										height="32"
-										rx="10"
-										fill="white"
-										stroke="#a5b4fc"
-										strokeWidth="1.4"
-									/>
-									<text
-										x={d.x}
-										y={d.y + 5}
-										textAnchor="middle"
-										fontSize="10"
-										fontWeight="700"
-										fontFamily="ui-sans-serif,system-ui,sans-serif"
-										fill="#4338ca"
-									>
-										{d.name.length > 20
-                      ? `${d.name.slice(0, 18)}\u2026`
-                      : d.name}
-                  </text>
-                </g>
-              );
-            })}
-
-            {crossLinks.map(({ from, to, ghostly }, li) => {
-              const { x: x1, y: y1 } = from;
-              const { x: x2, y: y2 } = to;
-              const ddx = x2 - x1;
-              const ddy = y2 - y1;
-              const dist = Math.hypot(ddx, ddy) || 1;
-              const off = Math.min(36, 14 + dist * 0.08);
-              const midX = (x1 + x2) / 2 - (ddy / dist) * off;
-							const midY =
-								(y1 + y2) / 2 + (ddx / dist) * off * 0.55;
-              const delay = 0.72 + li * 0.035;
-              return (
-                <path
-                  key={`xlink-${from.file.path}-${to.file.path}`}
-                  d={`M${x1},${y1} Q${midX},${midY} ${x2},${y2}`}
-                  fill="none"
-                  stroke={ghostly ? "#c4b5fd" : "#34d399"}
-                  strokeWidth={ghostly ? 1 : 1.25}
-                  strokeDasharray={ghostly ? "5 4" : "7 4"}
-                  opacity={ghostly ? 0.5 : 0.78}
-                  strokeLinecap="round"
-                  className="cg-draw"
-                  style={{ animationDelay: `${delay}s` }}
-                />
-              );
-            })}
-
-            {fnodes.map(({ file, x, y, order: o }) => {
-              const writ = file.status === "writing";
-              const done = file.status === "done";
-              const planned = file.status === "planned";
-              const ghost = file.isGhost === true;
-							const special =
-								file.path === "index.md" ||
-								file.path === "map.md";
-              const r = special ? 14 : 11;
-              const rawLabel = file.title?.trim()
-                ? file.title.trim()
-                : fileLabelForConstruction(file.path, { content: file.preview });
-              const name = truncateFileLabel(rawLabel, 24);
-              const parentPath =
-                file.path.split("/").length > 1
-                  ? file.path.split("/").slice(0, -1).join("/")
-                  : "";
-              const dIdx = parentPath
-                ? (dirOrder.get(parentPath) ?? 0)
-                : -1;
-              const baseDelay = 0.55 + Math.max(0, dIdx) * DIR_STAGGER;
-              const delay = baseDelay + o * NODE_STAGGER;
-              return (
-								<g
-									key={file.path}
-									className="cg-pop"
-									style={{
-										animationDelay: `${delay}s`,
-										opacity: ghost ? 0.82 : 1,
-									}}
-								>
-                  <title>{file.path}</title>
-                  {writ && (
-										<circle
-											cx={x}
-											cy={y}
-											r="22"
-											fill="none"
-											stroke="#8b5cf6"
-											strokeWidth="1.5"
-											className="cg-ring"
-											opacity="0.3"
-										/>
-                  )}
-                  <circle
-										cx={x}
-										cy={y}
-										r={r}
-										fill={
-											ghost
-												? done
-													? "#f5f3ff"
-													: writ
-														? "#faf5ff"
-														: "#fafafe"
-												: done
-													? "#ecfdf5"
-													: writ
-														? "#f5f3ff"
-														: planned
-															? "#fafafe"
-															: "#f8fafc"
-										}
-										stroke={
-											special
-												? "#fbbf24"
-												: ghost
-													? "#a78bfa"
-													: done
-														? "#34d399"
-														: writ
-															? "#a78bfa"
-															: "#cbd5e1"
-										}
-                    strokeWidth={writ ? 2.2 : 1.5}
-										strokeDasharray={
-											ghost ? "3 3" : undefined
-										}
-                  />
-                  <circle
-										cx={x}
-										cy={y}
-										r="3"
-										fill={
-											special
-												? "#f59e0b"
-												: ghost
-													? "#8b5cf6"
-													: done
-														? "#10b981"
-														: writ
-															? "#8b5cf6"
-															: "#94a3b8"
-										}
-                  />
-                  <text
-										x={x}
-										y={y + r + 15}
-										textAnchor="middle"
-										fontSize="8"
-										fontWeight="600"
-                    fontFamily="ui-monospace,SFMono-Regular,monospace"
-                    className="cg-fade"
-										style={{
-											animationDelay: `${delay + 0.15}s`,
-										}}
-										fill={
-											ghost
-												? "#7c3aed"
-												: done
-													? "#059669"
-													: writ
-														? "#6d28d9"
-														: "#64748b"
-										}
-                  >
-                    {name}
-                  </text>
-                </g>
-              );
-            })}
-          </>
-        ) : (
-          <GraphWaitingPlaceholder isRunning={isRunning} />
-        )}
-      </svg>
-    </div>
-  );
-}
-
-function GraphWaitingPlaceholder({ isRunning }: { isRunning: boolean }) {
-  return (
-    <g>
-      <circle
-        cx="460"
-        cy="200"
-        r="30"
-        fill="#ede9fe"
-        stroke="#8b5cf6"
-        strokeWidth="2"
-        className="cg-pop"
-      >
-        {isRunning && (
-          <animate
-            attributeName="r"
-            values="30;36;30"
-            dur="2s"
-            repeatCount="indefinite"
-          />
-        )}
-      </circle>
-      <circle cx="460" cy="200" r="7" fill="#7c3aed" className="cg-pop" />
-      <text
-        x="460"
-        y="248"
-        textAnchor="middle"
-        fontSize="11"
-        fontWeight="600"
-        fontFamily="ui-sans-serif,system-ui,sans-serif"
-        fill="#64748b"
-      >
-				{isRunning
-					? "Planning Brian structure\u2026"
-					: "Waiting for files"}
-      </text>
-    </g>
-  );
-}
-
-function pathsToVirtualTree(paths: string[]): BrainTreeNode[] {
-	const uniq = [...new Set(paths)]
-		.filter(Boolean)
-		.sort((a, b) => a.localeCompare(b));
-  const rootChildren: BrainTreeNode[] = [];
-  for (const path of uniq) {
-    const segments = path.split("/").filter(Boolean);
-    let parentList = rootChildren;
-    let acc = "";
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i]!;
-      acc = acc ? `${acc}/${seg}` : seg;
-      const isLeaf = i === segments.length - 1;
-      let node = parentList.find((c) => c.path === acc);
-      if (!node) {
-				node = {
-					name: seg,
-					path: acc,
-					type: isLeaf ? "file" : "directory",
-					children: isLeaf ? undefined : [],
-				};
-        parentList.push(node);
-      }
-      if (!isLeaf) {
-        node.children = node.children ?? [];
-        parentList = node.children;
-      }
-    }
-  }
-  function sortNodes(nodes: BrainTreeNode[]) {
-    nodes.sort((a, b) => {
-      if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-    for (const n of nodes) {
-      if (n.children?.length) sortNodes(n.children);
-    }
-  }
-  sortNodes(rootChildren);
-  return rootChildren;
-}
-
-function BuildFileTreeView({
-  tree,
-  files,
-  workspacePill,
-}: {
-  tree: BrainTreeNode[];
-  files: CreatedFile[];
-  workspacePill: string;
-}) {
-  const virtualTree = useMemo(
-    () => pathsToVirtualTree(files.map((f) => f.path)),
-    [files],
-  );
-  const displayTree = tree.length > 0 ? tree : virtualTree;
-  const fileByPath = useMemo(
-    () => new Map(files.map((f) => [f.path, f])),
-    [files],
-  );
-  const fileCount = files.filter(
-    (f) => f.path && !f.path.endsWith("/"),
-  ).length;
-  const pathDirCount = useMemo(
-    () => countPathDirectoryNodes(files),
-    [files],
-  );
-
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between border-b border-black/10 px-4 py-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-            Files
-          </p>
-          <p className="text-[11px] text-black/70">
-            {fileCount === 0
-              ? "Waiting for first files"
-              : `${pathDirCount} dir · ${fileCount} file${
-                  fileCount === 1 ? "" : "s"
-                } in tree`}
-          </p>
-        </div>
-        <span
-          className="max-w-[min(200px,45%)] truncate rounded-full bg-black/[0.06] px-2.5 py-1 text-center font-mono text-[10px] text-black/70"
-          title={workspacePill}
-        >
-          {workspacePill}/
-        </span>
-      </div>
-
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
-        {displayTree.length ? (
-          displayTree.map((node) => (
-            <BuildTreeNode
-              key={node.path}
-              node={node}
-              depth={0}
-              fileByPath={fileByPath}
-            />
-          ))
-        ) : (
-          <div className="flex flex-col items-center justify-center py-10 text-center text-black/40">
-            <Folder size={20} className="mb-2 opacity-50" />
-            <p className="text-[11px] font-medium">
-              Files appear here as the agent writes them
-            </p>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function BuildTreeNode({
-  node,
-  depth,
-  fileByPath,
-}: {
-  node: BrainTreeNode;
-  depth: number;
-  fileByPath: Map<string, CreatedFile>;
-}) {
-  const [open, setOpen] = useState(true);
-  const hint = node.type === "file" ? fileByPath.get(node.path) : undefined;
-  const ghost = hint?.isGhost === true;
-  const writing = hint?.status === "writing";
-  const done = hint?.status === "done";
-
-  if (node.type === "directory") {
-    const childCount = node.children?.length ?? 0;
-    return (
-      <div className="mb-0.5">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex w-full items-center gap-1 rounded-lg px-2 py-1.5 text-left transition hover:bg-black/[0.05]"
-          style={{ paddingLeft: 8 + depth * 14 }}
-        >
-          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center text-black/55">
-            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          </span>
-          <Folder size={13} className="flex-shrink-0 text-black/65" />
-          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-black/80">
-            {node.name}
-          </span>
-          <span className="flex-shrink-0 rounded-md bg-black/[0.06] px-1.5 py-0.5 text-[9px] font-semibold tabular-nums text-black/60">
-            {childCount}
-          </span>
-        </button>
-        {open ? (
-          <div className="space-y-0.5">
-            {node.children?.map((child) => (
-              <BuildTreeNode
-                key={child.path}
-                node={child}
-                depth={depth + 1}
-                fileByPath={fileByPath}
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    );
-  }
-
-  return (
-    <div
-      className={cn(
-        "flex items-start gap-2 rounded-xl px-2 py-1.5 transition",
-        writing
-          ? "bg-[color:var(--accent-50)] ring-1 ring-[color:var(--accent-200)]"
-          : "hover:bg-black/[0.04]",
-        ghost && "opacity-80",
-      )}
-      style={{ paddingLeft: 8 + depth * 14 }}
-    >
-      <FileText
-        size={13}
-        className={cn(
-          "mt-0.5 flex-shrink-0",
-          done
-            ? "text-emerald-600"
-            : writing
-              ? "text-[color:var(--accent-700)]"
-              : ghost
-                ? "text-[color:var(--accent-500)]"
-                : "text-black/65",
-        )}
-      />
-      <span className="min-w-0 flex-1" title={node.path}>
-        <span className="block truncate text-[11px] font-medium leading-tight text-black/85">
-          {hint
-            ? hint.title?.trim() || fileLabelForConstruction(hint.path, { content: hint.preview })
-            : node.name}
-        </span>
-      </span>
-      {writing ? (
-        <Loader2
-          size={11}
-          className="ml-1 mt-0.5 flex-shrink-0 animate-spin text-[color:var(--accent-600)]"
-        />
-      ) : ghost ? (
-        <span className="ml-1 mt-0.5 rounded bg-[color:var(--accent-100)] px-1 text-[8px] font-bold uppercase tracking-wider text-[color:var(--accent-700)]">
-          preview
-        </span>
-      ) : done ? (
-        <span className="ml-1 mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
-      ) : (
-        <span className="ml-1 mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-black/25" />
-      )}
-    </div>
-  );
-}
-
 function ErrorBanner({ message }: { message: string }) {
   return (
     <div className="flex items-start gap-3 rounded-2xl border border-red-200/70 bg-red-50/80 px-4 py-3 text-red-700 shadow-sm backdrop-blur-xl">
@@ -2487,60 +1471,6 @@ function ErrorBanner({ message }: { message: string }) {
     </div>
   );
 }
-
-function CompletionBar({
-	resultText,
-	onReset,
-}: {
-	resultText: string;
-	onReset: () => void;
-}) {
-  return (
-    <div className="fixed inset-x-0 bottom-0 z-40 border-t border-emerald-200/70 bg-white/85 px-6 py-4 shadow-2xl shadow-emerald-900/10 backdrop-blur-2xl">
-      <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center gap-4">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-100 ring-1 ring-emerald-200/70">
-          <CheckCircle2 size={22} className="text-emerald-600" />
-        </div>
-        <div className="min-w-0 flex-1">
-					<p className="text-sm font-semibold text-slate-800">
-						Brian is ready
-					</p>
-          <p className="truncate text-xs text-slate-500">
-						{resultText ||
-							"Stay on this screen as long as you like—open the map only when you choose."}
-          </p>
-        </div>
-				<button
-					onClick={onReset}
-					className="rounded-full border border-slate-200/70 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
-				>
-          New session
-        </button>
-				<Link
-					href="/brain"
-					className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-emerald-200/70 transition hover:bg-emerald-700"
-				>
-          <Brain size={13} />
-          View Brian map
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-xl border border-black/10 bg-white/60 px-2 py-2">
-      <p className="text-base font-bold tabular-nums leading-tight text-black/85">
-        {value}
-      </p>
-      <p className="text-[9px] font-semibold uppercase tracking-widest text-black/45">
-        {label}
-      </p>
-    </div>
-  );
-}
-
 function extensionOf(name: string) {
   const idx = name.lastIndexOf(".");
   return idx === -1 ? "" : name.slice(idx).toLowerCase();
@@ -2570,14 +1500,6 @@ function normalizeGithubRepoUrl(raw: string): string | null {
 		return null;
 	}
 }
-
-function formatCompact(value: number) {
-	return new Intl.NumberFormat("en-US", {
-		notation: "compact",
-		maximumFractionDigits: 1,
-	}).format(value);
-}
-
 function upsertFile(files: CreatedFile[], next: CreatedFile) {
   const existingIndex = files.findIndex((file) => file.path === next.path);
   if (existingIndex === -1) return [...files, next];
@@ -2594,24 +1516,6 @@ function upsertFile(files: CreatedFile[], next: CreatedFile) {
       : file,
   );
 }
-
-/** e.g. `acme/frontend` for graph center / badge when a GitHub repo is selected. */
-function shortGithubRepoPill(url: string | undefined | null): string {
-  if (!url?.trim()) return "";
-  const m = url.trim().match(/github\.com\/([^/]+)\/([^/?#]+)/i);
-  if (!m) return "Workspace";
-  return `${m[1]}/${m[2]!.replace(/\.git$/i, "")}`.slice(0, 36);
-}
-
-/** Short label for SVG nodes; keeps more characters for mono filenames. */
-function truncateFileLabel(s: string, max = 16): string {
-  if (s.length <= max) return s;
-  const inner = max - 1;
-  const left = Math.ceil(inner / 2);
-  const right = Math.floor(inner / 2);
-  return `${s.slice(0, left)}\u2026${s.slice(s.length - right)}`;
-}
-
 function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();

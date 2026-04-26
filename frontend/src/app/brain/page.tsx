@@ -59,7 +59,6 @@ function sortFiles(files: BrianFile[]): BrianFile[] {
 
 export default function BrainPage() {
   const [files, setFiles] = useState<BrianFile[] | null>(null);
-  const [meta, setMeta] = useState<{ brainDir: string; source: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -81,7 +80,6 @@ export default function BrainPage() {
         })),
       );
       setFiles(next);
-      setMeta({ brainDir: body.brain_dir, source: body.source });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to reach agent");
     } finally {
@@ -166,29 +164,6 @@ export default function BrainPage() {
     <>
       <ContextMapRebuildNotifier onRebuildDone={onContextMapRebuildDone} />
       <BrainCommand files={files ?? []} graphData={graphData} />
-      {/* Floating refresh / source indicator so it's visually clear which agent
-          the graph is reflecting. */}
-      <div className="pointer-events-none fixed right-4 top-4 z-30 flex items-center gap-2">
-        {meta && (
-          <span
-            className="pointer-events-auto rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-slate-500 shadow-sm backdrop-blur"
-            title={meta.brainDir}
-          >
-            {meta.source === "working" ? "live workspace" : "reference snapshot"} ·{" "}
-            {(files ?? []).length} files
-          </span>
-        )}
-        <button
-          type="button"
-          onClick={() => void load()}
-          disabled={loading}
-          className="pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white/85 px-3 py-1.5 text-[11px] font-semibold text-slate-700 shadow-sm backdrop-blur transition hover:bg-white disabled:opacity-50"
-          title="Re-fetch files from the connected agent"
-        >
-          {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          Refresh
-        </button>
-      </div>
     </>
   );
 }
