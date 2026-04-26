@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any, Literal, TypedDict
 
 from .builder import DocumentInput, SourceDocument
@@ -45,6 +46,8 @@ class IngestionState(TypedDict, total=False):
     result_text: str
     # Verification snippet (for debugging / result_text)
     verify_line: str
+    # Optional: bootstrap UI streams these as "thinking" lines (may be called from worker threads).
+    progress_sink: Callable[[str], None]
 
 
 __all__ = ["FlowMode", "IngestionState"]

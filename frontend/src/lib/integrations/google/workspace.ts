@@ -1,3 +1,6 @@
+import mammoth from "mammoth";
+import * as XLSX from "xlsx";
+
 import type { GoogleTokenPayload } from "./crypto";
 import { ensureFreshAccessToken } from "./oauth";
 
@@ -26,6 +29,13 @@ const DOC_MIME = "application/vnd.google-apps.document";
 const SHEET_MIME = "application/vnd.google-apps.spreadsheet";
 const SLIDE_MIME = "application/vnd.google-apps.presentation";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+/** Uploaded Microsoft Office files in Drive (not native Google Docs/Sheets). */
+const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+function fileNameEndsWith(name: string, ext: string) {
+  return name.toLowerCase().endsWith(ext);
+}
 
 async function gfetch(path: string, accessToken: string, init?: RequestInit) {
   const res = await fetch(path, {
@@ -75,25 +85,72 @@ function driveIdInQuery(id: string): string {
   return id.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 
+/** Cached result of `files.get` so we list children with the right corpus (per-folder). */
+type FolderDriveContext = { sharedDriveId?: string };
+
+async function resolveFolderDriveContext(
+  accessToken: string,
+  folderId: string,
+  cache: Map<string, FolderDriveContext>,
+): Promise<FolderDriveContext> {
+  const hit = cache.get(folderId);
+  if (hit) return hit;
+  const u = new URL(`${DRIVE_BASE}/files/${encodeURIComponent(folderId)}`);
+  u.searchParams.set("fields", "id,driveId");
+  u.searchParams.set("supportsAllDrives", "true");
+  const res = await gfetch(u.toString(), accessToken);
+  const data = (await res.json()) as { driveId?: string };
+  const ctx: FolderDriveContext = data.driveId ? { sharedDriveId: data.driveId } : {};
+  cache.set(folderId, ctx);
+  return ctx;
+}
+
+/**
+ * List immediate children of a folder. Must not blindly set `corpora=allDrives` with
+ * `'folderId' in parents` — that combination often returns **no files** for folders in
+ * My Drive. Use `corpora=drive` + `driveId` only when `files.get` says the folder
+ * lives on a shared drive; otherwise omit `corpora` (default user corpus).
+ */
 async function listFolderChildrenPage(
   accessToken: string,
   folderId: string,
+  corpusCache: Map<string, FolderDriveContext>,
   pageToken?: string,
 ): Promise<{ files: DriveListItem[]; nextPageToken?: string }> {
+  const { sharedDriveId } = await resolveFolderDriveContext(accessToken, folderId, corpusCache);
   const q = `'${driveIdInQuery(folderId)}' in parents and trashed = false`;
-  const u = new URL(`${DRIVE_BASE}/files`);
-  u.searchParams.set("q", q);
-  u.searchParams.set("pageSize", "100");
-  u.searchParams.set("supportsAllDrives", "true");
-  u.searchParams.set("includeItemsFromAllDrives", "true");
-  u.searchParams.set("corpora", "allDrives");
-  u.searchParams.set("fields", "nextPageToken, files(id,name,mimeType)");
-  if (pageToken) u.searchParams.set("pageToken", pageToken);
-  const res = await gfetch(u.toString(), accessToken);
-  const data = (await res.json()) as {
-    files?: DriveListItem[];
-    nextPageToken?: string;
+
+  const fetchPage = async (mode: "default" | "allDrives") => {
+    const u = new URL(`${DRIVE_BASE}/files`);
+    u.searchParams.set("q", q);
+    u.searchParams.set("pageSize", "100");
+    u.searchParams.set("supportsAllDrives", "true");
+    u.searchParams.set("includeItemsFromAllDrives", "true");
+    if (mode === "allDrives") {
+      u.searchParams.set("corpora", "allDrives");
+    } else if (sharedDriveId) {
+      u.searchParams.set("corpora", "drive");
+      u.searchParams.set("driveId", sharedDriveId);
+    }
+    u.searchParams.set("fields", "nextPageToken, files(id,name,mimeType)");
+    if (pageToken) u.searchParams.set("pageToken", pageToken);
+    const res = await gfetch(u.toString(), accessToken);
+    return (await res.json()) as {
+      files?: DriveListItem[];
+      nextPageToken?: string;
+    };
   };
+
+  let data = await fetchPage("default");
+  if (
+    !pageToken &&
+    !(data.files?.length) &&
+    !data.nextPageToken &&
+    !sharedDriveId
+  ) {
+    data = await fetchPage("allDrives");
+  }
+
   return { files: data.files ?? [], nextPageToken: data.nextPageToken };
 }
 
@@ -112,6 +169,7 @@ export async function expandDriveFoldersToFileIds(
   const fileIds: string[] = [];
   const seenFiles = new Set<string>();
   const enqueuedFolders = new Set<string>();
+  const corpusCache = new Map<string, FolderDriveContext>();
   const queue: { id: string; depth: number }[] = [];
 
   for (const id of folderIds) {
@@ -127,7 +185,12 @@ export async function expandDriveFoldersToFileIds(
 
     let pageToken: string | undefined;
     do {
-      const { files, nextPageToken } = await listFolderChildrenPage(p.access_token, folderId, pageToken);
+      const { files, nextPageToken } = await listFolderChildrenPage(
+        p.access_token,
+        folderId,
+        corpusCache,
+        pageToken,
+      );
       for (const f of files) {
         if (fileIds.length >= maxFiles) break;
         if (f.mimeType === FOLDER_MIME) {
@@ -216,6 +279,33 @@ export async function importDriveFiles(
     } else if (meta.mimeType === SHEET_MIME) {
       text = await sheetAsTsv(p.access_token, fileId);
       mimeOut = "text/tab-separated-values";
+    } else if (meta.mimeType === DOCX_MIME || fileNameEndsWith(meta.name, ".docx")) {
+      try {
+        const buf = await downloadMedia(p.access_token, fileId);
+        const { value } = await mammoth.extractRawText({ buffer: buf });
+        text = value?.trim() ? value : undefined;
+        mimeOut = "text/plain";
+      } catch {
+        continue;
+      }
+    } else if (meta.mimeType === XLSX_MIME || fileNameEndsWith(meta.name, ".xlsx")) {
+      try {
+        const buf = await downloadMedia(p.access_token, fileId);
+        const wb = XLSX.read(buf, { type: "buffer" });
+        const parts: string[] = [];
+        const maxSheets = 12;
+        for (const sheetName of wb.SheetNames.slice(0, maxSheets)) {
+          const sheet = wb.Sheets[sheetName];
+          if (!sheet) continue;
+          const csv = XLSX.utils.sheet_to_csv(sheet);
+          parts.push(`## ${sheetName}\n${csv}`);
+        }
+        const joined = parts.join("\n\n");
+        text = joined.trim() ? joined : undefined;
+        mimeOut = "text/plain";
+      } catch {
+        continue;
+      }
     } else if (meta.mimeType.startsWith("text/") || meta.mimeType === "application/json") {
       const buf = await downloadMedia(p.access_token, fileId);
       text = buf.toString("utf8");

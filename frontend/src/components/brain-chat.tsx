@@ -255,7 +255,10 @@ export function BrainChat({ contextHint }: { contextHint?: string }) {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+                  if (e.key !== "Enter") return;
+                  if (e.shiftKey && !e.metaKey && !e.ctrlKey) return;
+                  e.preventDefault();
+                  send();
                 }}
                 placeholder={contextHint ? "Ask about the selected brain file…" : "Ask about architecture, decisions, goals…"}
                 className="flex-1 resize-none rounded-2xl border border-slate-200/80 bg-white/80 px-4 py-3 text-sm text-slate-800 outline-none placeholder:text-slate-400 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-400/15 transition-all backdrop-blur-sm"
@@ -269,7 +272,9 @@ export function BrainChat({ contextHint }: { contextHint?: string }) {
                 <Send size={14} />
               </button>
             </div>
-            <p className="mt-2 text-[10px] text-slate-400">Enter to send · Shift+Enter for newline</p>
+            <p className="mt-2 text-[10px] text-slate-400">
+              Enter or ⌘/Ctrl+Enter to send · Shift+Enter for newline
+            </p>
           </div>
         </>
       )}
@@ -298,7 +303,10 @@ export function BrainChat({ contextHint }: { contextHint?: string }) {
                   value={editInstruction}
                   onChange={(e) => setEditInstruction(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void generateEdit(); }
+                    if (e.key !== "Enter") return;
+                    if (e.shiftKey && !e.metaKey && !e.ctrlKey) return;
+                    e.preventDefault();
+                    void generateEdit();
                   }}
                   placeholder={
                     contextHint

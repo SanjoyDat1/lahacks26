@@ -263,7 +263,7 @@ export function PromptBar({
 
       <div
         className={cn(
-          "flex items-end gap-2 rounded-2xl border border-black/10 bg-white/85 py-2 pl-4 pr-2 shadow-lg backdrop-blur-md transition",
+          "flex min-w-0 items-end gap-2 rounded-2xl border border-black/10 bg-white/85 py-2 pl-4 pr-2 shadow-lg backdrop-blur-md transition",
           "focus-within:border-black/25 focus-within:bg-white/95",
         )}
       >
@@ -276,7 +276,7 @@ export function PromptBar({
           }}
           placeholder="Ask, search pages, or describe an update…"
           className={cn(
-            "min-h-9 w-full resize-none border-0 bg-transparent py-2",
+            "min-h-9 min-w-0 w-full flex-1 resize-none border-0 bg-transparent py-2",
             "text-[13px] leading-6 text-black placeholder:text-black/40 outline-none",
           )}
           onKeyDown={(e) => {
@@ -284,20 +284,21 @@ export function PromptBar({
               setShowResults(false);
               return;
             }
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              setShowResults(false);
-              void submit();
-            }
+            if (e.key !== "Enter") return;
+            // Shift+Enter (without ⌘/Ctrl) = new line; Enter or ⌘/Ctrl+Enter = send
+            if (e.shiftKey && !e.metaKey && !e.ctrlKey) return;
+            e.preventDefault();
+            setShowResults(false);
+            void submit();
           }}
         />
 
         {!text && (
           <span
-            className="pointer-events-none hidden flex-shrink-0 select-none self-center whitespace-nowrap text-[10px] font-medium text-black/40 sm:inline"
+            className="pointer-events-none hidden max-w-[9rem] flex-shrink-0 select-none self-center text-right text-[10px] font-medium leading-tight text-black/40 sm:inline"
             aria-hidden
           >
-            ⌘ + Enter
+            Enter or ⌘↵ send · Shift+↵ newline
           </span>
         )}
 
@@ -311,7 +312,7 @@ export function PromptBar({
               ? "border-transparent bg-[color:var(--accent-600)] text-white hover:bg-[color:var(--accent-700)]"
               : "border-black/10 bg-white/60 text-black/35",
           )}
-          title="Send (Enter)"
+          title="Send (Enter or ⌘/Ctrl+Enter)"
         >
           {streaming || status === "classifying" || status === "updating" ? (
             <Loader2 size={14} className="animate-spin" />

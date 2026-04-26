@@ -6,6 +6,9 @@ import json
 import logging
 import re
 import sys
+import queue
+import threading
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from functools import lru_cache
 from pathlib import Path
@@ -198,20 +201,74 @@ def _single_pass_bootstrap_distill(model: object, raw_digest: str) -> str | None
         return None
 
 
-def _synthesize_initialize_context(docs: list[SourceDocument], settings: Settings) -> str:
+def _guess_workspace_source_kind(name: str) -> str:
+    """Short label for session UI (Google imports, calendar, etc.)."""
+    lower = name.lower()
+    if "calendar" in lower or "[google calendar]" in lower:
+        return "Calendar"
+    if "gmail" in lower or "[gmail]" in lower:
+        return "Gmail"
+    if "[drive]" in lower or "google drive" in lower:
+        return "Drive file"
+    if "sheet" in lower or "spreadsheet" in lower or ".tsv" in lower:
+        return "Sheet"
+    if name.startswith("[Google") or "google" in lower[:24]:
+        return "Google Workspace"
+    return "Document"
+
+
+def _bootstrap_source_inventory_lines(docs: list[SourceDocument]) -> str:
+    total_chars = sum(len(d.text or "") for d in docs)
+    lines = [
+        f"**Reading your session context:** {len(docs)} source(s), **{total_chars:,}** characters before distill.",
+        "Working through each item so the brain reflects what you actually attached (Drive, Docs, Sheets, Calendar, uploads, etc.):",
+    ]
+    for d in docs[:30]:
+        kind = _guess_workspace_source_kind(d.name)
+        ch = len(d.text or "")
+        short = d.name.replace("\n", " ")[:100]
+        lines.append(f"- **{kind}:** {short}{'…' if len(d.name) > 100 else ''} — {ch:,} chars")
+    if len(docs) > 30:
+        lines.append(f"- … and **{len(docs) - 30}** more sources.")
+    return "\n".join(lines) + "\n"
+
+
+def _synthesize_initialize_context(
+    docs: list[SourceDocument],
+    settings: Settings,
+    *,
+    on_progress: Callable[[str], None] | None = None,
+) -> str:
     """Return dense text for planning + generation; falls back to capped raw digest."""
+
+    def emit(msg: str) -> None:
+        if on_progress:
+            on_progress(msg if msg.endswith("\n") else msg + "\n")
+
     total = sum(len(d.text or "") for d in docs)
     raw_digest = _source_digest(docs, max_chars=min(120_000, max(total + 500, 50_000)))
+    emit(_bootstrap_source_inventory_lines(docs))
 
     try:
         if total <= _BOOTSTRAP_SINGLE_MAX_TOTAL_CHARS and len(docs) <= _BOOTSTRAP_SINGLE_MAX_DOCS:
+            emit(
+                "**Distill strategy:** single-pass synthesis — your import is compact enough "
+                "to merge in one model pass (Google text, calendar, mail, etc. in one briefing).\n"
+            )
             model = make_chat_model(settings, max_tokens=_BOOTSTRAP_SINGLE_MAX_TOKENS)
+            emit("Extracting durable facts, names, dates, and decisions into one dense briefing…\n")
             out = _single_pass_bootstrap_distill(model, raw_digest)
             if out and len(out) >= 64:
+                emit(f"**Briefing ready:** {len(out):,} characters of distilled context for brain planning.\n")
                 return out[:24_000]
+            emit("Single-pass output was thin — falling back to raw digest cap.\n")
 
         to_map = [d for d in docs if (d.text or "").strip()]
         if len(to_map) > _BOOTSTRAP_MAX_MAP_DOCS:
+            emit(
+                f"**Distill strategy:** map–reduce — {len(docs)} sources; fully mapping the first "
+                f"{_BOOTSTRAP_MAX_MAP_DOCS} and folding the rest into excerpt bundles.\n"
+            )
             head = to_map[:_BOOTSTRAP_MAX_MAP_DOCS]
             tail = to_map[_BOOTSTRAP_MAX_MAP_DOCS :]
             tail_blob = "\n\n".join(f"### {d.name}\n{(d.text or '')[:650]}" for d in tail[:60])
@@ -223,6 +280,11 @@ def _synthesize_initialize_context(docs: list[SourceDocument], settings: Setting
                     text=tail_blob[:12_000],
                 )
             ]
+        else:
+            emit(
+                f"**Distill strategy:** map–reduce — processing **{len(to_map)}** sources in parallel "
+                f"(up to {_BOOTSTRAP_MAP_WORKERS} at a time), then merging into one planner briefing.\n"
+            )
 
         def map_job(index: int, doc: SourceDocument) -> tuple[int, str, str]:
             local = make_chat_model(settings, max_tokens=_BOOTSTRAP_MAP_MAX_TOKENS)
@@ -230,24 +292,44 @@ def _synthesize_initialize_context(docs: list[SourceDocument], settings: Setting
             return index, doc.name, body
 
         indexed_results: list[tuple[int, str, str]] = []
+        done = 0
+        total_map = len(to_map)
         with ThreadPoolExecutor(max_workers=_BOOTSTRAP_MAP_WORKERS) as pool:
             futures = [pool.submit(map_job, i, d) for i, d in enumerate(to_map)]
             for fut in as_completed(futures):
-                indexed_results.append(fut.result())
+                idx, doc_name, body = fut.result()
+                indexed_results.append((idx, doc_name, body))
+                done += 1
+                preview = doc_name.replace("\n", " ")[:88]
+                blen = len(body or "")
+                kind = _guess_workspace_source_kind(doc_name)
+                emit(
+                    f"**Parsed** ({done}/{total_map}) **{kind}:** {preview}"
+                    f"{'…' if len(doc_name) > 88 else ''} → **{blen:,}** chars of extracted notes.\n"
+                )
+
         indexed_results.sort(key=lambda t: t[0])
         merged = "\n\n".join(
             f"### {name}\n{body}" for _, name, body in indexed_results if body.strip()
         )
         if not merged.strip():
+            emit("No extractable text from map step — using capped raw digest for planning.\n")
             return raw_digest[:MAX_SOURCE_CHARS]
 
+        emit(
+            "**Merge step:** folding per-source notes into one deduplicated markdown briefing "
+            "(sections: domains, decisions, risks, people, open questions)…\n"
+        )
         reduce_model = make_chat_model(settings, max_tokens=_BOOTSTRAP_REDUCE_MAX_TOKENS)
         reduced = _reduce_bootstrap_notes(reduce_model, merged)
         if reduced and len(reduced.strip()) >= 64:
+            emit(f"**Merged briefing:** {len(reduced):,} characters — ready to plan brain files.\n")
             return reduced[:24_000]
+        emit("Reduce step returned light output — using merged map notes for planning.\n")
         return merged[:24_000]
     except (OSError, TypeError, ValueError, RuntimeError) as exc:
         _log_graph(f"bootstrap synthesis error, using digest: {exc}")
+        emit(f"**Synthesis error** ({exc!s}) — using capped raw digest so bootstrap can continue.\n")
         return raw_digest[:MAX_SOURCE_CHARS]
 
 
@@ -270,14 +352,25 @@ def _distill_node(state: IngestionState) -> dict[str, Any]:
     if flow == "initialize":
         raw_digest = _source_digest(docs, max_chars=120_000)
         api_key = (getattr(s, "openai_api_key", "") or "").strip()
+        sink = state.get("progress_sink")
         if not api_key:
             _log_graph(f"distill END initialize no API key raw_chars={len(raw_digest)}")
+            if sink:
+                sink(_bootstrap_source_inventory_lines(docs))
+                sink(
+                    "**No OpenAI API key** — skipping LLM parsing/distill; using concatenated "
+                    "source text for brain planning (Drive uploads, calendar text, etc. still included).\n"
+                )
             cleaned = raw_digest[:MAX_SOURCE_CHARS]
             return {"cleaned_context": cleaned, "source_digest": raw_digest}
         try:
-            synthesized = _synthesize_initialize_context(docs, s)
+            synthesized = _synthesize_initialize_context(
+                docs, s, on_progress=sink,
+            )
         except Exception as exc:  # noqa: BLE001
             _log_graph(f"distill initialize synthesis exception: {exc}")
+            if sink:
+                sink(f"**Distill exception:** {exc!s} — using raw digest cap.\n")
             synthesized = raw_digest[:MAX_SOURCE_CHARS]
         if not synthesized.strip():
             synthesized = raw_digest[:MAX_SOURCE_CHARS]
@@ -674,7 +767,10 @@ def run_initialize_streaming(
     yield _event("graph_edge", from_="documents", to="normalize", status="active")
     yield _event(
         "thinking",
-        content="I am reading repository excerpts and any uploaded files, normalizing them into clean source documents for the brain.\n",
+        content=(
+            "Ingesting everything you attached — **Google Drive files**, **Docs/Sheets text**, **Calendar** snapshots, "
+            "**Gmail** digests, uploads, and any **GitHub** context — and normalizing them into clean source documents.\n"
+        ),
     )
     norm = _normalize_node(st)
     st.update(norm)
@@ -694,12 +790,36 @@ def run_initialize_streaming(
     yield _event(
         "thinking",
         content=(
-            "Now I am synthesizing durable context from all sources (map–reduce when large): "
-            "decisions, constraints, entities, open questions—dense briefing for planning without token-heavy raw dumps.\n"
+            "**Understanding context:** synthesizing durable facts from every source (per-file parsing when needed, "
+            "then merge) — decisions, constraints, entities, calendar events, sheet rows, and open questions — "
+            "into one briefing the brain planner can use.\n"
         ),
     )
-    distilled = _distill_node(st)
-    st.update(distilled)
+    progress_q: queue.Queue[str] = queue.Queue()
+    st["progress_sink"] = progress_q.put
+    distill_out: dict[str, Any] = {}
+
+    def _distill_worker() -> None:
+        try:
+            distill_out.update(_distill_node(st))
+        finally:
+            progress_q.put("__DISTILL_DONE__")
+
+    worker = threading.Thread(target=_distill_worker, daemon=True)
+    worker.start()
+    while True:
+        try:
+            msg = progress_q.get(timeout=0.2)
+        except queue.Empty:
+            if not worker.is_alive() and progress_q.empty():
+                break
+            continue
+        if msg == "__DISTILL_DONE__":
+            break
+        yield _event("thinking", content=msg)
+    worker.join(timeout=600)
+    st.pop("progress_sink", None)
+    st.update(distill_out)
     if st.get("error"):
         yield _event("error", message=str(st["error"]))
         return
@@ -708,10 +828,24 @@ def run_initialize_streaming(
     yield _event("graph_node", id="distill", label="Distill facts", status="done")
     yield _event("graph_edge", from_="normalize", to="distill", status="done")
 
+    _cc = (st.get("cleaned_context") or "").strip()
+    yield _event(
+        "thinking",
+        content=(
+            f"**Distill complete:** planner briefing is **{len(_cc):,}** characters — grounded in everything we parsed above.\n"
+        ),
+    )
+
     yield _event("stage_start", stage="write", label="Creating the brain structure")
     yield _event("graph_node", id="brain_files", label="Brain files", status="active")
     yield _event("graph_edge", from_="distill", to="brain_files", status="active")
-    yield _event("thinking", content="I am planning a connected brain from the uploaded context itself. The reference brain guides structure, but the directories and Markdown nodes must match the source material.\n")
+    yield _event(
+        "thinking",
+        content=(
+            "**Authoring the brain:** turning that briefing into linked Markdown files (architecture, projects, decisions) "
+            "so structure matches *your* sources, not a generic template.\n"
+        ),
+    )
     text = (st.get("cleaned_context") or "").strip()
     write_docs = [SourceDocument(name="source-context", text=text)] if text else docs
     written_map: dict[str, str] = {}
@@ -730,14 +864,31 @@ def run_initialize_streaming(
                 purpose = str(writer_event.get("purpose", ""))
                 links = writer_event.get("links", [])
                 yield _event("file_planned", path=rel_path, title=title, preview=purpose, links=links if isinstance(links, list) else [])
+                pr = purpose.replace("\n", " ").strip()[:220]
+                yield _event(
+                    "thinking",
+                    content=(
+                        f"**Planned note:** `{rel_path}` — *{title}* — {pr}{'…' if len(purpose) > 220 else ''}\n"
+                    ),
+                )
                 yield _event("directory_snapshot", tree=_directory_snapshot(settings.brain_dir))
             elif event_type == "file_writing" and rel_path:
+                yield _event(
+                    "thinking",
+                    content=f"**Writing:** `{rel_path}` — drafting markdown from the distilled context…\n",
+                )
                 yield _event("file_writing", path=rel_path, title=str(writer_event.get("title", "")))
             elif event_type == "file_created" and rel_path:
                 content = str(writer_event.get("content", ""))
                 written_map[rel_path] = content
                 title, preview = _file_preview(settings.brain_dir / rel_path)
                 yield _event("file_created", path=rel_path, title=title or str(writer_event.get("title", "")), preview=preview)
+                yield _event(
+                    "thinking",
+                    content=(
+                        f"**Saved:** `{rel_path}` (**{len(content):,}** chars) — linked into the brain tree.\n"
+                    ),
+                )
                 yield _event("directory_snapshot", tree=_directory_snapshot(settings.brain_dir))
             elif event_type == "done":
                 maybe_written = writer_event.get("written")

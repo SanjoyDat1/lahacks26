@@ -6,19 +6,23 @@ import {
   AlertCircle,
   ArrowRight,
   Brain,
+  Calendar,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
   Cpu,
+  FileSpreadsheet,
   FileText,
   Folder,
   GitBranch,
   Loader2,
+  Mail,
   Paperclip,
   Send,
   X,
 } from "lucide-react";
 
+import { normalizeBootstrapWsUrlForBrowser } from "@/lib/bootstrap-ws-url";
 import {
   buildGhostScaffoldFiles,
   chunkGhostBatches,
@@ -28,6 +32,11 @@ import {
   githubReposForApi,
   type GithubRepoFormRow,
 } from "@/lib/brain/github-ingest";
+import {
+  SessionIntegrationSources,
+  type ContextImportBatch,
+  type ContextPillKind,
+} from "@/components/start/session-integration-sources";
 import { env } from "@/lib/env";
 import { cn } from "@/lib/utils";
 
@@ -52,6 +61,35 @@ type UploadDoc = {
   chars: number;
   status: "ready" | "scanned" | "distilled";
 };
+
+type ContextBundlePill = {
+  id: string;
+  kind: ContextPillKind;
+  label: string;
+  docIds: string[];
+};
+
+function newContextPillId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `pill-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+function contextPillIcon(kind: ContextPillKind) {
+  const cls = "h-4 w-4";
+  switch (kind) {
+    case "drive_folder":
+      return <Folder className={cls} />;
+    case "calendar":
+      return <Calendar className={cls} />;
+    case "sheet":
+      return <FileSpreadsheet className={cls} />;
+    case "gmail":
+      return <Mail className={cls} />;
+    default:
+      return <FileText className={cls} />;
+  }
+}
 
 type GraphStatus = "idle" | "active" | "done";
 
@@ -213,12 +251,13 @@ export function SessionStartPage() {
   const [, setEdges] = useState<GraphEdge[]>(INITIAL_EDGES);
   const [tree, setTree] = useState<BrainTreeNode[]>([]);
   const [createdFiles, setCreatedFiles] = useState<CreatedFile[]>([]);
-  const [thinking, setThinking] = useState<string[]>([
-    "Add a public GitHub repo and optional files, then start the brain bootstrap.",
-  ]);
+  /** Live lines during bootstrap (build mode header only — no setup “session log” UI). */
+  const [thinking, setThinking] = useState<string[]>([]);
   const [resultText, setResultText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const socketRef = useRef<WebSocket | null>(null);
+  /** From GET /api/agent/stream — matches server-side AGENT_API_URL on localhost when NEXT_PUBLIC_* is unset. */
+  const bootstrapWsUrlRef = useRef<string | undefined>(undefined);
   const thinkingEndRef = useRef<HTMLDivElement>(null);
   /** Browser timer ids (number); avoid NodeJS.Timeout from global setInterval typing. */
   const restBootstrapTimersRef = useRef<number[]>([]);
@@ -227,6 +266,8 @@ export function SessionStartPage() {
 
   const [githubRestPipeline, setGithubRestPipeline] = useState(false);
   const [restProgress, setRestProgress] = useState(0);
+  const [googleAttachOpen, setGoogleAttachOpen] = useState(false);
+  const [contextPills, setContextPills] = useState<ContextBundlePill[]>([]);
 
   const cleanupRestBootstrap = useCallback(() => {
     restBootstrapTimersRef.current.forEach((id) => window.clearTimeout(id));
@@ -250,6 +291,14 @@ export function SessionStartPage() {
 		() => githubReposForApi(githubRepos),
 		[githubRepos],
 	);
+  const pillDocIdSet = useMemo(
+    () => new Set(contextPills.flatMap((p) => p.docIds)),
+    [contextPills],
+  );
+  const standaloneDocs = useMemo(
+    () => docs.filter((d) => !pillDocIdSet.has(d.id)),
+    [docs, pillDocIdSet],
+  );
   const hasBootstrapSource = docs.length > 0 || githubApiList.length > 0;
   const githubOnlyBootstrap = docs.length === 0 && githubApiList.length > 0;
   const sourceCount = docs.length + githubApiList.length;
@@ -265,10 +314,19 @@ export function SessionStartPage() {
     async function checkAgent() {
       try {
         const res = await fetch("/api/agent/stream");
-        const data = await res.json();
-        if (!cancelled) setAgentOnline(!data.offline);
+        const data = (await res.json()) as { offline?: boolean; bootstrap_ws_url?: string };
+        if (!cancelled) {
+          setAgentOnline(!data.offline);
+          bootstrapWsUrlRef.current =
+            typeof data.bootstrap_ws_url === "string" && data.bootstrap_ws_url.length > 0
+              ? data.bootstrap_ws_url
+              : undefined;
+        }
       } catch {
-        if (!cancelled) setAgentOnline(false);
+        if (!cancelled) {
+          setAgentOnline(false);
+          bootstrapWsUrlRef.current = undefined;
+        }
       }
     }
     checkAgent();
@@ -282,6 +340,96 @@ export function SessionStartPage() {
   useEffect(() => {
     thinkingEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thinking]);
+
+  useEffect(() => {
+    if (!googleAttachOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setGoogleAttachOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [googleAttachOpen]);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const g = sp.get("google");
+    if (g === "connected") {
+      setError(null);
+      window.history.replaceState({}, "", window.location.pathname);
+    } else if (g === "error") {
+      const msg = sp.get("message") ?? "unknown";
+      setError(`Google: ${decodeURIComponent(msg)}`);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
+  const appendImportBatches = useCallback(
+    (batches: ContextImportBatch[]) => {
+      const newPills: ContextBundlePill[] = [];
+      const newDocs: UploadDoc[] = [];
+      for (const batch of batches) {
+        const valid = batch.documents.filter(
+          (item) =>
+            (item.text && item.text.trim().length > 0) ||
+            (item.content_base64 && item.content_base64.trim().length > 0),
+        );
+        if (!valid.length) continue;
+        const docIds: string[] = [];
+        for (const item of valid) {
+          const id = `int-${item.name}-${item.chars}-${Math.random().toString(36).slice(2, 9)}`;
+          docIds.push(id);
+          newDocs.push({
+            id,
+            name: item.name,
+            text: item.text,
+            content_base64: item.content_base64,
+            mime_type: item.mime_type,
+            size: item.size,
+            chars: item.chars,
+            status: "ready",
+          });
+        }
+        newPills.push({
+          id: newContextPillId(),
+          kind: batch.kind,
+          label: batch.label,
+          docIds,
+        });
+      }
+      if (!newPills.length) {
+        return;
+      }
+      setError(null);
+      setDocs((prev) => [...prev, ...newDocs]);
+      setContextPills((prev) => [...prev, ...newPills]);
+    },
+    [],
+  );
+
+  const removeContextPill = useCallback((pillId: string) => {
+    let drop: Set<string> | undefined;
+    setContextPills((prev) => {
+      const pill = prev.find((p) => p.id === pillId);
+      if (!pill) return prev;
+      drop = new Set(pill.docIds);
+      return prev.filter((p) => p.id !== pillId);
+    });
+    if (drop) {
+      setDocs((d) => d.filter((doc) => !drop!.has(doc.id)));
+    }
+  }, []);
+
+  const removeDocOrBundle = useCallback(
+    (docId: string) => {
+      const pill = contextPills.find((p) => p.docIds.includes(docId));
+      if (pill) {
+        removeContextPill(pill.id);
+        return;
+      }
+      setDocs((prev) => prev.filter((d) => d.id !== docId));
+    },
+    [contextPills, removeContextPill],
+  );
 
   const resetRun = useCallback(() => {
     cleanupRestBootstrap();
@@ -297,11 +445,11 @@ export function SessionStartPage() {
     setTree([]);
     setCreatedFiles([]);
     setResultText("");
-    setThinking([
-      "Add a public GitHub repo and optional files, then start the brain bootstrap.",
-    ]);
+    setThinking([]);
     setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
     setGithubRepos([newGithubRepoRow()]);
+    setContextPills([]);
+    setGoogleAttachOpen(false);
 		setEntryText("");
   }, [cleanupRestBootstrap]);
 
@@ -344,10 +492,6 @@ export function SessionStartPage() {
     }
     if (nextDocs.length) {
       setDocs((prev) => [...prev, ...nextDocs]);
-      setThinking((prev) => [
-        ...prev,
-        `Loaded ${nextDocs.length} document${nextDocs.length === 1 ? "" : "s"} with ${formatNumber(nextDocs.reduce((sum, doc) => sum + doc.chars, 0))} characters.`,
-      ]);
     }
   }, []);
 
@@ -381,13 +525,6 @@ export function SessionStartPage() {
 			}
 			return next.length ? next : [newGithubRepoRow()];
 		});
-
-		setThinking((prev) => [
-			...prev,
-			normalized.length === 1
-				? `Attached GitHub repo: ${parseRepoSlugFromUrl(normalized[0]!) || normalized[0]}`
-				: `Attached ${normalized.length} GitHub repositories.`,
-		]);
 	}, []);
 
   const handleBootstrapEvent = useCallback((event: BootstrapEvent) => {
@@ -756,62 +893,90 @@ export function SessionStartPage() {
 
     cleanupRestBootstrap();
 
-    setStageLabel("Connecting to the brain agent");
-    setNodes(INITIAL_NODES);
-    setEdges(INITIAL_EDGES);
-    setThinking([
-      "Creating a new session. I will stream every important step instead of hiding the setup behind a spinner.",
-      ...(githubApiList.length
-        ? [
-            `Including ${githubApiList.length} public GitHub repo${githubApiList.length === 1 ? "" : "s"} (clone + scan may take a bit).`,
-          ]
-        : []),
-    ]);
-
-    const ws = new WebSocket(resolveBootstrapWsUrl());
-    socketRef.current = ws;
-
-    ws.onopen = () => {
-			ws.send(
-				JSON.stringify({
-        prompt,
-					documents: docs.map(
-						({ name, text, content_base64, mime_type, size }) => ({
-          name,
-          text,
-          content_base64,
-          mime_type,
-          size,
-						}),
-					),
-        github_repos: githubApiList,
-        clone_timeout_s: 300,
-        overwrite: true,
-        max_files: 20,
-				}),
-			);
-    };
-
-    ws.onmessage = (message) => {
-      let event: BootstrapEvent;
+    void (async () => {
       try {
-        event = JSON.parse(message.data) as BootstrapEvent;
+        const res = await fetch("/api/agent/stream");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const meta = (await res.json()) as {
+          bootstrap_ws_url?: string;
+          offline?: boolean;
+        };
+        if (meta.offline === true) {
+          setError(
+            "The brain agent is not running or Next.js cannot reach it. In a second terminal run: npm run brain-api (from the frontend folder) or: cd agent && uv run brain-api — then reload this page. Set AGENT_API_URL / NEXT_PUBLIC_AGENT_API_URL in .env if the API is not on port 8000.",
+          );
+          setIsRunning(false);
+          setStage("upload");
+          setStageLabel("Add a GitHub repo or uploads");
+          return;
+        }
+        if (typeof meta.bootstrap_ws_url === "string" && meta.bootstrap_ws_url.length > 0) {
+          bootstrapWsUrlRef.current = meta.bootstrap_ws_url;
+        }
       } catch {
+        setError(
+          "Could not verify the brain agent (request to /api/agent/stream failed). Check that the Next dev server is running, then start brain-api (npm run brain-api from frontend/).",
+        );
+        setIsRunning(false);
+        setStage("upload");
+        setStageLabel("Add a GitHub repo or uploads");
         return;
       }
-      handleBootstrapEvent(event);
-    };
 
-    ws.onerror = () => {
-			setError(
-				"Could not connect to the bootstrap WebSocket. Make sure the agent API is running.",
-			);
-      setIsRunning(false);
-    };
+      setStageLabel("Connecting to the brain agent");
+      setNodes(INITIAL_NODES);
+      setEdges(INITIAL_EDGES);
+      setThinking([
+        "Creating a new session. I will stream every important step instead of hiding the setup behind a spinner.",
+        ...(githubApiList.length
+          ? [
+              `Including ${githubApiList.length} public GitHub repo${githubApiList.length === 1 ? "" : "s"} (clone + scan may take a bit).`,
+            ]
+          : []),
+      ]);
 
-    ws.onclose = () => {
-      setIsRunning(false);
-    };
+      const wsUrl = resolveBootstrapWsUrl(bootstrapWsUrlRef.current);
+      const ws = new WebSocket(wsUrl);
+      socketRef.current = ws;
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({
+          prompt,
+          documents: docs.map(({ name, text, content_base64, mime_type, size }) => ({
+            name,
+            text,
+            content_base64,
+            mime_type,
+            size,
+          })),
+          github_repos: githubApiList,
+          clone_timeout_s: 300,
+          overwrite: true,
+          max_files: 20,
+        }));
+      };
+
+      ws.onmessage = (message) => {
+        let event: BootstrapEvent;
+        try {
+          event = JSON.parse(message.data) as BootstrapEvent;
+        } catch {
+          return;
+        }
+        handleBootstrapEvent(event);
+      };
+
+      ws.onerror = () => {
+        setError(
+          `Could not open the bootstrap WebSocket (${wsUrl}). Start the agent on port 8000 (npm run brain-api from frontend/, or cd agent && uv run brain-api). If the UI is not on the same machine, set NEXT_PUBLIC_AGENT_API_URL to the URL your browser can reach.`,
+        );
+        setIsRunning(false);
+      };
+
+      ws.onclose = () => {
+        setIsRunning(false);
+      };
+    })();
   }, [
     agentOnline,
     cleanupRestBootstrap,
@@ -848,29 +1013,28 @@ export function SessionStartPage() {
 							What should your brain learn first?
             </h1>
 						<p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-500">
-							Paste a GitHub repository URL or drop files anywhere
-							on the entry box. The same initialize flow builds
-							the brain.
+							Paste a GitHub URL, drop files on the box, or open the paperclip to upload files and connect
+							Google Workspace (company Drive folder + calendar). Your context shows as thumbnails above the
+							input—like ChatGPT attachments.
             </p>
           </div>
 
 					<UniversalStartEntry
 						text={entryText}
-              docs={docs}
+						standaloneDocs={standaloneDocs}
+						contextPills={contextPills}
 						githubRepos={githubRepos.filter((repo) =>
 							repo.url.trim(),
 						)}
-              isDragging={isDragging}
-              isRunning={isRunning}
+						isDragging={isDragging}
+						isRunning={isRunning}
 						canSubmit={hasBootstrapSource && agentOnline !== false}
 						onTextChange={setEntryText}
 						onPasteGithubRepos={addGithubRepoUrls}
-              onBrowse={() => inputRef.current?.click()}
-						onRemoveDoc={(id) =>
-							setDocs((prev) =>
-								prev.filter((doc) => doc.id !== id),
-							)
-						}
+						onBrowse={() => inputRef.current?.click()}
+						onRemoveDoc={removeDocOrBundle}
+						onRemoveContextPill={removeContextPill}
+						onOpenGoogleWorkspace={() => setGoogleAttachOpen(true)}
 						onRemoveRepo={(id) =>
 							setGithubRepos((prev) => {
 								const next = prev.filter(
@@ -881,16 +1045,53 @@ export function SessionStartPage() {
 									: [newGithubRepoRow()];
 							})
 						}
-              onDragOver={(event) => {
-                event.preventDefault();
-                setIsDragging(true);
-              }}
-              onDragLeave={() => setIsDragging(false)}
-              onDrop={handleDrop}
+						onDragOver={(event) => {
+							event.preventDefault();
+							setIsDragging(true);
+						}}
+						onDragLeave={() => setIsDragging(false)}
+						onDrop={handleDrop}
 						onSubmit={runBootstrap}
 					/>
 
-					<p className="mt-4 w-[min(560px,calc(100vw-32px))] text-center text-[11px] leading-5 text-slate-500">
+					{googleAttachOpen ? (
+						<button
+							type="button"
+							className="fixed inset-0 z-[60] bg-slate-950/40 backdrop-blur-[2px] transition-opacity"
+							aria-label="Close Google Workspace"
+							onClick={() => setGoogleAttachOpen(false)}
+						/>
+					) : null}
+					{googleAttachOpen ? (
+						<div
+							className="fixed left-1/2 top-1/2 z-[70] w-[min(440px,calc(100vw-24px))] max-h-[min(640px,85vh)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-[1.75rem] border border-slate-200/90 bg-white p-5 pb-6 pt-12 shadow-2xl shadow-slate-900/20 ring-1 ring-slate-100"
+							role="dialog"
+							aria-modal="true"
+							aria-labelledby="google-attach-title"
+						>
+							<button
+								type="button"
+								onClick={() => setGoogleAttachOpen(false)}
+								className="absolute right-3 top-3 rounded-xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+								aria-label="Close"
+							>
+								<X size={18} />
+							</button>
+							<h2 id="google-attach-title" className="sr-only">
+								Connect Google Workspace
+							</h2>
+							<SessionIntegrationSources
+								disabled={isRunning}
+								embeddedHeader
+								fetchDriveOnOpen
+								onImportBatches={appendImportBatches}
+								onError={(msg) => setError(msg)}
+								onClose={() => setGoogleAttachOpen(false)}
+							/>
+						</div>
+					) : null}
+
+					<p className="mt-6 w-[min(560px,calc(100vw-32px))] text-center text-[11px] leading-5 text-slate-500">
 						Supported: PDFs, Office docs, Markdown, text, JSON,
 						YAML, CSV, and source files.
 					</p>
@@ -1044,183 +1245,261 @@ export function SessionStartPage() {
 }
 
 function UniversalStartEntry({
-	text,
-  docs,
-	githubRepos,
+  text,
+  standaloneDocs,
+  contextPills,
+  githubRepos,
   isDragging,
   isRunning,
-	canSubmit,
-	onTextChange,
-	onPasteGithubRepos,
+  canSubmit,
+  onTextChange,
+  onPasteGithubRepos,
   onBrowse,
-	onRemoveDoc,
-	onRemoveRepo,
+  onRemoveDoc,
+  onRemoveContextPill,
+  onOpenGoogleWorkspace,
+  onRemoveRepo,
   onDragOver,
   onDragLeave,
   onDrop,
-	onSubmit,
+  onSubmit,
 }: {
-	text: string;
-  docs: UploadDoc[];
-	githubRepos: GithubRepoFormRow[];
+  text: string;
+  standaloneDocs: UploadDoc[];
+  contextPills: ContextBundlePill[];
+  githubRepos: GithubRepoFormRow[];
   isDragging: boolean;
   isRunning: boolean;
-	canSubmit: boolean;
-	onTextChange: (text: string) => void;
-	onPasteGithubRepos: (urls: string[]) => void;
+  canSubmit: boolean;
+  onTextChange: (text: string) => void;
+  onPasteGithubRepos: (urls: string[]) => void;
   onBrowse: () => void;
-	onRemoveDoc: (id: string) => void;
-	onRemoveRepo: (id: string) => void;
+  onRemoveDoc: (id: string) => void;
+  onRemoveContextPill: (pillId: string) => void;
+  onOpenGoogleWorkspace: () => void;
+  onRemoveRepo: (id: string) => void;
   onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
-	onSubmit: () => void;
+  onSubmit: () => void;
 }) {
-	const taRef = useRef<HTMLTextAreaElement | null>(null);
-	const sourceCount = docs.length + githubRepos.length;
-	const canRun = sourceCount > 0 && canSubmit && !isRunning;
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const attachWrapRef = useRef<HTMLDivElement | null>(null);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
 
-	useEffect(() => {
-		const ta = taRef.current;
-		if (!ta) return;
-		ta.style.height = "auto";
-		const lineHeight = 20;
-		const next = Math.min(160, Math.max(lineHeight, ta.scrollHeight));
-		ta.style.height = `${next}px`;
-	}, [text]);
+  const sourceCount = standaloneDocs.length + contextPills.length + githubRepos.length;
+  const canRun = sourceCount > 0 && canSubmit && !isRunning;
 
-	const hasAttachments = githubRepos.length > 0 || docs.length > 0;
+  useEffect(() => {
+    const ta = taRef.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    const lineHeight = 20;
+    const next = Math.min(160, Math.max(lineHeight, ta.scrollHeight));
+    ta.style.height = `${next}px`;
+  }, [text]);
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      const el = attachWrapRef.current;
+      if (el && !el.contains(e.target as Node)) setAttachMenuOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [attachMenuOpen]);
+
+  const hasAttachments =
+    githubRepos.length > 0 || standaloneDocs.length > 0 || contextPills.length > 0;
 
   return (
     <div
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-			className="mx-auto w-[min(560px,calc(100vw-32px))]"
-		>
-			{hasAttachments && (
-				<div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 px-1">
-					{githubRepos.map((repo) => {
-						const slug = parseRepoSlugFromUrl(repo.url) || repo.url;
-						return (
-							<AttachmentPill
-								key={repo.id}
-								icon={<GitBranch size={11} />}
-								label={slug}
-								disabled={isRunning}
-								onRemove={() => onRemoveRepo(repo.id)}
-							/>
-						);
-					})}
-					{docs.map((doc) => (
-						<AttachmentPill
-							key={doc.id}
-							icon={<FileText size={11} />}
-							label={doc.name}
-							disabled={isRunning}
-							onRemove={() => onRemoveDoc(doc.id)}
-						/>
-					))}
-				</div>
-			)}
+      className="mx-auto w-[min(560px,calc(100vw-32px))]"
+    >
+      {hasAttachments ? (
+        <div className="mb-2.5 flex min-h-[2.75rem] min-w-0 flex-wrap items-center gap-2 px-0.5">
+          {githubRepos.map((repo) => {
+            const slug = parseRepoSlugFromUrl(repo.url) || repo.url;
+            return (
+              <AttachmentPill
+                key={repo.id}
+                icon={<GitBranch className="h-4 w-4" />}
+                label={slug}
+                disabled={isRunning}
+                onRemove={() => onRemoveRepo(repo.id)}
+              />
+            );
+          })}
+          {contextPills.map((pill) => (
+            <AttachmentPill
+              key={pill.id}
+              icon={contextPillIcon(pill.kind)}
+              label={pill.label}
+              disabled={isRunning}
+              onRemove={() => onRemoveContextPill(pill.id)}
+            />
+          ))}
+          {standaloneDocs.map((doc) => (
+            <AttachmentPill
+              key={doc.id}
+              icon={<FileText className="h-4 w-4" />}
+              label={doc.name}
+              disabled={isRunning}
+              onRemove={() => onRemoveDoc(doc.id)}
+            />
+          ))}
+        </div>
+      ) : null}
 
-			<div
-				className={cn(
-					"relative flex min-h-9 items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-1.5 shadow-[0_6px_18px_-12px_rgba(0,0,0,0.18)] transition",
-					isDragging && "border-violet-400 bg-violet-50/80",
-				)}
-			>
-				<button
-					type="button"
-					onClick={onBrowse}
-					disabled={isRunning}
-					title="Attach files"
-					className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-black/45 transition hover:bg-black/[0.06] hover:text-black/75 disabled:opacity-50"
-				>
-					<Paperclip size={14} />
-				</button>
+      <div
+        className={cn(
+          "relative flex min-h-9 items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-1.5 shadow-[0_6px_18px_-12px_rgba(0,0,0,0.18)] transition",
+          isDragging && "border-violet-400 bg-violet-50/80",
+        )}
+      >
+        {/* z-10 so this control stays above the textarea when long unbroken text widens the flex row */}
+        <div className="relative z-10 flex-shrink-0" ref={attachWrapRef}>
+          <button
+            type="button"
+            onClick={() => setAttachMenuOpen((v) => !v)}
+            disabled={isRunning}
+            title="Add to context"
+            className={cn(
+              "relative z-10 flex h-7 w-7 items-center justify-center rounded-lg text-black/45 transition hover:bg-black/[0.06] hover:text-black/75 disabled:opacity-50",
+              attachMenuOpen && "bg-black/[0.06] text-black/70",
+            )}
+          >
+            <Paperclip size={14} />
+          </button>
+          {attachMenuOpen ? (
+            <div
+              className="absolute bottom-full left-0 z-50 mb-2 w-[min(260px,calc(100vw-32px))] overflow-hidden rounded-2xl border border-black/10 bg-white py-1 shadow-xl shadow-black/10 ring-1 ring-black/5"
+              role="menu"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-[13px] text-black/85 transition hover:bg-black/[0.04]"
+                onClick={() => {
+                  setAttachMenuOpen(false);
+                  onBrowse();
+                }}
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-violet-50 text-violet-700">
+                  <FileText size={16} />
+                </span>
+                <span>
+                  <span className="block font-semibold">Upload files</span>
+                  <span className="block text-[11px] font-normal text-black/45">From your computer</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex w-full items-center gap-3 px-3 py-2.5 text-left text-[13px] text-black/85 transition hover:bg-black/[0.04]"
+                onClick={() => {
+                  setAttachMenuOpen(false);
+                  onOpenGoogleWorkspace();
+                }}
+              >
+                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src="/brand/google-workspace.svg" alt="" className="h-5 w-5" draggable={false} />
+                </span>
+                <span>
+                  <span className="block font-semibold">Google Workspace</span>
+                  <span className="block text-[11px] font-normal text-black/45">
+                    Company folder, calendar, extra Drive files
+                  </span>
+                </span>
+              </button>
+            </div>
+          ) : null}
+        </div>
 
-				<textarea
-					ref={taRef}
-					value={text}
-					disabled={isRunning}
-					onChange={(e) => onTextChange(e.target.value)}
-					onPaste={(e) => {
-						const pasted = e.clipboardData.getData("text");
-						const urls = extractGithubRepoUrls(pasted);
-						if (!urls.length) return;
-						e.preventDefault();
-						onPasteGithubRepos(urls);
-						const remainder = removeGithubRepoUrls(pasted).trim();
-						onTextChange(remainder);
-					}}
-					onKeyDown={(e) => {
-						if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-							e.preventDefault();
-							onSubmit();
-						}
-					}}
-					placeholder="Paste a GitHub repo URL or drop files…"
-					rows={1}
-					className={cn(
-						"m-0 block h-5 max-h-40 flex-1 resize-none self-center overflow-hidden border-none bg-transparent p-0 align-middle outline-none",
-						"text-[13px] leading-5 text-black placeholder:text-black/35 disabled:opacity-60",
-					)}
-				/>
+        <textarea
+          ref={taRef}
+          value={text}
+          disabled={isRunning}
+          onChange={(e) => onTextChange(e.target.value)}
+          onPaste={(e) => {
+            const pasted = e.clipboardData.getData("text");
+            const urls = extractGithubRepoUrls(pasted);
+            if (!urls.length) return;
+            e.preventDefault();
+            onPasteGithubRepos(urls);
+            const remainder = removeGithubRepoUrls(pasted).trim();
+            onTextChange(remainder);
+          }}
+          onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+              e.preventDefault();
+              onSubmit();
+            }
+          }}
+          placeholder="Paste a GitHub URL, or use the clip to add files & Google…"
+          rows={1}
+          className={cn(
+            // min-w-0: without it, flex-1 textarea won’t shrink and can overlap the paperclip (stealing clicks).
+            "m-0 block h-5 max-h-40 min-w-0 flex-1 resize-none self-center overflow-hidden border-none bg-transparent p-0 align-middle outline-none break-words",
+            "text-[13px] leading-5 text-black placeholder:text-black/35 disabled:opacity-60",
+          )}
+        />
 
-				<span className="flex-shrink-0 select-none whitespace-nowrap text-[10px] font-medium text-black/40">
-					⌘ + Enter
-				</span>
+        <span className="flex-shrink-0 select-none whitespace-nowrap text-[10px] font-medium text-black/40">
+          ⌘ + Enter
+        </span>
 
-				<button
-					type="button"
-					onClick={onSubmit}
-					disabled={!canRun}
-					title="Create brain (⌘/Ctrl + Enter)"
-					className={cn(
-						"flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition",
-						text.trim().length > 0 || sourceCount > 0
-							? "border-transparent bg-[color:var(--accent-600)] text-white hover:bg-[color:var(--accent-700)] disabled:opacity-60"
-							: "border-black/10 bg-white text-black/35",
-					)}
-				>
-					{isRunning ? (
-						<Loader2 size={14} className="animate-spin" />
-					) : (
-						<Send size={14} />
-					)}
-				</button>
-			</div>
-		</div>
-	);
+        <button
+          type="button"
+          onClick={onSubmit}
+          disabled={!canRun}
+          title="Create brain (⌘/Ctrl + Enter)"
+          className={cn(
+            "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition",
+            text.trim().length > 0 || sourceCount > 0
+              ? "border-transparent bg-[color:var(--accent-600)] text-white hover:bg-[color:var(--accent-700)] disabled:opacity-60"
+              : "border-black/10 bg-white text-black/35",
+          )}
+        >
+          {isRunning ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function AttachmentPill({
-	icon,
-	label,
-	disabled,
-	onRemove,
+  icon,
+  label,
+  disabled,
+  onRemove,
 }: {
-	icon: React.ReactNode;
-	label: string;
-	disabled: boolean;
-	onRemove: () => void;
+  icon: React.ReactNode;
+  label: string;
+  disabled: boolean;
+  onRemove: () => void;
 }) {
-	return (
-		<span className="inline-flex min-w-0 max-w-[200px] items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800 ring-1 ring-violet-200/80">
-			<span className="flex-shrink-0 text-violet-700">{icon}</span>
-			<span className="truncate">{label}</span>
-			{!disabled ? (
-				<button
-					type="button"
-					onClick={onRemove}
-					className="ml-0.5 flex-shrink-0 rounded-full p-0.5 text-violet-600/70 transition hover:bg-violet-200/70 hover:text-violet-900"
-					aria-label={`Remove ${label}`}
-				>
-					<X size={10} />
-                </button>
-			) : null}
-		</span>
+  return (
+    <span className="inline-flex max-w-[min(240px,42vw)] items-center gap-2 rounded-xl border border-black/8 bg-white py-1 pl-1 pr-1 shadow-sm ring-1 ring-black/[0.04]">
+      <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-violet-50 to-sky-50 text-violet-800">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-tight text-black/80">{label}</span>
+      {!disabled ? (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="flex-shrink-0 rounded-lg p-1.5 text-black/35 transition hover:bg-black/[0.06] hover:text-black/70"
+          aria-label={`Remove ${label}`}
+        >
+          <X size={12} />
+        </button>
+      ) : null}
+    </span>
   );
 }
 
@@ -2225,10 +2504,6 @@ function normalizeGithubRepoUrl(raw: string): string | null {
 	}
 }
 
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
-}
-
 function formatCompact(value: number) {
 	return new Intl.NumberFormat("en-US", {
 		notation: "compact",
@@ -2328,22 +2603,26 @@ function readFileAsDataUrl(file: File) {
   });
 }
 
-function resolveBootstrapWsUrl() {
+function resolveBootstrapWsUrl(serverBootstrapUrl?: string | null) {
+  const fromServer = serverBootstrapUrl?.trim();
+  if (fromServer) return normalizeBootstrapWsUrlForBrowser(fromServer);
   if (process.env.NEXT_PUBLIC_AGENT_WS_URL) {
-    return process.env.NEXT_PUBLIC_AGENT_WS_URL;
+    return normalizeBootstrapWsUrlForBrowser(process.env.NEXT_PUBLIC_AGENT_WS_URL);
   }
   const base = env.agentApiUrlPublic;
   if (base) {
     try {
       const u = new URL(base);
       const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
-      return `${wsProto}//${u.host}/bootstrap/ws`;
+      return normalizeBootstrapWsUrlForBrowser(`${wsProto}//${u.host}/bootstrap/ws`);
     } catch {
       /* use localhost fallback */
     }
   }
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${protocol}://${window.location.hostname}:8000/bootstrap/ws`;
+  return normalizeBootstrapWsUrlForBrowser(
+    `${protocol}://${window.location.hostname}:8000/bootstrap/ws`,
+  );
 }
 
 function stageTitle(stage: StageId) {
