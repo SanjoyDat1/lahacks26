@@ -4,6 +4,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { BrianFile, GraphData, GraphLink } from "@/lib/brian/reader";
+import {
+  buildBrianPathLookup,
+  resolveBrainLinkHref,
+} from "@/lib/brian/resolve-markdown-link";
 import { categoryOf, categoryShade, type BrainCategory } from "@/lib/brain/categories";
 import { addGraphLink, removeGraphLink } from "@/lib/brain/graph-link-mutations";
 
@@ -280,7 +284,12 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
             onSelectSource={(titleOrPath) => {
               const f =
                 files.find((x) => x.path === titleOrPath) ??
-                files.find((x) => (x.frontmatter.title ?? "") === titleOrPath);
+                files.find((x) => (x.frontmatter.title ?? "") === titleOrPath) ??
+                resolveBrainLinkHref(
+                  titleOrPath,
+                  selectedFile?.path ?? null,
+                  buildBrianPathLookup(files),
+                );
               if (f) setSelectedFile(f);
             }}
             accentForPath={(p) => categoryShade(p)}
@@ -289,9 +298,9 @@ export function BrainCommand({ files: serverFiles, graphData: serverGraphData }:
       </div>
 
       {selectedEdge && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-[88px] z-[25] flex justify-center px-4">
+        <div className="pointer-events-none absolute inset-x-0 bottom-52 z-[25] flex justify-center px-4 pb-2 sm:bottom-56">
           <div
-            className="pointer-events-auto flex max-w-[min(520px,calc(100vw-32px))] items-center gap-3 rounded-2xl border border-black/10 bg-white/95 px-4 py-2.5 text-[13px] shadow-lg backdrop-blur-md"
+            className="pointer-events-auto flex max-w-[min(520px,calc(100vw-32px))] items-center gap-3 rounded-2xl border border-black/10 bg-white/95 px-4 py-2.5 text-[13px] shadow-xl shadow-black/10 backdrop-blur-md"
             role="status"
           >
             <Link2 size={16} className="shrink-0 text-black/55" aria-hidden />

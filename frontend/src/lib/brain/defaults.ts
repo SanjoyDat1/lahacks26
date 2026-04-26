@@ -12,62 +12,52 @@ export const brainPaths = [
 export const defaultBrainFiles: BrainFile[] = [
   {
     path: "brain/project_overview.md",
-    content: `# Project Overview
+    content: `# Project overview
 
-AI Brain is a source-of-truth layer that turns asynchronous product and engineering communication into structured project context.
+Add a short, factual summary of **your** project—the one from your repos, uploads, and connected imports (name, purpose, who it is for).
 
 ## Mission
 
-Bridge the gap between human decisions and LLM execution by keeping project goals, architecture, and decision history current in a Git-backed brain.
+*(Replace with goals stated in your sources.)*
 `,
   },
   {
     path: "brain/architecture.md",
     content: `# Architecture
 
-## Pipeline
+## System shape
 
-1. Ingest events from GitHub, GitLab, Slack, Discord, and meeting transcripts.
-2. Store normalized raw events and vector-searchable documents.
-3. Distill significant changes into brain updates.
-4. Commit source-of-truth changes to GitHub.
-5. Give coding agents a system prompt that requires reading the brain before implementation.
+*(Replace with how **your** codebase or product is structured—only what your sources support.)*
 `,
   },
   {
     path: "brain/goals.md",
     content: `# Goals
 
-- Preserve project intent across meetings, pull requests, issues, and chat.
-- Make AI-generated understanding auditable through Git commits.
-- Give humans a fast editor for correcting and improving the brain.
-- Give coding agents an explicit, current context source before writing code.
+- *(List objectives that appear in your project sources.)*
 `,
   },
   {
     path: "brain/decision_log.md",
-    content: `# Decision Log
+    content: `# Decision log
 
-Record durable product and architecture decisions here. Each entry should include the source event, rationale, and impact.
+Record durable decisions grounded in **your** project. Cite the source (doc, PR, sheet, etc.) when possible.
 `,
   },
   {
     path: "brain/open_questions.md",
-    content: `# Open Questions
+    content: `# Open questions
 
-- Which source channels should be treated as authoritative for goals?
-- What review policy should be required before AI brain updates are committed?
+- *(Track ambiguities or gaps from your imports—not generic product questions.)*
 `,
   },
   {
     path: "brain/agent_system_prompt.md",
-    content: `# Coding Agent System Prompt
+    content: `# Coding agent system prompt
 
-Before writing code, read every file under /brain to understand the current project context.
+Before writing code, read the Markdown under this brain folder so behavior matches **this** project's documented context.
 
-If you make a durable design or product decision, document it in /brain/decision_log.md before implementing the code.
-
-If requirements conflict, prefer the most recent committed brain context and explain the conflict to the human.
+Document durable design decisions in \`brain/decision_log.md\` when your sources require it.
 `,
   },
 ];

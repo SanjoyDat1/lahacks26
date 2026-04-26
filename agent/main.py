@@ -79,7 +79,7 @@ def bootstrap_working_brain(
     prompt: str,
     sources: list[str],
     overwrite: bool = False,
-    max_files: int = 3,
+    max_files: int = 24,
 ) -> None:
     """Create a minimal working brain from an initial prompt and source files."""
 
@@ -139,7 +139,7 @@ def build_parser() -> argparse.ArgumentParser:
     bootstrap.add_argument(
         "--max-files",
         type=int,
-        default=3,
+        default=24,
         help="Maximum number of brain files to create during bootstrap.",
     )
 

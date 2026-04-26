@@ -137,9 +137,11 @@ def _map_one_document_for_bootstrap(model: object, doc: SourceDocument) -> str:
         return ""
     system = SystemMessage(
         content=(
-            "Extract durable facts for a team knowledge brain from ONE source. "
+            "Extract durable facts about **the user's project or organization** from ONE source "
+            "(repo, document, sheet, etc.). "
             "Keep proper nouns, numbers, dates, URLs, technical terms, explicit decisions, owners, constraints. "
             "Skip greetings, signatures, boilerplate, and repeated lines. "
+            "Do not reframe the content as being about an 'AI brain' product unless the source says so. "
             "Return ONLY valid JSON: {\"bullets\": string} where the string is markdown bullet lines (- item), "
             "at most ~40 lines, no introduction or closing."
         )
@@ -161,9 +163,14 @@ def _reduce_bootstrap_notes(model: object, merged: str) -> str | None:
         return None
     system = SystemMessage(
         content=(
-            "Merge per-source extractions into ONE dense briefing for planning a Markdown knowledge brain. "
-            "Deduplicate aggressively. Organize with markdown ## headings, for example: "
-            "Overview, Domains, Key facts, Decisions, Constraints & risks, People, Open questions, Timeline, References. "
+            "Merge per-source extractions into ONE dense briefing **about the user's organization and initiatives** "
+            "(repos, uploads, Google Workspace content). "
+            "The briefing's subject is that real-world work—not a separate documentation tool or 'AI Brain' app. "
+            "Deduplicate aggressively. When sources are heterogeneous (e.g. spreadsheets + docs + code), add a ## section "
+            "**By business function** (or **By facet**) and group bullets under subheadings such as Engineering, Product, "
+            "Design, Marketing, Sales, Finance, Legal, Operations—**only for facets actually present in the excerpts**; "
+            "do not invent departments. Also use ## Cross-cutting constraints for org-wide risks, metrics, or policies "
+            "that span facets. Other useful ## headings: Overview, Key facts, Decisions, People, Open questions, Timeline, References. "
             "Use - bullets under sections only. Preserve specifics (names, numbers, URLs). "
             "Return ONLY valid JSON: {\"distilled_text\": string}. "
             "Keep the string under ~17000 characters."
@@ -184,10 +191,15 @@ def _single_pass_bootstrap_distill(model: object, raw_digest: str) -> str | None
         return None
     system = SystemMessage(
         content=(
-            "Compress heterogeneous workspace material into ONE dense markdown briefing for an AI knowledge brain. "
+            "Compress heterogeneous workspace material into ONE dense markdown briefing **about the user's organization** "
+            "as reflected in those sources (products, codebases, GTM, finance signals, teams, timelines). "
             "Sources may include Google Docs/Sheets, calendar snapshots, Gmail digests, PDFs, and plain text. "
+            "When material clearly spans multiple business facets, structure with ## By business function (or ## By facet) "
+            "using only subheadings supported by the text (e.g. Engineering, Marketing, Finance); skip empty facets. "
+            "Add ## Cross-cutting constraints for org-wide themes. "
             "Preserve concrete names, metrics, dates, URLs, technical terms, decisions, owners, constraints, risks. "
             "Strip chit-chat, duplicates, and layout noise. "
+            "Do not describe a generic 'AI Brain' platform unless the sources explicitly discuss it. "
             "Use ## sections and - bullets. "
             "Return ONLY valid JSON: {\"distilled_text\": string} under ~16000 characters."
         )
@@ -442,7 +454,7 @@ def _bootstrap_write_node(state: IngestionState) -> dict[str, Any]:
             docs,
             settings=s,
             initial_prompt=state.get("initial_prompt", ""),
-            max_files=int(state.get("max_files", 3) or 3),
+            max_files=int(state.get("max_files", 24) or 24),
             overwrite=bool(state.get("overwrite", False)),
         )
     except (OSError, FileExistsError, ValueError) as exc:  # noqa: BLE001
@@ -658,7 +670,7 @@ def run_initialize(
     *,
     initial_prompt: str,
     settings: Settings,
-    max_files: int = 3,
+    max_files: int = 24,
     overwrite: bool = False,
 ) -> dict[str, Any]:
     """Entry: bootstrap / create working brain from documents."""
@@ -741,7 +753,7 @@ def run_initialize_streaming(
     *,
     initial_prompt: str,
     settings: Settings,
-    max_files: int = 18,
+    max_files: int = 24,
     overwrite: bool = True,
 ) -> Iterator[dict[str, Any]]:
     """Streaming initialize flow for the hackathon session-start experience."""

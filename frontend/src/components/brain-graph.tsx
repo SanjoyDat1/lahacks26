@@ -313,6 +313,8 @@ export function BrainGraph({
   const [tooltipNode, setTooltipNode] = useState<SimNode | null>(null);
   const [hoverConnectionCount, setHoverConnectionCount] = useState(0);
   const [isConnecting, setIsConnecting] = useState(false);
+  /** True when pointer is near a link (not a node) — custom cursor for “select / remove connection”. */
+  const [edgeHovered, setEdgeHovered] = useState(false);
   const hoverNodeRef = useRef<SimNode | null>(null);
   // Connected node IDs for the currently hovered node
   const hovConnectedRef = useRef<Set<string>>(new Set());
@@ -980,6 +982,13 @@ export function BrainGraph({
       }
       setTooltipNode(nextHoverNode);
     }
+
+    const overLink =
+      !connectDragRef.current &&
+      !panRef.current &&
+      !nextHoverNode &&
+      findLink(cx, cy) !== null;
+    setEdgeHovered((prev) => (prev === overLink ? prev : overLink));
   }
 
   function onMouseUp(e: React.MouseEvent<HTMLCanvasElement>) {
@@ -1063,7 +1072,9 @@ export function BrainGraph({
             ? "cursor-crosshair"
             : tooltipNode
               ? "cursor-pointer"
-              : "cursor-grab active:cursor-grabbing",
+              : edgeHovered
+                ? "cursor-brain-edge"
+                : "cursor-grab active:cursor-grabbing",
         )}
         style={{
           background: minimal
@@ -1082,6 +1093,7 @@ export function BrainGraph({
           connectAnchorRef.current = null;
           connectTargetRef.current = null;
           setIsConnecting(false);
+          setEdgeHovered(false);
           panRef.current = null;
           mouseDownRef.current = null;
           hoverIdRef.current = null;

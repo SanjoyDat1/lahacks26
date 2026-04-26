@@ -237,7 +237,7 @@ export function SessionStartPage() {
 	]);
 	const [entryText, setEntryText] = useState("");
   const prompt =
-    "Build a transparent AI brain for this codebase from the linked GitHub repository (and any optional uploaded documents). Focus on architecture, entry points, dependencies, and how the system fits together.";
+    "Build our enterprise knowledge brain from the linked GitHub repositories, uploads, and Google Workspace imports. Infer which business functions the sources actually cover (engineering, product, design, marketing, finance, legal, ops, etc.) and organize context so multiple AI agents share one grounded view. Prioritize decisions, metrics, owners, risks, and agent guardrails—only what the sources support.";
   const [isDragging, setIsDragging] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [isDone, setIsDone] = useState(false);
@@ -766,7 +766,7 @@ export function SessionStartPage() {
               prompt,
               github_repos: githubApiList,
               overwrite: true,
-              max_files: 20,
+              max_files: 24,
               apply: true,
               clone_timeout_s: 300,
             }),
@@ -949,7 +949,7 @@ export function SessionStartPage() {
           github_repos: githubApiList,
           clone_timeout_s: 300,
           overwrite: true,
-          max_files: 20,
+          max_files: 24,
         }));
       };
 

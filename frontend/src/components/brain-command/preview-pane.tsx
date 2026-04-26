@@ -16,6 +16,11 @@ import {
 } from "lucide-react";
 
 import type { BrianFile } from "@/lib/brian/reader";
+import {
+  buildBrianPathLookup,
+  isExternalOrNonBrainHref,
+  resolveBrainLinkHref,
+} from "@/lib/brian/resolve-markdown-link";
 import { cn } from "@/lib/utils";
 
 type Answer = { markdown: string; sources: string[] };
@@ -215,7 +220,10 @@ function ConnectedPagesList({
   );
 }
 
-const mdComponents: Components = {
+const linkLikeClass =
+  "text-[color:var(--accent-700)] underline decoration-black/20 underline-offset-2 hover:decoration-[color:var(--accent-700)]";
+
+const markdownComponentsBase: Omit<Components, "a"> = {
   h1: ({ children, ...p }) => (
     <h1 {...p} className="mt-6 mb-4 text-2xl font-semibold tracking-tight text-black first:mt-0">
       {children}
@@ -255,11 +263,6 @@ const mdComponents: Components = {
     <li {...p} className="pl-1">
       {children}
     </li>
-  ),
-  a: ({ children, ...p }) => (
-    <a {...p} className="text-[color:var(--accent-700)] underline decoration-black/20 underline-offset-2 hover:decoration-[color:var(--accent-700)]">
-      {children}
-    </a>
   ),
   strong: ({ children, ...p }) => (
     <strong {...p} className="font-semibold text-black">
@@ -384,6 +387,64 @@ export function PreviewPane({
   const connectedPages = useMemo(
     () => (file ? getConnectedPages(file, allFiles) : []),
     [file, allFiles],
+  );
+
+  const pathLookup = useMemo(() => buildBrianPathLookup(allFiles), [allFiles]);
+
+  const mdComponents = useMemo<Components>(
+    () => ({
+      ...markdownComponentsBase,
+      a: ({ href, children, title }) => {
+        if (!href?.trim()) {
+          return <span className={linkLikeClass}>{children}</span>;
+        }
+        if (isExternalOrNonBrainHref(href)) {
+          if (/^https?:\/\//i.test(href.trim())) {
+            return (
+              <a
+                href={href}
+                title={title}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={linkLikeClass}
+              >
+                {children}
+              </a>
+            );
+          }
+          return (
+            <a href={href} title={title} className={linkLikeClass}>
+              {children}
+            </a>
+          );
+        }
+        const target = resolveBrainLinkHref(href, file?.path ?? null, pathLookup);
+        if (target) {
+          return (
+            <button
+              type="button"
+              title={title ?? target.path}
+              className={cn(
+                linkLikeClass,
+                "inline cursor-pointer border-0 bg-transparent p-0 text-left font-inherit",
+              )}
+              onClick={() => onSelectSource(target.path)}
+            >
+              {children}
+            </button>
+          );
+        }
+        return (
+          <span
+            className={cn(linkLikeClass, "cursor-help opacity-55")}
+            title={`No matching brain file loaded for “${href}”. It may be missing from the agent workspace.`}
+          >
+            {children}
+          </span>
+        );
+      },
+    }),
+    [file?.path, pathLookup, onSelectSource],
   );
 
   const answerBlock = lastAnswer ? (

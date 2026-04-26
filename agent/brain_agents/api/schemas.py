@@ -34,7 +34,7 @@ class BootstrapRequest(BaseModel):
     prompt: str = ""
     sources: list[str] = Field(default_factory=list)
     overwrite: bool = False
-    max_files: int = Field(default=3, ge=1, le=50)
+    max_files: int = Field(default=24, ge=1, le=50)
 
 
 class BootstrapDocument(BaseModel):
@@ -64,7 +64,12 @@ class InitializeGitHubRepoSource(BaseModel):
 
 
 class BootstrapStreamRequest(BaseModel):
-    prompt: str = "Build my AI brain from these documents."
+    prompt: str = (
+        "Build an enterprise knowledge brain from these imports for our AI agents. Infer which functions matter "
+        "(e.g. engineering, product, design, marketing, finance, legal, operations) from the sources only. "
+        "Prioritize decisions, metrics, owners, risks, and guardrails agents must respect. Stay strictly grounded "
+        "in the supplied repos, files, and Google Workspace content."
+    )
     documents: list[BootstrapDocument] = Field(default_factory=list)
     github_repos: list[InitializeGitHubRepoSource] = Field(
         default_factory=list,
@@ -72,7 +77,7 @@ class BootstrapStreamRequest(BaseModel):
     )
     clone_timeout_s: int = Field(default=300, ge=30, le=3_600)
     overwrite: bool = True
-    max_files: int = Field(default=18, ge=1, le=50)
+    max_files: int = Field(default=24, ge=1, le=50)
 
     @model_validator(mode="after")
     def at_least_one_source(self) -> Self:
@@ -120,7 +125,7 @@ class InitializeRequest(BaseModel):
     github_repos: list[InitializeGitHubRepoSource] = Field(default_factory=list)
     overwrite: bool = False
     max_files: int = Field(
-        default=18,
+        default=24,
         ge=1,
         le=50,
         description="Maximum number of brain Markdown files to create.",

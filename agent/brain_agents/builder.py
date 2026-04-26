@@ -38,9 +38,13 @@ TEXT_EXTENSIONS = {
 MAX_SOURCE_CHARS = 45_000
 MAX_TEMPLATE_CHARS = 12_000
 MAX_CATALOG_CHARS = 18_000
-DEFAULT_MAX_BOOTSTRAP_FILES = 18
-BATCH_GENERATION_SIZE = 4
+DEFAULT_MAX_BOOTSTRAP_FILES = 24
+# Small batches + high output token cap avoid truncated JSON (invalid mid-string) when
+# the model returns {"files":[{"path":"...","content":"...very long markdown..."}]}
+BATCH_GENERATION_SIZE = 2
 MAX_PARALLEL_BATCHES = 3
+BOOTSTRAP_PLAN_MAX_TOKENS = 6_000
+BOOTSTRAP_GENERATION_MAX_TOKENS = 16_384
 INDEX_PATH = "index.md"
 MIN_RICH_BOOTSTRAP_FILES = 8
 REQUIRED_BOOTSTRAP_PATHS = [
@@ -225,17 +229,23 @@ def _reference_catalog(reference_dir: Path) -> tuple[str, set[str]]:
         valid_paths.add(relative_path)
         text = _read_text_file(template_file)
         frontmatter = _parse_frontmatter(text)
-        body = re.sub(r"^---\r?\n.*?\r?\n---\r?\n?", "", text, flags=re.DOTALL).strip()
-        excerpt = " ".join(body.split())[:500]
+        raw_kw = frontmatter.get("keywords", [])
+        keywords: list[str] = []
+        if isinstance(raw_kw, list):
+            keywords = [str(k).strip() for k in raw_kw if str(k).strip()][:12]
+        # Never embed template body prose here — excerpts biased models toward the reference
+        # product ("AI Brain") instead of the user's GitHub uploads and Google Workspace imports.
         entries.append(
             json.dumps(
                 {
                     "path": relative_path,
-                    "title": frontmatter.get("title", ""),
                     "type": frontmatter.get("type", ""),
                     "importance": frontmatter.get("importance", ""),
-                    "keywords": frontmatter.get("keywords", []),
-                    "purpose_hint": excerpt,
+                    "keywords": keywords,
+                    "note": (
+                        "Structural template only: reuse YAML keys, heading depth, and linking style. "
+                        "Do not treat reference titles or any sample wording as facts about the user's project."
+                    ),
                 },
                 ensure_ascii=True,
             )
@@ -315,19 +325,19 @@ def _coerce_file_plan(item: object, valid_paths: set[str]) -> BrainFilePlan | No
 
 def _required_plan(path: str, valid_paths: set[str]) -> BrainFilePlan:
     titles = {
-        "index.md": "Brain Index",
-        "map.md": "Brain Map",
-        "summaries/project_summary.md": "Project Summary",
+        "index.md": "Knowledge index",
+        "map.md": "Topic link map",
+        "summaries/project_summary.md": "Project summary",
     }
     purposes = {
-        "index.md": "Entry point that links every generated context node.",
-        "map.md": "Visual knowledge map of the generated brain.",
-        "summaries/project_summary.md": "Shortest useful source-grounded summary.",
+        "index.md": "Entry point linking all generated notes about the user's project.",
+        "map.md": "Mermaid or linked overview of the user's project topics and files.",
+        "summaries/project_summary.md": "Shortest factual summary of the user's repos, uploads, and imports only.",
     }
     return BrainFilePlan(
         path=path,
         title=titles.get(path, Path(path).stem.replace("_", " ").replace("-", " ").title()),
-        purpose=purposes.get(path, "Required source-grounded brain file."),
+        purpose=purposes.get(path, "Required documentation file grounded in user sources."),
         template_path=path if path in valid_paths else "",
         links=tuple(required for required in REQUIRED_BOOTSTRAP_PATHS if required != path),
     )
@@ -351,28 +361,45 @@ def _plan_brain_files(
 
     minimum_files = min(max_files, MIN_RICH_BOOTSTRAP_FILES)
     system = SystemMessage(
-        "You design a compact, source-grounded Markdown brain (few files, strong links) from uploaded source documents. "
-        "The uploaded source is the only source of truth. The reference catalog is only "
-        "a style/schema example, not content to copy. Return only JSON."
+        "You plan interlinked Markdown files for an **enterprise knowledge brain**: canonical, source-grounded context "
+        "so many AI agents (engineering, GTM, finance, etc.) can align on facts, decisions, and guardrails. "
+        "Infer which **business functions** matter from INITIAL PROMPT + SOURCE DOCUMENTS only. "
+        "The subject is the customer's organization and work—not a product named 'AI Brain', 'Brian', or this tool. "
+        "The reference catalog is layout/schema only, not factual content. Return only JSON."
     )
     user = HumanMessage(
-        f"""Plan the Markdown files for a new working brain.
+        f"""Plan the Markdown files for this working brain from the sources below.
 
-Rules:
+## Enterprise structure (required pattern)
 - Always include `index.md`, `map.md`, and `summaries/project_summary.md`.
-- Build a **small, coherent** brain: at least {minimum_files} files and at most {max_files} files. Prefer **depth over breadth**: put most repo-specific content under **one** `projects/<slug>/` hub (e.g. overview, architecture, data_model, timeline, open_questions) rather than many parallel top-level folders.
-- Add `architecture/system_context.md` only when it clarifies boundaries; add `decisions/ADR-*.md` only when the source supports real decisions. Do **not** invent scattered roots like `compliance/`, `customers/`, `observability/`, `platform/`, `stakeholders/` unless those topics are clearly in the source.
-- If you need extra files beyond the project hub, use **one** extra shallow area (e.g. `context/` or `requirements/`) with 1-2 files, not a dozen new top-level domains.
-- File paths must be **specific to the uploaded context**. You may use catalog paths when they fit, or create nested paths under `projects/...`, `concepts/...`, `requirements/...`, etc., only when justified by the source.
-- Use `template_path` only when a reference file is structurally helpful. Leave it empty for custom source-specific files.
-- Do NOT include Brian, AI Brain, Next.js, FastAPI, GitHub, Slack, Postgres, pgvector, OpenAI, or local demo mode unless those exact ideas appear in the uploaded source or initial prompt.
-- Do NOT create integrations, architecture, or coding-agent files unless the source actually discusses those concepts.
-- Every planned file must include 1-3 short `evidence` bullets copied or tightly paraphrased from the uploaded source.
-- Prefer source-specific concepts, entities, workflows, decisions, constraints, risks, questions, and relationships over generic template categories.
-- Make the graph query-efficient: related files should link to their local overview file, the local overview should link to important child files, and cross-domain relationships should be represented in `links`.
-- In every file plan, `links` must list 2-6 related planned file paths or ids that should connect in the final graph. Use paths from this same planned file set.
-- Return JSON exactly like:
-  {{"files": [{{"path": "index.md", "title": "Brain Index", "purpose": "Entry point", "template_path": "index.md", "evidence": ["source-backed point"], "links": ["summaries/project_summary.md"]}}], "rationale": "short reason"}}
+- Use **parallel domain hubs** under `context/<slug>/` where `<slug>` is a lowercase hyphenated function or facet **evidenced by sources** (examples you may use only when applicable: engineering, product, design, marketing, sales, finance, legal, security, operations, people, customer-success).
+- Each active domain MUST include `context/<slug>/overview.md` as the hub. Add 0–2 additional files under that domain (e.g. `metrics.md`, `risks.md`, `roadmap.md`) only when SOURCE DOCUMENTS support them.
+- When **GitHub repos** are primary technical sources, also use `projects/<repo-slug>/` for repo-specific depth (overview, architecture, data_model, timeline, open_questions) **in addition to** `context/engineering` (or similar) if engineering content exists—do not collapse everything into a single folder if sources span business + engineering.
+- When sources are **narrowly one codebase** and there is no marketing/finance/etc. material, it is OK to plan **one** strong technical hub (e.g. `projects/<slug>/` + optional `context/engineering/overview.md`)—do **not** invent empty marketing/finance trees.
+- Allocate roughly **2–6** domain hubs when imports are clearly multi-aspect (e.g. Docs + Sheets + repo); **1–2** when sources are thin or purely technical.
+- Optional spine when sources discuss policy, risk, or agent behavior: `meta/using_this_brain.md` and/or `governance/agent_guardrails.md` (one file each at most).
+- `summaries/project_summary.md` must read as a **cross-functional snapshot**: org/initiative identity, what agents must know first, and pointers to each planned `context/*/overview.md` hub—every claim backed by evidence.
+- `index.md` must link to the spine, summary, map, each `context/*/overview.md`, and important `projects/*` overviews.
+
+## Grounding and anti-hallucination
+- Every planned file needs 1–3 `evidence` bullets quoted or tightly paraphrased from SOURCE DOCUMENTS or INITIAL PROMPT.
+- If a function is **weakly** evidenced, plan a **short** overview plus open questions—no fabricated metrics, revenue, or headcount.
+- Do NOT name or describe Brian, AI Brain, this bootstrap tool, or demo-stack trivia unless those exact ideas appear in SOURCE DOCUMENTS or INITIAL PROMPT.
+
+## Graph / linking
+- Every file plan's `links` lists **2–6** related paths from the same plan set. Link **across domains** where dependencies exist (e.g. product roadmap ↔ engineering architecture ↔ finance assumptions).
+- Use `template_path` only when a reference path helps structure; otherwise leave empty.
+
+## Output shape
+- Return JSON with:
+  - `"context_domains"`: optional array of `{{"slug": "engineering", "rationale": "one line why sources justify this hub"}}` for each domain hub you create (omit if none).
+  - `"files"`: array of file plans.
+  - `"rationale"`: short string.
+- Example line (abbreviated):
+  {{"context_domains": [{{"slug": "engineering", "rationale": "GitHub repo excerpts"}}], "files": [{{"path": "index.md", "title": "Knowledge index", "purpose": "Entry point; links all context domains for agents", "template_path": "index.md", "evidence": ["source-backed point"], "links": ["summaries/project_summary.md", "context/engineering/overview.md"]}}], "rationale": "…"}}
+
+## Budget
+- Plan at least {minimum_files} files and at most {max_files} files total.
 
 INITIAL PROMPT:
 ```text
@@ -404,6 +431,10 @@ SOURCE DOCUMENTS:
     files = parsed.get("files") if isinstance(parsed, dict) else None
     if not isinstance(files, list):
         raise ValueError("Brain-plan JSON must include a files list")
+
+    ctx_dom = parsed.get("context_domains") if isinstance(parsed, dict) else None
+    if isinstance(ctx_dom, list) and ctx_dom:
+        _log_bootstrap(f"context_domains={ctx_dom!r}")
 
     plans: list[BrainFilePlan] = []
     for required_path in REQUIRED_BOOTSTRAP_PATHS:
@@ -482,7 +513,7 @@ def _ensure_index_links(content: str, selected_paths: list[str]) -> str:
     if not missing:
         return content
 
-    lines = [content.rstrip(), "", "## Generated Brain Files", ""]
+    lines = [content.rstrip(), "", "## Generated documentation files", ""]
     lines.extend(f"- [{path}]({path})" for path in missing)
     return "\n".join(lines) + "\n"
 
@@ -579,28 +610,40 @@ def _generate_file_batch(
     )
 
     system = SystemMessage(
-        "You create Markdown project-brain files from raw source documents. "
-        "The source documents are the only factual authority. Reference templates are "
-        "format examples only. Return only valid JSON with generated file contents."
+        "You write Markdown for an **enterprise knowledge brain**: source-grounded context so **multiple AI agents** "
+        "(coding, GTM, finance, design, etc.) share one canonical picture. "
+        "Each file should make clear **which decisions it informs**, **which agent roles rely on it**, and **how it links** to other domains. "
+        "Facts come only from SOURCE DOCUMENTS + INITIAL PROMPT—not from template bodies or a generic 'AI Brain' product. "
+        "Templates are YAML/heading patterns only. Return only valid JSON with generated file contents."
     )
     user = HumanMessage(
-        f"""Create these Markdown files for a new working brain: {", ".join(batch_paths)}.
+        f"""Create these Markdown files: {", ".join(batch_paths)}.
 
-Use the supplied file plan for each file's title, purpose, and source evidence.
+For **context/<domain>/** files: after frontmatter, include a short **## Audience** line naming agent or human roles that should read this (e.g. engineering agents, finance review agents)—only roles justified by the file purpose and sources.
+For **governance/** or **meta/** files: emphasize guardrails, uncertainty, and what agents must not assume without human confirmation.
+
+Use each file plan's title, purpose, and `source_evidence`.
 Use templates only for frontmatter style, heading style, and organization hints.
-Never copy Brian/sample-specific facts from a template.
-Never mention Brian, AI Brain, Next.js, FastAPI, GitHub, Slack, Discord, Postgres, pgvector, OpenAI, or local demo mode unless those facts appear in SOURCE DOCUMENTS or INITIAL PROMPT.
+Never copy prose, product names, or stack claims from a template file body.
+Never mention Brian, AI Brain, this documentation tool, or stack trivia unless those facts appear in SOURCE DOCUMENTS or INITIAL PROMPT.
 Every factual statement must be supported by SOURCE DOCUMENTS or INITIAL PROMPT.
-If a file's area is under-specified, write a concise source-grounded note plus open questions instead of inventing details.
+If under-specified, write a concise source-grounded note plus `## Open questions`—no invented metrics.
+
 Preserve useful YAML keys when possible:
 id, type, title, status, importance, updated, links, keywords.
 Use `{date.today().isoformat()}` only if the template has an updated field.
-Keep links limited to these selected files, and omit links to uncreated files: {", ".join(selected_paths) or "(none)"}
-Use each file plan's `planned_links` as the default frontmatter `links` for that file, plus any obviously related selected files.
-For frontmatter links, prefer exact selected file paths such as `projects/scootal/architecture.md`; ids are also allowed, but paths are safer.
-If creating `index.md`, treat it as the mandatory entry point and include Markdown links to every other selected file.
-If creating `map.md`, make the graph reflect the selected files and their real source-grounded relationships.
-Include a section named `## Source Evidence` in every non-index file with bullets from the file plan and/or SOURCE DOCUMENTS.
+Keep links limited to these selected files: {", ".join(selected_paths) or "(none)"}
+Use each file plan's `planned_links` as the default frontmatter `links`, plus clearly related selected paths.
+Prefer exact paths such as `context/engineering/overview.md` and `projects/my-repo/overview.md`.
+
+If creating `index.md`: mandatory entry point; include a **## Context domains** section with links to every `context/*/overview.md` in the selected set; link `map.md`, `summaries/project_summary.md`, and key `projects/*` overviews; frame the brain as shared context for AI-assisted work **for this organization**.
+If creating `map.md`: show **functions and dependencies** (Mermaid flowchart or grouped bullet graph)—marketing → product → engineering, finance ↔ roadmap, etc.—grounded in sources, not only a repo file tree.
+If creating `summaries/project_summary.md`: cross-functional executive snapshot; name the org/initiative from sources; bullet **what agents must know first**; link each context domain overview; never "AI Brain" unless sources say so.
+
+Include `## Source Evidence` in every non-index file with bullets from the file plan and/or SOURCE DOCUMENTS.
+
+Return ONE complete JSON object (no markdown fences). In each `content` string use JSON escapes for newlines (\\n) only—no raw line breaks inside the string.
+The JSON must be **complete and valid** so `json.loads` succeeds: if you are near the output limit, shorten sections rather than stopping mid-string.
 
 Return JSON exactly like:
 {{"files": [{{"path": "index.md", "content": "---\\n...complete markdown...\\n"}}]}}
@@ -663,6 +706,49 @@ SOURCE DOCUMENTS:
     return generated
 
 
+def _generate_file_batch_resilient(
+    model: object,
+    reference_dir: Path,
+    batch_plans: list[BrainFilePlan],
+    source_digest: str,
+    initial_prompt: str,
+    selected_paths: list[str],
+) -> dict[str, str]:
+    """Generate a batch of files; on truncated/invalid JSON, split the batch and retry."""
+    try:
+        return _generate_file_batch(
+            model,
+            reference_dir,
+            batch_plans,
+            source_digest,
+            initial_prompt,
+            selected_paths,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        retryable = "valid batch-generation JSON" in msg or "omitted files" in msg
+        if not retryable or len(batch_plans) <= 1:
+            raise
+        mid = max(1, len(batch_plans) // 2)
+        first, second = batch_plans[:mid], batch_plans[mid:]
+        _log_bootstrap(
+            f"batch generation retry: splitting {len(batch_plans)} files into "
+            f"{len(first)} + {len(second)} (was: {msg[:120]}…)"
+        )
+        merged: dict[str, str] = {}
+        merged.update(
+            _generate_file_batch_resilient(
+                model, reference_dir, first, source_digest, initial_prompt, selected_paths
+            )
+        )
+        merged.update(
+            _generate_file_batch_resilient(
+                model, reference_dir, second, source_digest, initial_prompt, selected_paths
+            )
+        )
+        return merged
+
+
 def create_brain_from_documents_streaming(
     documents: Iterable[DocumentInput],
     *,
@@ -676,9 +762,8 @@ def create_brain_from_documents_streaming(
     """
     Create a source-grounded working brain and yield writer progress events.
 
-    `brian/` is used as schema and style guidance only. The generated working brain
-    should be dynamically planned from the uploaded context and must not inherit
-    unsupported Brian-specific facts.
+    The reference brain directory is schema/style guidance only. Output Markdown must
+    document the user's supplied sources and must not inherit sample product facts.
     """
 
     s = settings or load_settings(validate=True)
@@ -698,8 +783,9 @@ def create_brain_from_documents_streaming(
     _prepare_output_tree(ref, out, overwrite=overwrite)
     _log_bootstrap(f"prepared output tree reference={ref} output={out}")
 
-    model = make_chat_model(s)
-    file_plans = _plan_brain_files(model, ref, source_digest, initial_prompt, max_files)
+    plan_model = make_chat_model(s, max_tokens=BOOTSTRAP_PLAN_MAX_TOKENS)
+    write_model = make_chat_model(s, max_tokens=BOOTSTRAP_GENERATION_MAX_TOKENS)
+    file_plans = _plan_brain_files(plan_model, ref, source_digest, initial_prompt, max_files)
     selected_paths = [plan.path for plan in file_plans]
     written: dict[str, str] = {}
 
@@ -728,8 +814,8 @@ def create_brain_from_documents_streaming(
         _log_bootstrap(f"starting batch {batch_index}/{len(batches)}")
         return (
             batch_index,
-            _generate_file_batch(
-                model,
+            _generate_file_batch_resilient(
+                write_model,
                 ref,
                 batch_plans,
                 source_digest,
