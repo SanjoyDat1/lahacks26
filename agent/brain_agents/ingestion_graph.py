@@ -1039,7 +1039,17 @@ def run_update_streaming(
     # Invalidate retrieval index once after all ops
     if touched:
         try:
+            yield _event(
+                "index_invalidate",
+                label="Retrieval cache invalidated",
+                brain_root=str(resolve_brain_root(s)),
+            )
             retrieval_service.invalidate(resolve_brain_root(s))
+            yield _event(
+                "index_invalidated",
+                label="Retrieval cache cleared",
+                brain_root=str(resolve_brain_root(s)),
+            )
         except (OSError, TypeError):
             pass
 
