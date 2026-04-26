@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
@@ -25,6 +24,11 @@ import {
   X,
 } from "lucide-react";
 
+import {
+  buildGhostScaffoldFiles,
+  chunkGhostBatches,
+  parseRepoSlugFromUrl,
+} from "@/lib/brain/bootstrap-scaffold";
 import { githubReposForApi, type GithubRepoFormRow } from "@/lib/brain/github-ingest";
 import { cn } from "@/lib/utils";
 
@@ -74,6 +78,8 @@ type CreatedFile = {
   preview?: string;
   status: "planned" | "writing" | "done";
   links?: string[];
+  /** Predicted layout while GitHub POST is in flight; replaced by real files on response. */
+  isGhost?: boolean;
 };
 
 type BootstrapEvent =
@@ -167,7 +173,6 @@ const INITIAL_EDGES: GraphEdge[] = [
 ];
 
 export function SessionStartPage() {
-  const router = useRouter();
   const [docs, setDocs] = useState<UploadDoc[]>([]);
   const [githubRepos, setGithubRepos] = useState<GithubRepoFormRow[]>(() => [newGithubRepoRow()]);
   const prompt =
@@ -246,12 +251,6 @@ export function SessionStartPage() {
   useEffect(() => {
     thinkingEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thinking]);
-
-  useEffect(() => {
-    if (!isDone) return;
-    const timer = setTimeout(() => router.push("/brain"), 1600);
-    return () => clearTimeout(timer);
-  }, [isDone, router]);
 
   const resetRun = useCallback(() => {
     cleanupRestBootstrap();
@@ -464,6 +463,41 @@ export function SessionStartPage() {
         });
       });
 
+      const slug = parseRepoSlugFromUrl(githubApiList[0]?.repo_url ?? "");
+      const ghostScaffold = buildGhostScaffoldFiles(slug);
+      const ghostBatches = chunkGhostBatches(ghostScaffold, 4);
+      scheduleRest(350, () => {
+        if (restFetchDoneRef.current) return;
+        setThinking((prev) => [
+          ...prev,
+          "Laying out the brain directory scaffold—watch files and cross-links appear while the server still works.",
+        ]);
+      });
+      let ghostT = 520;
+      for (const batch of ghostBatches) {
+        for (const g of batch) {
+          const path = g.path;
+          const links = g.links;
+          const title = g.title;
+          scheduleRest(ghostT, () => {
+            if (restFetchDoneRef.current) return;
+            setCreatedFiles((prev) =>
+              upsertFile(prev, { path, title, status: "planned", links, isGhost: true }),
+            );
+          });
+          scheduleRest(ghostT + 85, () => {
+            if (restFetchDoneRef.current) return;
+            setCreatedFiles((prev) => upsertFile(prev, { path, status: "writing", links, isGhost: true }));
+          });
+          scheduleRest(ghostT + 175, () => {
+            if (restFetchDoneRef.current) return;
+            setCreatedFiles((prev) => upsertFile(prev, { path, title, status: "done", links, isGhost: true }));
+          });
+          ghostT += 200;
+        }
+        ghostT += 90;
+      }
+
       restProgressIntervalRef.current = window.setInterval(() => {
         if (restFetchDoneRef.current) return;
         setRestProgress((p) => Math.min(90, p + 0.35 + Math.random() * 0.9));
@@ -478,7 +512,7 @@ export function SessionStartPage() {
               prompt,
               github_repos: githubApiList,
               overwrite: true,
-              max_files: 24,
+              max_files: 20,
               apply: true,
               clone_timeout_s: 300,
             }),
@@ -496,6 +530,7 @@ export function SessionStartPage() {
           if (!res.ok) {
             setRestProgress(0);
             setGithubRestPipeline(false);
+            setCreatedFiles([]);
             setError(formatInitializeErrorDetail(raw, res.status));
             setIsRunning(false);
             setStage("upload");
@@ -504,6 +539,10 @@ export function SessionStartPage() {
           }
 
           const written = Array.isArray(raw.written_files) ? raw.written_files : [];
+          const writtenSet = new Set(written);
+          if (written.length > 0) {
+            setCreatedFiles((prev) => prev.filter((f) => !f.isGhost || writtenSet.has(f.path)));
+          }
           setRestProgress(96);
           setStage("write");
           setStageLabel("Materializing brain files on the canvas…");
@@ -517,15 +556,17 @@ export function SessionStartPage() {
           for (const path of written) {
             const rel = path;
             scheduleRest(delay, () => {
-              setCreatedFiles((prev) => [...prev, { path: rel, title: rel.split("/").pop(), status: "planned" }]);
+              setCreatedFiles((prev) =>
+                upsertFile(prev, { path: rel, title: rel.split("/").pop(), status: "planned", isGhost: false }),
+              );
             });
             delay += step;
             scheduleRest(delay, () => {
-              setCreatedFiles((prev) => prev.map((f) => (f.path === rel ? { ...f, status: "writing" } : f)));
+              setCreatedFiles((prev) => upsertFile(prev, { path: rel, status: "writing", isGhost: false }));
             });
             delay += step;
             scheduleRest(delay, () => {
-              setCreatedFiles((prev) => prev.map((f) => (f.path === rel ? { ...f, status: "done" } : f)));
+              setCreatedFiles((prev) => upsertFile(prev, { path: rel, status: "done", isGhost: false }));
             });
             delay += step + 35;
           }
@@ -559,6 +600,7 @@ export function SessionStartPage() {
           }
           setRestProgress(0);
           setGithubRestPipeline(false);
+          setCreatedFiles([]);
           setError(e instanceof Error ? e.message : "Initialize request failed");
           setIsRunning(false);
           setStage("upload");
@@ -598,7 +640,7 @@ export function SessionStartPage() {
         github_repos: githubApiList,
         clone_timeout_s: 300,
         overwrite: true,
-        max_files: 24,
+        max_files: 20,
       }));
     };
 
@@ -839,14 +881,25 @@ export function SessionStartPage() {
                       <p className="text-xs text-slate-500">Directories, markdown nodes, and retrieval links appear as the agent builds them</p>
                     </div>
                   </div>
-                  <div className={cn(
-                    "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold",
-                    isDone
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                      : "border-violet-200 bg-violet-50 text-violet-700",
-                  )}>
-                    {isDone ? <CheckCircle2 size={12} /> : <Loader2 size={12} className="animate-spin" />}
-                    {isDone ? "Ready" : "Building"}
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <div className={cn(
+                      "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold",
+                      isDone
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                        : "border-violet-200 bg-violet-50 text-violet-700",
+                    )}>
+                      {isDone ? <CheckCircle2 size={12} /> : <Loader2 size={12} className="animate-spin" />}
+                      {isDone ? "Ready" : "Building"}
+                    </div>
+                    {isDone && (
+                      <Link
+                        href="/brain"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                      >
+                        <Brain size={12} />
+                        View brain map
+                      </Link>
+                    )}
                   </div>
                 </div>
                 <BootstrapLiveGraph files={createdFiles} isRunning={isRunning} />
@@ -1032,18 +1085,20 @@ function BootstrapLiveGraph({
     }
   }
 
-  const visible = files.slice(0, 24);
-  const doneCount = visible.filter((f) => f.status === "done").length;
+  const visible = files.slice(0, 28);
+  const doneCount = visible.filter((f) => f.status === "done" && !f.isGhost).length;
   const dirSet = new Set(visible.map((f) => directoryOf(f.path)));
-  const dirNames = Array.from(dirSet);
+  const dirNames = Array.from(dirSet).sort((a, b) => {
+    if (a === "brain") return -1;
+    if (b === "brain") return 1;
+    return a.localeCompare(b);
+  });
 
-  const W = 920;
+  const VIEW_MIN = 920;
   const BRAIN_Y = 48;
-  const DIR_Y = 155;
-  const FILE_Y0 = 270;
-  const FILE_ROW = 62;
-  const PAD = 80;
-  const COL_GAP = 90;
+  const DIR_Y = 158;
+  const FILE_Y0 = 272;
+  const FILE_ROW = 76;
 
   const NODE_STAGGER = 0.35;
   const DIR_STAGGER = 0.5;
@@ -1051,14 +1106,7 @@ function BootstrapLiveGraph({
   const POP_DUR = 0.7;
   const DRAW_DUR = 0.8;
 
-  const dirX = new Map<string, number>();
-  if (dirNames.length <= 1) {
-    dirNames.forEach((d) => dirX.set(d, W / 2));
-  } else {
-    const span = W - PAD * 2;
-    const gap = span / (dirNames.length - 1);
-    dirNames.forEach((d, i) => dirX.set(d, PAD + i * gap));
-  }
+  const { width: W, dirX, pillHalfW } = layoutBootstrapDirectoryRow(dirNames, VIEW_MIN);
 
   const byDir = new Map<string, CreatedFile[]>();
   for (const f of visible) {
@@ -1070,6 +1118,18 @@ function BootstrapLiveGraph({
   const dirOrder = new Map<string, number>();
   dirNames.forEach((d, i) => dirOrder.set(d, i));
 
+  function fileGridCols(n: number): number {
+    if (n <= 6) return 1;
+    if (n <= 14) return 2;
+    return 3;
+  }
+
+  function fileColGap(cols: number): number {
+    if (cols <= 1) return 0;
+    if (cols === 2) return 96;
+    return 82;
+  }
+
   type FNode = { file: CreatedFile; x: number; y: number; order: number };
   const fnodes: FNode[] = [];
   let order = 0;
@@ -1078,25 +1138,42 @@ function BootstrapLiveGraph({
     const cx = dirX.get(d) ?? W / 2;
     const sibs = byDir.get(d)!;
     const si = sibs.indexOf(f);
-    const cols = sibs.length > 4 ? 2 : 1;
+    const cols = fileGridCols(sibs.length);
+    const colGap = fileColGap(cols);
     const col = si % cols;
     const row = Math.floor(si / cols);
-    const x = cx + (col - (cols - 1) / 2) * COL_GAP;
+    const x = cx + (col - (cols - 1) / 2) * colGap;
     const y = FILE_Y0 + row * FILE_ROW;
     fnodes.push({ file: f, x, y, order: order++ });
   }
 
+  const posByPath = new Map<string, FNode>(fnodes.map((fn) => [fn.file.path, fn]));
+  const crossLinks: { from: FNode; to: FNode; ghostly: boolean }[] = [];
+  const linkSeen = new Set<string>();
+  for (const fn of fnodes) {
+    for (const tp of fn.file.links ?? []) {
+      const toNode = posByPath.get(tp);
+      if (!toNode) continue;
+      const a = fn.file.path;
+      const b = toNode.file.path;
+      const key = a < b ? `${a}\0${b}` : `${b}\0${a}`;
+      if (linkSeen.has(key)) continue;
+      linkSeen.add(key);
+      crossLinks.push({ from: fn, to: toNode, ghostly: Boolean(fn.file.isGhost || toNode.file.isGhost) });
+    }
+  }
+
   let maxRows = 1;
   byDir.forEach((children) => {
-    const c = children.length > 4 ? 2 : 1;
+    const c = fileGridCols(children.length);
     maxRows = Math.max(maxRows, Math.ceil(children.length / c));
   });
-  const H = Math.max(440, FILE_Y0 + maxRows * FILE_ROW + 50);
+  const H = Math.max(480, FILE_Y0 + maxRows * FILE_ROW + 64);
 
   const hasBrain = visible.length > 0;
 
   return (
-    <div className="relative min-h-0 flex-1 overflow-hidden rounded-[1.75rem] border border-slate-200/60 bg-gradient-to-b from-slate-50 to-white">
+    <div className="relative min-h-0 flex-1 overflow-x-auto overflow-y-hidden rounded-[1.75rem] border border-slate-200/60 bg-gradient-to-b from-slate-50 to-white">
       <div className="pointer-events-none absolute inset-0 opacity-[.18] [background-image:radial-gradient(circle,rgba(148,163,184,.18)_1px,transparent_1px)] [background-size:22px_22px]" />
 
       <div className="pointer-events-none absolute left-4 top-4 z-10 flex gap-2">
@@ -1105,7 +1182,7 @@ function BootstrapLiveGraph({
         </span>
         {doneCount > 0 && (
           <span className="rounded-full border border-emerald-200 bg-emerald-50/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-700 shadow-sm backdrop-blur">
-            {doneCount} linked
+            {doneCount} materialized
           </span>
         )}
       </div>
@@ -1152,10 +1229,13 @@ function BootstrapLiveGraph({
               const dx = dirX.get(d)!;
               const midY = (BRAIN_Y + DIR_Y) / 2 + 12;
               const delay = 0.3 + i * DIR_STAGGER;
+              const pull = (dx - W / 2) * 0.22;
+              const c1x = W / 2 + pull;
+              const c2x = dx - pull * 0.35;
               return (
                 <path
                   key={`br-${d}`}
-                  d={`M${W / 2},${BRAIN_Y + 22} C${W / 2},${midY} ${dx},${midY} ${dx},${DIR_Y - 18}`}
+                  d={`M${W / 2},${BRAIN_Y + 22} C${c1x},${midY} ${c2x},${midY} ${dx},${DIR_Y - 18}`}
                   fill="none"
                   stroke="#c7d2fe"
                   strokeWidth="1.5"
@@ -1168,13 +1248,15 @@ function BootstrapLiveGraph({
             {/* directory nodes */}
             {dirNames.map((d, i) => {
               const dx = dirX.get(d)!;
-              const w = Math.max(80, d.length * 8 + 28);
+              const hw = pillHalfW.get(d) ?? Math.max(40, d.length * 5.6 + 24);
+              const w = hw * 2;
               const delay = 0.4 + i * DIR_STAGGER;
               return (
                 <g key={`d-${d}`} className="cg-pop" style={{ animationDelay: `${delay}s` }}>
-                  <rect x={dx - w / 2} y={DIR_Y - 16} width={w} height="32" rx="10" fill="white" stroke="#a5b4fc" strokeWidth="1.4" />
+                  <title>{`${d}/`}</title>
+                  <rect x={dx - hw} y={DIR_Y - 16} width={w} height="32" rx="10" fill="white" stroke="#a5b4fc" strokeWidth="1.4" />
                   <text x={dx} y={DIR_Y + 5} textAnchor="middle" fontSize="10" fontWeight="700" fontFamily="ui-sans-serif,system-ui,sans-serif" fill="#4338ca">
-                    {d}
+                    {d.length > 18 ? `${d.slice(0, 16)}\u2026` : d}
                   </text>
                 </g>
               );
@@ -1186,6 +1268,7 @@ function BootstrapLiveGraph({
               const dx = dirX.get(d) ?? W / 2;
               const done = file.status === "done";
               const writ = file.status === "writing";
+              const ghost = file.isGhost === true;
               const dIdx = dirOrder.get(d) ?? 0;
               const baseDelay = 0.6 + dIdx * DIR_STAGGER;
               const delay = baseDelay + o * LINK_STAGGER;
@@ -1196,11 +1279,38 @@ function BootstrapLiveGraph({
                   y1={DIR_Y + 18}
                   x2={x}
                   y2={y - 14}
-                  stroke={done ? "#86efac" : writ ? "#c4b5fd" : "#e2e8f0"}
+                  stroke={ghost ? "#ddd6fe" : done ? "#86efac" : writ ? "#c4b5fd" : "#e2e8f0"}
                   strokeWidth={writ ? 1.8 : 1.2}
-                  strokeDasharray={done ? "none" : "5 5"}
+                  strokeDasharray={ghost ? "4 4" : done ? "none" : "5 5"}
+                  opacity={ghost ? 0.65 : 1}
                   className={writ ? "cg-flow" : "cg-draw"}
                   style={!writ ? { animationDelay: `${delay}s` } : undefined}
+                />
+              );
+            })}
+
+            {crossLinks.map(({ from, to, ghostly }, li) => {
+              const { x: x1, y: y1 } = from;
+              const { x: x2, y: y2 } = to;
+              const dx = x2 - x1;
+              const dy = y2 - y1;
+              const dist = Math.hypot(dx, dy) || 1;
+              const off = Math.min(36, 14 + dist * 0.08);
+              const midX = (x1 + x2) / 2 - (dy / dist) * off;
+              const midY = (y1 + y2) / 2 + (dx / dist) * off * 0.55;
+              const delay = 0.82 + li * 0.035;
+              return (
+                <path
+                  key={`xlink-${from.file.path}-${to.file.path}`}
+                  d={`M${x1},${y1} Q${midX},${midY} ${x2},${y2}`}
+                  fill="none"
+                  stroke={ghostly ? "#c4b5fd" : "#34d399"}
+                  strokeWidth={ghostly ? 1 : 1.25}
+                  strokeDasharray={ghostly ? "5 4" : "7 4"}
+                  opacity={ghostly ? 0.5 : 0.78}
+                  strokeLinecap="round"
+                  className="cg-draw"
+                  style={{ animationDelay: `${delay}s` }}
                 />
               );
             })}
@@ -1210,37 +1320,41 @@ function BootstrapLiveGraph({
               const writ = file.status === "writing";
               const done = file.status === "done";
               const planned = file.status === "planned";
+              const ghost = file.isGhost === true;
               const special = file.path === "index.md" || file.path === "map.md";
               const r = special ? 14 : 11;
-              const name = file.path.split("/").pop()?.replace(".md", "") ?? "";
+              const baseName = file.path.split("/").pop()?.replace(/\.mdx?$/i, "") ?? "";
+              const name = truncateFileLabel(baseName, 17);
               const d = directoryOf(file.path);
               const dIdx = dirOrder.get(d) ?? 0;
               const baseDelay = 0.7 + dIdx * DIR_STAGGER;
               const delay = baseDelay + o * NODE_STAGGER;
               return (
-                <g key={file.path} className="cg-pop" style={{ animationDelay: `${delay}s` }}>
+                <g key={file.path} className="cg-pop" style={{ animationDelay: `${delay}s`, opacity: ghost ? 0.82 : 1 }}>
+                  <title>{file.path}</title>
                   {writ && (
                     <circle cx={x} cy={y} r="22" fill="none" stroke="#8b5cf6" strokeWidth="1.5" className="cg-ring" opacity="0.3" />
                   )}
                   <circle
                     cx={x} cy={y} r={r}
-                    fill={done ? "#ecfdf5" : writ ? "#f5f3ff" : planned ? "#fafafe" : "#f8fafc"}
-                    stroke={special ? "#fbbf24" : done ? "#34d399" : writ ? "#a78bfa" : "#cbd5e1"}
+                    fill={ghost ? (done ? "#f5f3ff" : writ ? "#faf5ff" : "#fafafe") : done ? "#ecfdf5" : writ ? "#f5f3ff" : planned ? "#fafafe" : "#f8fafc"}
+                    stroke={special ? "#fbbf24" : ghost ? "#a78bfa" : done ? "#34d399" : writ ? "#a78bfa" : "#cbd5e1"}
                     strokeWidth={writ ? 2.2 : 1.5}
+                    strokeDasharray={ghost ? "3 3" : undefined}
                   />
                   <circle
                     cx={x} cy={y} r="3"
-                    fill={special ? "#f59e0b" : done ? "#10b981" : writ ? "#8b5cf6" : "#94a3b8"}
+                    fill={special ? "#f59e0b" : ghost ? "#8b5cf6" : done ? "#10b981" : writ ? "#8b5cf6" : "#94a3b8"}
                   />
                   <text
-                    x={x} y={y + r + 14}
+                    x={x} y={y + r + 15}
                     textAnchor="middle" fontSize="8" fontWeight="600"
                     fontFamily="ui-monospace,SFMono-Regular,monospace"
                     className="cg-fade"
                     style={{ animationDelay: `${delay + 0.15}s` }}
-                    fill={done ? "#059669" : writ ? "#6d28d9" : "#64748b"}
+                    fill={ghost ? "#7c3aed" : done ? "#059669" : writ ? "#6d28d9" : "#64748b"}
                   >
-                    {name.length > 14 ? name.slice(0, 13) + "\u2026" : name}
+                    {name}
                   </text>
                 </g>
               );
@@ -1291,7 +1405,47 @@ function GraphWaitingPlaceholder({ isRunning }: { isRunning: boolean }) {
   );
 }
 
+function pathsToVirtualTree(paths: string[]): BrainTreeNode[] {
+  const uniq = [...new Set(paths)].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  const rootChildren: BrainTreeNode[] = [];
+  for (const path of uniq) {
+    const segments = path.split("/").filter(Boolean);
+    let parentList = rootChildren;
+    let acc = "";
+    for (let i = 0; i < segments.length; i++) {
+      const seg = segments[i]!;
+      acc = acc ? `${acc}/${seg}` : seg;
+      const isLeaf = i === segments.length - 1;
+      let node = parentList.find((c) => c.path === acc);
+      if (!node) {
+        node = { name: seg, path: acc, type: isLeaf ? "file" : "directory", children: isLeaf ? undefined : [] };
+        parentList.push(node);
+      }
+      if (!isLeaf) {
+        node.children = node.children ?? [];
+        parentList = node.children;
+      }
+    }
+  }
+  function sortNodes(nodes: BrainTreeNode[]) {
+    nodes.sort((a, b) => {
+      if (a.type !== b.type) return a.type === "directory" ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
+    for (const n of nodes) {
+      if (n.children?.length) sortNodes(n.children);
+    }
+  }
+  sortNodes(rootChildren);
+  return rootChildren;
+}
+
 function BrainDirectoryTree({ tree, files }: { tree: BrainTreeNode[]; files: CreatedFile[] }) {
+  const virtualTree = useMemo(() => pathsToVirtualTree(files.map((f) => f.path)), [files]);
+  const displayTree = tree.length > 0 ? tree : virtualTree;
+  const fileByPath = useMemo(() => new Map(files.map((f) => [f.path, f])), [files]);
+  const fileCount = files.filter((f) => f.path && !f.path.endsWith("/")).length;
+
   return (
     <div className="flex min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
       <div className="mb-3 flex items-center justify-between">
@@ -1299,15 +1453,19 @@ function BrainDirectoryTree({ tree, files }: { tree: BrainTreeNode[]; files: Cre
           <FolderOpen size={15} className="text-emerald-500" />
           <div>
             <h2 className="text-sm font-semibold text-slate-800">Brain Directory</h2>
-            <p className="text-xs text-slate-400">Created files appear as they are written</p>
+            <p className="text-xs text-slate-400">
+              {tree.length > 0 ? "Live snapshot from the agent" : "Built live from paths on the canvas (preview + real)"}
+            </p>
           </div>
         </div>
         <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-          {files.length} files
+          {fileCount} files
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/60 bg-slate-50/70 p-3">
-        {tree.length ? tree.map((node) => <TreeNode key={node.path} node={node} depth={0} />) : (
+        {displayTree.length ? (
+          displayTree.map((node) => <TreeNode key={node.path} node={node} depth={0} fileByPath={fileByPath} />)
+        ) : (
           <div className="flex flex-col items-center justify-center py-10 text-center text-slate-400">
             <Folder size={24} className="mb-2 opacity-40" />
             <p className="text-xs font-medium">Waiting for generated brain files</p>
@@ -1318,23 +1476,40 @@ function BrainDirectoryTree({ tree, files }: { tree: BrainTreeNode[]; files: Cre
   );
 }
 
-function TreeNode({ node, depth }: { node: BrainTreeNode; depth: number }) {
+function TreeNode({
+  node,
+  depth,
+  fileByPath,
+}: {
+  node: BrainTreeNode;
+  depth: number;
+  fileByPath: Map<string, CreatedFile>;
+}) {
+  const hint = node.type === "file" ? fileByPath.get(node.path) : undefined;
+  const ghost = hint?.isGhost === true;
+  const writing = hint?.status === "writing";
+
   return (
     <div>
       <div
         className={cn(
           "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition",
           node.type === "directory" ? "bg-amber-50/60" : "hover:bg-white/80",
+          ghost && "border border-dashed border-violet-200/90 bg-violet-50/40",
+          writing && "ring-1 ring-violet-400/50",
         )}
         style={{ paddingLeft: 8 + depth * 16 }}
       >
-        {node.type === "directory" ? <Folder size={13} className="text-amber-500" /> : <FileText size={13} className="text-emerald-500" />}
+        {node.type === "directory" ? <Folder size={13} className="text-amber-500" /> : <FileText size={13} className={ghost ? "text-violet-500" : "text-emerald-500"} />}
         <span className={node.type === "directory" ? "font-semibold text-slate-700" : "font-mono text-slate-600"}>
           {node.name}
         </span>
-        {node.type === "file" && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400" />}
+        {node.type === "file" && ghost && (
+          <span className="ml-auto rounded px-1 text-[9px] font-bold uppercase tracking-wide text-violet-600">preview</span>
+        )}
+        {node.type === "file" && !ghost && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400" />}
       </div>
-      {node.children?.map((child) => <TreeNode key={child.path} node={child} depth={depth + 1} />)}
+      {node.children?.map((child) => <TreeNode key={child.path} node={child} depth={depth + 1} fileByPath={fileByPath} />)}
     </div>
   );
 }
@@ -1406,15 +1581,17 @@ function CompletionBar({ resultText, onReset }: { resultText: string; onReset: (
           <CheckCircle2 size={22} className="text-emerald-600" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-800">Brain ready for the demo</p>
-          <p className="truncate text-xs text-slate-500">{resultText || "Your generated brain is ready to inspect and query."}</p>
+          <p className="text-sm font-semibold text-slate-800">Brain is ready</p>
+          <p className="truncate text-xs text-slate-500">
+            {resultText || "Stay on this screen as long as you like—open the map only when you choose."}
+          </p>
         </div>
         <button onClick={onReset} className="rounded-full border border-slate-200/70 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
           New session
         </button>
-        <Link href="/brain" className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-emerald-200/70 transition hover:bg-emerald-700">
+        <Link href="/brain" className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-emerald-200/70 transition hover:bg-emerald-700">
           <Brain size={13} />
-          Open Brain
+          View brain map
         </Link>
         <Link href="/agent" className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-violet-200/70 transition hover:bg-violet-700">
           <Cpu size={13} />
@@ -1465,6 +1642,7 @@ function upsertFile(files: CreatedFile[], next: CreatedFile) {
           title: next.title ?? file.title,
           preview: next.preview ?? file.preview,
           links: next.links ?? file.links,
+          isGhost: "isGhost" in next ? next.isGhost : file.isGhost,
         }
       : file,
   );
@@ -1473,6 +1651,53 @@ function upsertFile(files: CreatedFile[], next: CreatedFile) {
 function directoryOf(path: string) {
   const parts = path.split("/").filter(Boolean);
   return parts.length > 1 ? parts[0] : "brain";
+}
+
+/** Short label for SVG nodes; keeps more characters for mono filenames. */
+function truncateFileLabel(s: string, max = 16): string {
+  if (s.length <= max) return s;
+  const inner = max - 1;
+  const left = Math.ceil(inner / 2);
+  const right = Math.floor(inner / 2);
+  return `${s.slice(0, left)}\u2026${s.slice(s.length - right)}`;
+}
+
+/**
+ * Pack directory pills on one row with minimum gaps so rounded rects do not overlap.
+ * Returns canvas width ≥ viewMin when the row needs more horizontal space.
+ */
+function layoutBootstrapDirectoryRow(
+  dirNames: string[],
+  viewMin: number,
+): { width: number; dirX: Map<string, number>; pillHalfW: Map<string, number> } {
+  const sidePad = 44;
+  const minBetween = 16;
+  const pillPadX = 24;
+  const halfWidths = dirNames.map((d) => Math.max(40, d.length * 5.6 + pillPadX));
+  const pillHalfW = new Map<string, number>();
+  dirNames.forEach((d, i) => pillHalfW.set(d, halfWidths[i]!));
+
+  if (dirNames.length === 0) {
+    return { width: viewMin, dirX: new Map(), pillHalfW };
+  }
+  if (dirNames.length === 1) {
+    const d0 = dirNames[0]!;
+    return { width: viewMin, dirX: new Map([[d0, viewMin / 2]]), pillHalfW };
+  }
+
+  const centers: number[] = [];
+  let x = sidePad + halfWidths[0]!;
+  centers.push(x);
+  for (let i = 1; i < dirNames.length; i++) {
+    x = centers[i - 1]! + halfWidths[i - 1]! + minBetween + halfWidths[i]!;
+    centers.push(x);
+  }
+  const rawRight = centers[centers.length - 1]! + halfWidths[halfWidths.length - 1]! + sidePad;
+  const width = Math.max(viewMin, Math.ceil(rawRight + 8));
+  const shift = (width - rawRight) / 2;
+  const dirX = new Map<string, number>();
+  dirNames.forEach((d, i) => dirX.set(d, centers[i]! + shift));
+  return { width, dirX, pillHalfW };
 }
 
 function readFileAsDataUrl(file: File) {

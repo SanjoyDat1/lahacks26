@@ -45,7 +45,7 @@ class RetrievalHit:
 
 
 # Stage-1 shortlist size. Cross-encoder cost is roughly linear in this number.
-_STAGE1_TOPN = 20
+_STAGE1_TOPN = 25
 
 # Files inside this directory are "always preferred" for short queries about
 # constraints / undecided issues. They get a soft floor in the bundle even when

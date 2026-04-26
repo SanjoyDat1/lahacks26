@@ -72,7 +72,7 @@ class BootstrapStreamRequest(BaseModel):
     )
     clone_timeout_s: int = Field(default=300, ge=30, le=3_600)
     overwrite: bool = True
-    max_files: int = Field(default=24, ge=1, le=50)
+    max_files: int = Field(default=18, ge=1, le=50)
 
     @model_validator(mode="after")
     def at_least_one_source(self) -> Self:
@@ -120,7 +120,7 @@ class InitializeRequest(BaseModel):
     github_repos: list[InitializeGitHubRepoSource] = Field(default_factory=list)
     overwrite: bool = False
     max_files: int = Field(
-        default=8,
+        default=18,
         ge=1,
         le=50,
         description="Maximum number of brain Markdown files to create.",

@@ -38,11 +38,11 @@ TEXT_EXTENSIONS = {
 MAX_SOURCE_CHARS = 45_000
 MAX_TEMPLATE_CHARS = 12_000
 MAX_CATALOG_CHARS = 18_000
-DEFAULT_MAX_BOOTSTRAP_FILES = 24
+DEFAULT_MAX_BOOTSTRAP_FILES = 18
 BATCH_GENERATION_SIZE = 4
 MAX_PARALLEL_BATCHES = 3
 INDEX_PATH = "index.md"
-MIN_RICH_BOOTSTRAP_FILES = 12
+MIN_RICH_BOOTSTRAP_FILES = 8
 REQUIRED_BOOTSTRAP_PATHS = [
     "index.md",
     "map.md",
@@ -351,7 +351,7 @@ def _plan_brain_files(
 
     minimum_files = min(max_files, MIN_RICH_BOOTSTRAP_FILES)
     system = SystemMessage(
-        "You design a rich Markdown knowledge graph from uploaded source documents. "
+        "You design a compact, source-grounded Markdown brain (few files, strong links) from uploaded source documents. "
         "The uploaded source is the only source of truth. The reference catalog is only "
         "a style/schema example, not content to copy. Return only JSON."
     )
@@ -360,9 +360,10 @@ def _plan_brain_files(
 
 Rules:
 - Always include `index.md`, `map.md`, and `summaries/project_summary.md`.
-- Create a complex but relevant graph: at least {minimum_files} files and at most {max_files} files.
-- For substantial source material, prefer nested directories with 2-5 files each instead of one flat file per folder. Good examples: `projects/<project_slug>/overview.md`, `projects/<project_slug>/architecture.md`, `projects/<project_slug>/timeline.md`, `people/<person_slug>/role.md`, `requirements/<area>/constraints.md`, `risks/<area>/open_questions.md`.
-- File paths should be specific to the uploaded context. You may use catalog paths when they fit, or create new nested paths such as `concepts/...`, `people/...`, `products/...`, `projects/...`, `research/...`, `requirements/...`, `risks/...`, `timeline/...`, `evidence/...`, or domain-specific folders.
+- Build a **small, coherent** brain: at least {minimum_files} files and at most {max_files} files. Prefer **depth over breadth**: put most repo-specific content under **one** `projects/<slug>/` hub (e.g. overview, architecture, data_model, timeline, open_questions) rather than many parallel top-level folders.
+- Add `architecture/system_context.md` only when it clarifies boundaries; add `decisions/ADR-*.md` only when the source supports real decisions. Do **not** invent scattered roots like `compliance/`, `customers/`, `observability/`, `platform/`, `stakeholders/` unless those topics are clearly in the source.
+- If you need extra files beyond the project hub, use **one** extra shallow area (e.g. `context/` or `requirements/`) with 1-2 files, not a dozen new top-level domains.
+- File paths must be **specific to the uploaded context**. You may use catalog paths when they fit, or create nested paths under `projects/...`, `concepts/...`, `requirements/...`, etc., only when justified by the source.
 - Use `template_path` only when a reference file is structurally helpful. Leave it empty for custom source-specific files.
 - Do NOT include Brian, AI Brain, Next.js, FastAPI, GitHub, Slack, Postgres, pgvector, OpenAI, or local demo mode unless those exact ideas appear in the uploaded source or initial prompt.
 - Do NOT create integrations, architecture, or coding-agent files unless the source actually discusses those concepts.
@@ -424,9 +425,6 @@ SOURCE DOCUMENTS:
         fallback_paths = [
             "context/key_facts.md",
             "context/open_questions.md",
-            "risks/risks_and_constraints.md",
-            "concepts/core_concepts.md",
-            "timeline/source_timeline.md",
         ]
         for fallback_path in fallback_paths:
             if len(plans) >= min(max_files, minimum_files):

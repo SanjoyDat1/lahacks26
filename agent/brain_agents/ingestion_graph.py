@@ -473,7 +473,7 @@ def run_initialize_streaming(
     *,
     initial_prompt: str,
     settings: Settings,
-    max_files: int = 24,
+    max_files: int = 18,
     overwrite: bool = True,
 ) -> Iterator[dict[str, Any]]:
     """Streaming initialize flow for the hackathon session-start experience."""
