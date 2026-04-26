@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, GitBranch, Sparkles } from "lucide-react";
+import { ArrowRight, GitBranch, Map, Sparkles } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
@@ -16,16 +15,6 @@ export function BrainHomeLanding({ hasBrain }: { hasBrain: boolean }) {
       </div>
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center px-6 py-16">
-        <div className="mb-5">
-          <Image
-            src="/brian-logo.png"
-            alt="Brian"
-            width={72}
-            height={72}
-            className="mx-auto h-[4.5rem] w-[4.5rem] object-contain drop-shadow-sm"
-            priority
-          />
-        </div>
         <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-violet-200/70 bg-white/80 px-4 py-2 text-xs font-semibold text-violet-800 shadow-sm backdrop-blur-xl">
           <Sparkles size={14} className="text-violet-500" />
           Brian
@@ -35,7 +24,8 @@ export function BrainHomeLanding({ hasBrain }: { hasBrain: boolean }) {
           Start from a clean session
         </h1>
         <p className="mx-auto mt-5 max-w-xl text-center text-base leading-relaxed text-slate-600">
-          Initialize Brian from a GitHub repo (and optional files). You will get the live session builder—clone, scan, distill, and graph—then open the full command center when you are ready.
+          Initialize Brian from a GitHub repo (and optional files). You will get the live session builder—clone, scan,
+          distill, and graph—then open the full command center when you are ready.
         </p>
 
         <div className="mt-10 flex w-full max-w-md flex-col gap-3 sm:max-w-lg sm:flex-row sm:justify-center">
@@ -59,24 +49,20 @@ export function BrainHomeLanding({ hasBrain }: { hasBrain: boolean }) {
               !hasBrain && "text-slate-500",
             )}
           >
-            <Image
-              src="/brian-logo.png"
-              alt=""
-              width={20}
-              height={20}
-              className={cn("h-5 w-5 object-contain", !hasBrain && "opacity-40")}
-            />
+            <Map size={17} className={hasBrain ? "text-violet-600" : "text-slate-400"} />
             Open Brian map
           </Link>
         </div>
 
         {!hasBrain ? (
           <p className="mt-4 max-w-md text-center text-xs text-slate-500">
-            No Brian files on disk yet—use <span className="font-semibold text-slate-700">Start new session</span> first, or open the map to see an empty workspace.
+            No Brian files on disk yet—use <span className="font-semibold text-slate-700">Start new session</span>{" "}
+            first, or open the map to see an empty workspace.
           </p>
         ) : (
           <p className="mt-4 max-w-md text-center text-xs text-slate-500">
-            You already have Brian content. Open the map to browse and chat, or start another session to re-initialize (overwrites when you choose that in the builder).
+            You already have Brian content. Open the map to browse and chat, or start another session to re-initialize
+            (overwrites when you choose that in the builder).
           </p>
         )}
       </div>

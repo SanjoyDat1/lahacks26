@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -31,22 +30,9 @@ export function Nav() {
   return (
     <header className="sticky top-0 z-30 border-b border-black/10 bg-white/55 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-screen-2xl items-center justify-between px-6 py-3">
-        {/* Brand */}
-        <Link href="/" className="group flex items-center gap-2.5">
-          <div className="relative flex h-9 w-9 shrink-0 items-center justify-center overflow-visible rounded-xl transition">
-            <Image
-              src="/brian-logo.png"
-              alt="Brian"
-              width={36}
-              height={36}
-              className="h-9 w-9 object-contain"
-              priority
-            />
-          </div>
-          <div>
-            <span className="text-[13px] font-semibold tracking-tight text-black/90">Brian</span>
-            <span className="ml-1.5 hidden text-[11px] text-black/55 sm:inline">company knowledge</span>
-          </div>
+        <Link href="/" className="group flex items-center gap-2">
+          <span className="text-[13px] font-semibold tracking-tight text-black/90">Brian</span>
+          <span className="hidden text-[11px] text-black/55 sm:inline">company knowledge</span>
         </Link>
 
         <div className="flex items-center gap-2">

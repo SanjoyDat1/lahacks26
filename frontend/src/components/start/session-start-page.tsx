@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -1062,23 +1061,11 @@ export function SessionStartPage() {
       {!buildMode ? (
 				<section className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-5xl flex-col items-center justify-center pb-10">
           <div className="mb-8 text-center">
-            <div className="mx-auto mb-5 flex justify-center">
-              <Image
-                src="/brian-logo.png"
-                alt="Brian"
-                width={88}
-                height={88}
-                className="h-[5.5rem] w-[5.5rem] object-contain drop-shadow-sm"
-                priority
-              />
-            </div>
-            <h1 className="mt-2 text-5xl font-bold tracking-tight text-slate-950 md:text-6xl">
-							What should Brian learn first?
+            <h1 className="text-5xl font-bold tracking-tight text-slate-950 md:text-6xl">
+              What should Brian learn first?
             </h1>
-						<p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-500">
-							Paste a GitHub URL, drop files on the box, or open the paperclip to upload files and connect
-							Google Workspace (company Drive folder + calendar). Your context shows as thumbnails above the
-							input—like ChatGPT attachments.
+            <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-slate-500">
+              Add a GitHub repo, files, or Google Workspace. Context appears as chips above the box.
             </p>
           </div>
 
@@ -1505,7 +1492,7 @@ function UniversalStartEntry({
             e.preventDefault();
             if (canRun) onSubmit();
           }}
-          placeholder="Paste a GitHub URL, or use the clip to add files & Google…"
+          placeholder="Repo URL, files, or Google…"
           rows={1}
           className={cn(
             // min-w-0: without it, flex-1 textarea won’t shrink and can overlap the paperclip (stealing clicks).
