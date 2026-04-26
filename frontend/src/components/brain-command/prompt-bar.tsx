@@ -41,6 +41,7 @@ export function PromptBar({
   const [pendingUpdate, setPendingUpdate] = useState<{
     instruction: string;
     file: string;
+    newContent: string;
     summary: string;
   } | null>(null);
   const taRef = useRef<HTMLTextAreaElement | null>(null);
@@ -104,15 +105,25 @@ export function PromptBar({
           headers: { "content-type": "application/json" },
           body: JSON.stringify({ instruction, apply: false }),
         });
-        const preview = (await previewRes.json()) as { summary?: string; file?: string; error?: string };
+        const preview = (await previewRes.json()) as {
+          summary?: string;
+          file?: string;
+          newContent?: string;
+          error?: string;
+        };
 
         const md = previewRes.ok
-          ? `**Proposed update**\n\n- File: \`${String(preview.file ?? "")}\`\n- Summary: ${String(preview.summary ?? "")}\n\nUse **Apply update** below to write it to disk.`
+          ? `**Proposed update**\n\n- File: \`${String(preview.file ?? "")}\`\n- Summary: ${String(preview.summary ?? "")}\n\nUse **Apply update** to write it to disk.`
           : `Could not generate an update preview.\n\n${String(preview.error ?? "Unknown error")}`;
 
         onAnswer({ markdown: md, sources: preview.file ? [preview.file] : [] });
-        if (previewRes.ok && preview.file && preview.summary) {
-          setPendingUpdate({ instruction, file: preview.file, summary: preview.summary });
+        if (previewRes.ok && preview.file && preview.newContent && preview.summary) {
+          setPendingUpdate({
+            instruction,
+            file: preview.file,
+            newContent: preview.newContent,
+            summary: preview.summary,
+          });
         }
         onStatusChange(previewRes.ok ? "done" : "error");
       } catch (e) {
@@ -202,13 +213,19 @@ export function PromptBar({
   }, [messages, onActiveSources, onAnswer, onStatusChange, text]);
 
   const applyPending = useCallback(async () => {
-    if (!pendingUpdate) return;
+    if (!pendingUpdate || status === "updating") return;
     onStatusChange("updating");
     try {
       const res = await fetch("/api/brian/ai-edit", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ instruction: pendingUpdate.instruction, apply: true }),
+        body: JSON.stringify({
+          instruction: pendingUpdate.instruction,
+          apply: true,
+          file: pendingUpdate.file,
+          newContent: pendingUpdate.newContent,
+          summary: pendingUpdate.summary,
+        }),
       });
       const data = (await res.json()) as { summary?: string; file?: string; error?: string };
       if (!res.ok) {
@@ -226,7 +243,7 @@ export function PromptBar({
       onAnswer({ markdown: `Apply failed: ${e instanceof Error ? e.message : "Unknown error"}`, sources: [] });
       onStatusChange("error");
     }
-  }, [onAnswer, onStatusChange, pendingUpdate]);
+  }, [onAnswer, onStatusChange, pendingUpdate, status]);
 
   return (
     <div className="relative">
@@ -302,13 +319,30 @@ export function PromptBar({
           }}
         />
 
-        {!text && (
+        {!text && !pendingUpdate && (
           <span
             className="pointer-events-none hidden max-w-[9rem] flex-shrink-0 select-none self-center text-right text-[10px] font-medium leading-tight text-black/40 sm:inline"
             aria-hidden
           >
             Enter or ⌘↵ send · Shift+↵ newline
           </span>
+        )}
+
+        {pendingUpdate && (
+          <button
+            type="button"
+            onClick={() => void applyPending()}
+            disabled={status === "updating"}
+            className={cn(
+              "mb-0.5 inline-flex h-9 flex-shrink-0 items-center justify-center rounded-xl px-3 text-[10px] font-semibold transition",
+              status === "updating"
+                ? "bg-black/[0.04] text-black/35"
+                : "bg-black/[0.06] text-black/80 hover:bg-black/[0.10] hover:text-black",
+            )}
+            title={`Apply update to ${pendingUpdate.file}`}
+          >
+            Apply update
+          </button>
         )}
 
         <button
@@ -330,19 +364,6 @@ export function PromptBar({
           )}
         </button>
       </div>
-
-      {pendingUpdate && (
-        <div className="mt-2 flex justify-end px-2">
-          <button
-            type="button"
-            onClick={() => void applyPending()}
-            className="rounded-full bg-black/[0.06] px-3 py-1 text-[10px] font-semibold text-black/80 transition hover:bg-black/[0.10] hover:text-black"
-            title={`Apply update to ${pendingUpdate.file}`}
-          >
-            Apply update
-          </button>
-        </div>
-      )}
     </div>
   );
 }

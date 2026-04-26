@@ -34,8 +34,17 @@ function collectRaw(
   }
 }
 
+function resolveBrianFilePath(relPath: string) {
+  const brianDir = path.resolve(resolveBrianDir());
+  const full = path.resolve(brianDir, relPath);
+  if (full !== brianDir && !full.startsWith(`${brianDir}${path.sep}`)) {
+    throw new Error("Refusing to write outside the brian directory");
+  }
+  return full;
+}
+
 function writeBrianFile(relPath: string, content: string) {
-  const full = path.join(resolveBrianDir(), relPath);
+  const full = resolveBrianFilePath(relPath);
   fs.mkdirSync(path.dirname(full), { recursive: true });
   fs.writeFileSync(full, content, "utf8");
 }
@@ -64,9 +73,12 @@ Rules:
    { "file": "relative/path.md", "newContent": "...", "summary": "one sentence describing what changed" }`;
 
 export async function POST(req: Request) {
-  const { instruction, apply } = (await req.json()) as {
+  const { instruction, apply, file, newContent, summary } = (await req.json()) as {
     instruction: string;
     apply?: boolean;
+    file?: string;
+    newContent?: string;
+    summary?: string;
   };
 
   if (!instruction?.trim()) {
@@ -76,6 +88,25 @@ export async function POST(req: Request) {
   const allFiles = readAllRaw();
   if (!allFiles.length) {
     return NextResponse.json({ error: "No brian files found" }, { status: 404 });
+  }
+
+  if (apply && file && typeof newContent === "string") {
+    try {
+      writeBrianFile(file, newContent);
+    } catch (err) {
+      console.error("Failed to write brian file", err);
+      return NextResponse.json(
+        { error: "Failed to write file." },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({
+      file,
+      original: allFiles.find((f) => f.relPath === file)?.raw ?? "",
+      newContent,
+      summary: summary ?? "Applied update.",
+    });
   }
 
   // Build context block — list every file with its full content
