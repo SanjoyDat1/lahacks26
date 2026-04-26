@@ -5,22 +5,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertCircle,
   ArrowRight,
-  Bot,
   Brain,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   Cpu,
   FileText,
   Folder,
-  FolderOpen,
   GitBranch,
   Loader2,
-  Network,
+  Paperclip,
   Send,
-  Sparkles,
-  Upload,
-  Wifi,
-  WifiOff,
   X,
 } from "lucide-react";
 
@@ -29,17 +24,19 @@ import {
   chunkGhostBatches,
   parseRepoSlugFromUrl,
 } from "@/lib/brain/bootstrap-scaffold";
-import { githubReposForApi, type GithubRepoFormRow } from "@/lib/brain/github-ingest";
-import { env } from "@/lib/env";
 import {
-  SessionIntegrationSources,
-  type IntegrationDocBatch,
-} from "@/components/start/session-integration-sources";
+  githubReposForApi,
+  type GithubRepoFormRow,
+} from "@/lib/brain/github-ingest";
+import { env } from "@/lib/env";
 import { cn } from "@/lib/utils";
 
 function newGithubRepoRow(): GithubRepoFormRow {
   return {
-    id: typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `gh-${Date.now()}`,
+		id:
+			typeof crypto !== "undefined" && "randomUUID" in crypto
+				? crypto.randomUUID()
+				: `gh-${Date.now()}`,
     url: "",
     ref: "",
   };
@@ -91,17 +88,35 @@ type BootstrapEvent =
   | { type: "connected"; message: string }
   | { type: "stage_start"; stage: StageId; label?: string }
   | { type: "thinking"; content: string }
-  | { type: "document"; name: string; chars: number; status: "scanned" | "distilled" }
+	| {
+			type: "document";
+			name: string;
+			chars: number;
+			status: "scanned" | "distilled";
+	  }
   | { type: "graph_node"; id: string; label: string; status: GraphStatus }
   | { type: "graph_edge"; from: string; to: string; status: GraphStatus }
-  | { type: "file_planned"; path: string; title?: string; preview?: string; links?: string[] }
+	| {
+			type: "file_planned";
+			path: string;
+			title?: string;
+			preview?: string;
+			links?: string[];
+	  }
   | { type: "file_writing"; path: string; title?: string }
   | { type: "file_created"; path: string; title?: string; preview?: string }
   | { type: "directory_snapshot"; tree: BrainTreeNode[] }
   | { type: "done"; written_files: string[]; result_text: string }
   | { type: "error"; message: string };
 
-type StageId = "upload" | "normalize" | "distill" | "write" | "index" | "verify" | "done";
+type StageId =
+	| "upload"
+	| "normalize"
+	| "distill"
+	| "write"
+	| "index"
+	| "verify"
+	| "done";
 
 const SUPPORTED_EXTENSIONS = new Set([
   ".pdf",
@@ -179,7 +194,10 @@ const INITIAL_EDGES: GraphEdge[] = [
 
 export function SessionStartPage() {
   const [docs, setDocs] = useState<UploadDoc[]>([]);
-  const [githubRepos, setGithubRepos] = useState<GithubRepoFormRow[]>(() => [newGithubRepoRow()]);
+	const [githubRepos, setGithubRepos] = useState<GithubRepoFormRow[]>(() => [
+		newGithubRepoRow(),
+	]);
+	const [entryText, setEntryText] = useState("");
   const prompt =
     "Build a transparent AI brain for this codebase from the linked GitHub repository (and any optional uploaded documents). Focus on architecture, entry points, dependencies, and how the system fits together.";
   const [isDragging, setIsDragging] = useState(false);
@@ -188,13 +206,15 @@ export function SessionStartPage() {
   const [error, setError] = useState<string | null>(null);
   const [agentOnline, setAgentOnline] = useState<boolean | null>(null);
   const [stage, setStage] = useState<StageId>("upload");
-  const [stageLabel, setStageLabel] = useState("Add GitHub, Workspace sources, or uploads");
+	const [stageLabel, setStageLabel] = useState(
+		"Add a GitHub repo or uploads",
+	);
   const [, setNodes] = useState<GraphNode[]>(INITIAL_NODES);
   const [, setEdges] = useState<GraphEdge[]>(INITIAL_EDGES);
   const [tree, setTree] = useState<BrainTreeNode[]>([]);
   const [createdFiles, setCreatedFiles] = useState<CreatedFile[]>([]);
   const [thinking, setThinking] = useState<string[]>([
-    "Connect GitHub, Google Workspace, uploads, or meeting webhooks—everything merges into one bootstrap for the brain agent.",
+    "Add a public GitHub repo and optional files, then start the brain bootstrap.",
   ]);
   const [resultText, setResultText] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -222,8 +242,14 @@ export function SessionStartPage() {
 
   useEffect(() => () => cleanupRestBootstrap(), [cleanupRestBootstrap]);
 
-  const totalChars = useMemo(() => docs.reduce((sum, doc) => sum + doc.chars, 0), [docs]);
-  const githubApiList = useMemo(() => githubReposForApi(githubRepos), [githubRepos]);
+	const totalChars = useMemo(
+		() => docs.reduce((sum, doc) => sum + doc.chars, 0),
+		[docs],
+	);
+	const githubApiList = useMemo(
+		() => githubReposForApi(githubRepos),
+		[githubRepos],
+	);
   const hasBootstrapSource = docs.length > 0 || githubApiList.length > 0;
   const githubOnlyBootstrap = docs.length === 0 && githubApiList.length > 0;
   const sourceCount = docs.length + githubApiList.length;
@@ -257,59 +283,6 @@ export function SessionStartPage() {
     thinkingEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [thinking]);
 
-  useEffect(() => {
-    const sp = new URLSearchParams(window.location.search);
-    const g = sp.get("google");
-    if (g === "connected") {
-      setThinking((p) => [
-        ...p,
-        "Google Workspace connected. Pick Drive files, paste a Sheet URL, and/or add a calendar snapshot, then import into this session.",
-      ]);
-      window.history.replaceState({}, "", window.location.pathname);
-    } else if (g === "error") {
-      const msg = sp.get("message") ?? "unknown";
-      setThinking((p) => [...p, `Google: ${decodeURIComponent(msg)}`]);
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, []);
-
-  const appendFromIntegration = useCallback((items: IntegrationDocBatch[]) => {
-    const valid = items.filter(
-      (item) =>
-        (item.text && item.text.trim().length > 0) ||
-        (item.content_base64 && item.content_base64.trim().length > 0),
-    );
-    if (valid.length === 0) {
-      setThinking((prev) => [
-        ...prev,
-        "Google import returned no readable documents (every item was empty). Try different files or check server logs.",
-      ]);
-      return;
-    }
-    if (valid.length < items.length) {
-      setThinking((prev) => [
-        ...prev,
-        `Skipped ${items.length - valid.length} empty item(s) from the import response.`,
-      ]);
-    }
-    const charSum = valid.reduce((s, d) => s + (d.chars || 0), 0);
-    const nextDocs: UploadDoc[] = valid.map((item) => ({
-      id: `int-${item.name}-${item.chars}-${Math.random().toString(36).slice(2, 9)}`,
-      name: item.name,
-      text: item.text,
-      content_base64: item.content_base64,
-      mime_type: item.mime_type,
-      size: item.size,
-      chars: item.chars,
-      status: "ready",
-    }));
-    setDocs((prev) => [...prev, ...nextDocs]);
-    setThinking((prev) => [
-      ...prev,
-      `Workspace: added ${valid.length} document(s) (${charSum.toLocaleString()} chars) to this session. They appear in “Extra files” above — click **Create Brain** to send everything to the agent.`,
-    ]);
-  }, []);
-
   const resetRun = useCallback(() => {
     cleanupRestBootstrap();
     socketRef.current?.close();
@@ -318,17 +291,18 @@ export function SessionStartPage() {
     setIsDone(false);
     setError(null);
     setStage("upload");
-    setStageLabel("Add GitHub, Workspace sources, or uploads");
+    setStageLabel("Add a GitHub repo or uploads");
     setNodes(INITIAL_NODES);
     setEdges(INITIAL_EDGES);
     setTree([]);
     setCreatedFiles([]);
     setResultText("");
     setThinking([
-      "Connect GitHub, Google Workspace, uploads, or meeting webhooks—everything merges into one bootstrap for the brain agent.",
+      "Add a public GitHub repo and optional files, then start the brain bootstrap.",
     ]);
     setDocs((prev) => prev.map((doc) => ({ ...doc, status: "ready" })));
     setGithubRepos([newGithubRepoRow()]);
+		setEntryText("");
   }, [cleanupRestBootstrap]);
 
   const addFiles = useCallback(async (fileList: FileList | File[]) => {
@@ -343,9 +317,13 @@ export function SessionStartPage() {
         unsupported.push(file.name);
         continue;
       }
-      const isText = TEXT_UPLOAD_EXTENSIONS.has(ext) || file.type.startsWith("text/");
+			const isText =
+				TEXT_UPLOAD_EXTENSIONS.has(ext) ||
+				file.type.startsWith("text/");
       const text = isText ? await file.text() : undefined;
-      const contentBase64 = isText ? undefined : await readFileAsDataUrl(file);
+			const contentBase64 = isText
+				? undefined
+				: await readFileAsDataUrl(file);
       if (isText && !text?.trim()) continue;
       nextDocs.push({
         id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`,
@@ -360,7 +338,9 @@ export function SessionStartPage() {
     }
 
     if (unsupported.length) {
-      setError(`Unsupported files skipped: ${unsupported.slice(0, 4).join(", ")}${unsupported.length > 4 ? "..." : ""}`);
+			setError(
+				`Unsupported files skipped: ${unsupported.slice(0, 4).join(", ")}${unsupported.length > 4 ? "..." : ""}`,
+			);
     }
     if (nextDocs.length) {
       setDocs((prev) => [...prev, ...nextDocs]);
@@ -371,11 +351,44 @@ export function SessionStartPage() {
     }
   }, []);
 
-  const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+	const handleDrop = useCallback(
+		(event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragging(false);
     void addFiles(event.dataTransfer.files);
-  }, [addFiles]);
+		},
+		[addFiles],
+	);
+
+	const addGithubRepoUrls = useCallback((urls: string[]) => {
+		const normalized = urls
+			.map(normalizeGithubRepoUrl)
+			.filter((url): url is string => Boolean(url));
+		if (!normalized.length) return;
+
+		setGithubRepos((prev) => {
+			const existing = prev.filter((repo) => repo.url.trim());
+			const seen = new Set(
+				existing.map((repo) => repo.url.trim().toLowerCase()),
+			);
+			const next = [...existing];
+			for (const url of normalized) {
+				const key = url.toLowerCase();
+				if (seen.has(key)) continue;
+				next.push({ ...newGithubRepoRow(), url, ref: "" });
+				seen.add(key);
+				if (next.length >= 4) break;
+			}
+			return next.length ? next : [newGithubRepoRow()];
+		});
+
+		setThinking((prev) => [
+			...prev,
+			normalized.length === 1
+				? `Attached GitHub repo: ${parseRepoSlugFromUrl(normalized[0]!) || normalized[0]}`
+				: `Attached ${normalized.length} GitHub repositories.`,
+		]);
+	}, []);
 
   const handleBootstrapEvent = useCallback((event: BootstrapEvent) => {
     if (event.type === "connected") {
@@ -404,7 +417,9 @@ export function SessionStartPage() {
     if (event.type === "graph_node") {
       setNodes((prev) =>
         prev.map((node) =>
-          node.id === event.id ? { ...node, label: event.label, status: event.status } : node,
+					node.id === event.id
+						? { ...node, label: event.label, status: event.status }
+						: node,
         ),
       );
       return;
@@ -412,7 +427,9 @@ export function SessionStartPage() {
     if (event.type === "graph_edge") {
       setEdges((prev) =>
         prev.map((edge) =>
-          edge.from === event.from && edge.to === event.to ? { ...edge, status: event.status } : edge,
+					edge.from === event.from && edge.to === event.to
+						? { ...edge, status: event.status }
+						: edge,
         ),
       );
       return;
@@ -503,13 +520,48 @@ export function SessionStartPage() {
           : `${githubApiList.length} repositories will be processed in order.`,
       ]);
 
-      const narrativeBeats: { t: number; stage: StageId; label: string; line: string }[] = [
-        { t: 400, stage: "normalize", label: "Cloning & reading the tree…", line: "Git is fetching objects; next we walk text files and rank them for context." },
-        { t: 2800, stage: "normalize", label: "Ranking source excerpts…", line: "README, manifests, and high-signal paths are prioritized like an IDE index." },
-        { t: 5600, stage: "distill", label: "Distilling durable facts…", line: "Noise is stripped; decisions, stack, entry points, and boundaries stay." },
-        { t: 9200, stage: "write", label: "Authoring brain markdown…", line: "The model is shaping projects/, architecture, and cross-links you can browse." },
-        { t: 12800, stage: "index", label: "Wiring retrieval…", line: "Sections are prepared so search and agents can use this brain immediately." },
-        { t: 16800, stage: "verify", label: "Still working—large repos take longer…", line: "Hang tight; the server is still generating files. Progress below keeps moving until the response lands." },
+      const narrativeBeats: {
+        t: number;
+        stage: StageId;
+        label: string;
+        line: string;
+      }[] = [
+        {
+          t: 400,
+          stage: "normalize",
+          label: "Cloning & reading the tree…",
+          line: "Git is fetching objects; next we walk text files and rank them for context.",
+        },
+        {
+          t: 2800,
+          stage: "normalize",
+          label: "Ranking source excerpts…",
+          line: "README, manifests, and high-signal paths are prioritized like an IDE index.",
+        },
+        {
+          t: 5600,
+          stage: "distill",
+          label: "Distilling durable facts…",
+          line: "Noise is stripped; decisions, stack, entry points, and boundaries stay.",
+        },
+        {
+          t: 9200,
+          stage: "write",
+          label: "Authoring brain markdown…",
+          line: "The model is shaping projects/, architecture, and cross-links you can browse.",
+        },
+        {
+          t: 12800,
+          stage: "index",
+          label: "Wiring retrieval…",
+          line: "Sections are prepared so search and agents can use this brain immediately.",
+        },
+        {
+          t: 16800,
+          stage: "verify",
+          label: "Still working—large repos take longer…",
+          line: "Hang tight; the server is still generating files. Progress below keeps moving until the response lands.",
+        },
       ];
 
       narrativeBeats.forEach((beat) => {
@@ -540,16 +592,26 @@ export function SessionStartPage() {
           scheduleRest(ghostT, () => {
             if (restFetchDoneRef.current) return;
             setCreatedFiles((prev) =>
-              upsertFile(prev, { path, title, status: "planned", links, isGhost: true }),
+              upsertFile(prev, {
+                path,
+                title,
+                status: "planned",
+                links,
+                isGhost: true,
+              }),
             );
           });
           scheduleRest(ghostT + 85, () => {
             if (restFetchDoneRef.current) return;
-            setCreatedFiles((prev) => upsertFile(prev, { path, status: "writing", links, isGhost: true }));
+            setCreatedFiles((prev) =>
+              upsertFile(prev, { path, status: "writing", links, isGhost: true }),
+            );
           });
           scheduleRest(ghostT + 175, () => {
             if (restFetchDoneRef.current) return;
-            setCreatedFiles((prev) => upsertFile(prev, { path, title, status: "done", links, isGhost: true }));
+            setCreatedFiles((prev) =>
+              upsertFile(prev, { path, title, status: "done", links, isGhost: true }),
+            );
           });
           ghostT += 200;
         }
@@ -575,10 +637,16 @@ export function SessionStartPage() {
               clone_timeout_s: 300,
             }),
           });
-          const raw = (await res.json()) as { detail?: unknown; written_files?: string[]; result_text?: string };
+          const raw = (await res.json()) as {
+            detail?: unknown;
+            written_files?: string[];
+            result_text?: string;
+          };
 
           restFetchDoneRef.current = true;
-          restBootstrapTimersRef.current.forEach((tid) => window.clearTimeout(tid));
+          restBootstrapTimersRef.current.forEach((tid) =>
+            window.clearTimeout(tid),
+          );
           restBootstrapTimersRef.current = [];
           if (restProgressIntervalRef.current != null) {
             window.clearInterval(restProgressIntervalRef.current);
@@ -592,14 +660,16 @@ export function SessionStartPage() {
             setError(formatInitializeErrorDetail(raw, res.status));
             setIsRunning(false);
             setStage("upload");
-            setStageLabel("Add GitHub, Workspace sources, or uploads");
+            setStageLabel("Add a GitHub repo or uploads");
             return;
           }
 
           const written = Array.isArray(raw.written_files) ? raw.written_files : [];
           const writtenSet = new Set(written);
           if (written.length > 0) {
-            setCreatedFiles((prev) => prev.filter((f) => !f.isGhost || writtenSet.has(f.path)));
+            setCreatedFiles((prev) =>
+              prev.filter((f) => !f.isGhost || writtenSet.has(f.path)),
+            );
           }
           setRestProgress(96);
           setStage("write");
@@ -615,23 +685,35 @@ export function SessionStartPage() {
             const rel = path;
             scheduleRest(delay, () => {
               setCreatedFiles((prev) =>
-                upsertFile(prev, { path: rel, title: rel.split("/").pop(), status: "planned", isGhost: false }),
+                upsertFile(prev, {
+                  path: rel,
+                  title: rel.split("/").pop(),
+                  status: "planned",
+                  isGhost: false,
+                }),
               );
             });
             delay += step;
             scheduleRest(delay, () => {
-              setCreatedFiles((prev) => upsertFile(prev, { path: rel, status: "writing", isGhost: false }));
+              setCreatedFiles((prev) =>
+                upsertFile(prev, { path: rel, status: "writing", isGhost: false }),
+              );
             });
             delay += step;
             scheduleRest(delay, () => {
-              setCreatedFiles((prev) => upsertFile(prev, { path: rel, status: "done", isGhost: false }));
+              setCreatedFiles((prev) =>
+                upsertFile(prev, { path: rel, status: "done", isGhost: false }),
+              );
             });
             delay += step + 35;
           }
 
           if (written.length === 0) {
             scheduleRest(500, () => {
-              setThinking((prev) => [...prev, "No new file paths were reported—check the agent logs or open the brain workspace anyway."]);
+              setThinking((prev) => [
+                ...prev,
+                "No new file paths were reported—check the agent logs or open the brain workspace anyway.",
+              ]);
             });
           }
 
@@ -650,7 +732,9 @@ export function SessionStartPage() {
           });
         } catch (e) {
           restFetchDoneRef.current = true;
-          restBootstrapTimersRef.current.forEach((tid) => window.clearTimeout(tid));
+          restBootstrapTimersRef.current.forEach((tid) =>
+            window.clearTimeout(tid),
+          );
           restBootstrapTimersRef.current = [];
           if (restProgressIntervalRef.current != null) {
             window.clearInterval(restProgressIntervalRef.current);
@@ -659,10 +743,12 @@ export function SessionStartPage() {
           setRestProgress(0);
           setGithubRestPipeline(false);
           setCreatedFiles([]);
-          setError(e instanceof Error ? e.message : "Initialize request failed");
+          setError(
+            e instanceof Error ? e.message : "Initialize request failed",
+          );
           setIsRunning(false);
           setStage("upload");
-          setStageLabel("Add GitHub, Workspace sources, or uploads");
+          setStageLabel("Add a GitHub repo or uploads");
         }
       })();
       return;
@@ -686,20 +772,24 @@ export function SessionStartPage() {
     socketRef.current = ws;
 
     ws.onopen = () => {
-      ws.send(JSON.stringify({
+			ws.send(
+				JSON.stringify({
         prompt,
-        documents: docs.map(({ name, text, content_base64, mime_type, size }) => ({
+					documents: docs.map(
+						({ name, text, content_base64, mime_type, size }) => ({
           name,
           text,
           content_base64,
           mime_type,
           size,
-        })),
+						}),
+					),
         github_repos: githubApiList,
         clone_timeout_s: 300,
         overwrite: true,
         max_files: 20,
-      }));
+				}),
+			);
     };
 
     ws.onmessage = (message) => {
@@ -713,7 +803,9 @@ export function SessionStartPage() {
     };
 
     ws.onerror = () => {
-      setError("Could not connect to the bootstrap WebSocket. Make sure the agent API is running.");
+			setError(
+				"Could not connect to the bootstrap WebSocket. Make sure the agent API is running.",
+			);
       setIsRunning(false);
     };
 
@@ -733,12 +825,10 @@ export function SessionStartPage() {
   ]);
 
   return (
-    <main className="relative min-h-screen overflow-hidden px-6 py-8">
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute left-1/2 top-12 h-72 w-72 -translate-x-1/2 rounded-full bg-violet-300/20 blur-3xl" />
-        <div className="absolute bottom-8 right-10 h-72 w-72 rounded-full bg-sky-300/20 blur-3xl" />
-      </div>
-
+    <main className={cn(
+      "relative overflow-hidden",
+      buildMode ? "h-screen px-4 py-3" : "min-h-screen px-6 py-8",
+    )}>
       <input
         ref={inputRef}
         type="file"
@@ -752,250 +842,198 @@ export function SessionStartPage() {
       />
 
       {!buildMode ? (
-        <section className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-6xl flex-col pb-10">
+				<section className="mx-auto flex min-h-[calc(100vh-120px)] w-full max-w-5xl flex-col items-center justify-center pb-10">
           <div className="mb-8 text-center">
-            <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-violet-200/60 bg-white/75 px-4 py-2 text-xs font-semibold text-violet-700 shadow-sm backdrop-blur-2xl">
-              <Sparkles size={13} className="text-violet-500" />
-              AI Brain Session Builder
-            </div>
             <h1 className="mt-6 text-5xl font-bold tracking-tight text-slate-950 md:text-6xl">
-              Paste a repo. Get a codebase brain.
+							What should your brain learn first?
             </h1>
-            <p className="mx-auto mt-4 max-w-3xl text-base leading-7 text-slate-500">
-              Wire up <span className="font-semibold text-slate-700">GitHub</span>,{" "}
-              <span className="font-semibold text-slate-700">Google Workspace</span> (Drive, Docs, Sheets, Calendar),{" "}
-              <span className="font-semibold text-slate-700">Slack</span> (soon), and{" "}
-              <span className="font-semibold text-slate-700">ElevenLabs</span> meeting transcripts—then run one unified bootstrap into your brain.
+						<p className="mx-auto mt-4 max-w-2xl text-sm leading-6 text-slate-500">
+							Paste a GitHub repository URL or drop files anywhere
+							on the entry box. The same initialize flow builds
+							the brain.
             </p>
           </div>
 
-          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
-            <div className="rounded-[2rem] border border-slate-200/80 bg-white/70 p-5 shadow-sm backdrop-blur-xl">
-              <div className="mb-3 flex items-center gap-3">
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-900 shadow-md shadow-slate-300/30">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src="/brand/github.svg" alt="" className="h-7 w-7" draggable={false} />
-                </span>
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">GitHub repository</p>
-                  <p className="text-xs text-slate-500">
-                    Public HTTPS. Shallow clone + ranked source scan—still the fastest way to anchor the brain in code.
-                  </p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {githubRepos.map((row, index) => (
-                  <div key={row.id} className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                    <label className="block min-w-0 flex-1">
-                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                        Repo URL {githubRepos.length > 1 ? `#${index + 1}` : ""}
-                      </span>
-                      <input
-                        type="url"
-                        placeholder="https://github.com/owner/repo"
-                        value={row.url}
-                        disabled={isRunning}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, url: v } : r)));
-                        }}
-                        className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none ring-violet-500/0 transition focus:ring-2 focus:ring-violet-500/30"
-                      />
-                    </label>
-                    <label className="block w-full sm:w-36">
-                      <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-slate-400">Branch (opt.)</span>
-                      <input
-                        type="text"
-                        placeholder="main"
-                        value={row.ref}
-                        disabled={isRunning}
-                        onChange={(e) => {
-                          const v = e.target.value;
-                          setGithubRepos((prev) => prev.map((r) => (r.id === row.id ? { ...r, ref: v } : r)));
-                        }}
-                        className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none focus:ring-2 focus:ring-violet-500/30"
-                      />
-                    </label>
-                    {githubRepos.length > 1 && (
-                      <button
-                        type="button"
-                        disabled={isRunning}
-                        onClick={() => setGithubRepos((prev) => prev.filter((r) => r.id !== row.id))}
-                        className="rounded-xl border border-slate-200/80 px-3 py-2 text-xs font-medium text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        Remove
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-              {githubRepos.length < 4 && (
-                <button
-                  type="button"
-                  disabled={isRunning}
-                  onClick={() => setGithubRepos((prev) => [...prev, newGithubRepoRow()])}
-                  className="mt-3 text-xs font-semibold text-violet-600 hover:text-violet-800 disabled:opacity-50"
-                >
-                  + Add another repository
-                </button>
-              )}
-            </div>
-
-            <SessionIntegrationSources
-              disabled={isRunning}
-              onImported={appendFromIntegration}
-              onLog={(msg) => setThinking((prev) => [...prev, msg])}
-            />
-          </div>
-
-          <div className="mt-6">
-            <DocumentDropzone
+					<UniversalStartEntry
+						text={entryText}
               docs={docs}
+						githubRepos={githubRepos.filter((repo) =>
+							repo.url.trim(),
+						)}
               isDragging={isDragging}
               isRunning={isRunning}
+						canSubmit={hasBootstrapSource && agentOnline !== false}
+						onTextChange={setEntryText}
+						onPasteGithubRepos={addGithubRepoUrls}
               onBrowse={() => inputRef.current?.click()}
-              onRemove={(id) => setDocs((prev) => prev.filter((doc) => doc.id !== id))}
+						onRemoveDoc={(id) =>
+							setDocs((prev) =>
+								prev.filter((doc) => doc.id !== id),
+							)
+						}
+						onRemoveRepo={(id) =>
+							setGithubRepos((prev) => {
+								const next = prev.filter(
+									(repo) => repo.id !== id,
+								);
+								return next.length
+									? next
+									: [newGithubRepoRow()];
+							})
+						}
               onDragOver={(event) => {
                 event.preventDefault();
                 setIsDragging(true);
               }}
               onDragLeave={() => setIsDragging(false)}
               onDrop={handleDrop}
-              variant="hero"
-              supportingFiles
-            />
-          </div>
+						onSubmit={runBootstrap}
+					/>
 
-          <div className="mt-6 max-h-[min(420px,50vh)] min-h-[200px]">
-            <AgentThinkingStream
-              thinking={thinking}
-              endRef={thinkingEndRef}
-              subtitle="Imports, uploads, and bootstrap steps (visible while you set up — not only after Create Brain)."
-            />
-          </div>
+					<p className="mt-4 w-[min(560px,calc(100vw-32px))] text-center text-[11px] leading-5 text-slate-500">
+						Supported: PDFs, Office docs, Markdown, text, JSON,
+						YAML, CSV, and source files.
+					</p>
 
-          <div className="mt-6 flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <AgentStatus online={agentOnline} compact />
-            <button
-              onClick={runBootstrap}
-              disabled={!hasBootstrapSource || isRunning || agentOnline === false}
-              className={cn(
-                "inline-flex items-center justify-center gap-2 rounded-full px-6 py-3 text-sm font-semibold transition-all",
-                hasBootstrapSource && !isRunning && agentOnline !== false
-                  ? "bg-violet-600 text-white shadow-lg shadow-violet-300/40 hover:-translate-y-0.5 hover:bg-violet-700 hover:shadow-violet-400/50"
-                  : "cursor-not-allowed bg-white/70 text-slate-400 ring-1 ring-slate-200/70",
-              )}
-            >
-              <Send size={15} />
-              Create Brain
-            </button>
-          </div>
-
-          {error ? <div className="mt-4 w-full"><ErrorBanner message={error} /></div> : null}
+					{error ? (
+						<div className="mt-4 w-[min(560px,calc(100vw-32px))]">
+							<ErrorBanner message={error} />
+						</div>
+					) : null}
         </section>
       ) : (
-        <section className="mx-auto flex max-w-screen-2xl flex-col gap-5 pb-10">
-          <div className="rounded-[2rem] border border-white/80 bg-white/75 p-5 shadow-sm backdrop-blur-2xl">
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-2xl bg-violet-100 ring-1 ring-violet-200/70">
-                    <Brain size={15} className="text-violet-600" />
-                  </span>
+        <>
+          <div className="pointer-events-none absolute inset-0 canvas-dots opacity-[0.18]" />
+          <section className={cn(
+              "relative mx-auto flex max-w-screen-2xl flex-col gap-3",
+              isDone ? "h-[calc(100vh-112px)]" : "h-[calc(100vh-24px)]",
+            )}>
+            <ThinkingHeader
+              stageLabel={stageLabel}
+              stage={stage}
+              completed={completedStages}
+              isRunning={isRunning}
+              isDone={isDone}
+              thinking={thinking}
+              endRef={thinkingEndRef}
+              githubRestPipeline={githubRestPipeline}
+              restProgress={restProgress}
+            />
+
+            <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[280px_1fr_320px]">
+              {/* Left: file tree styled like the main brain map */}
+              <section className="glass min-h-0 overflow-hidden">
+                <BuildFileTreeView
+                  tree={tree}
+                  files={createdFiles}
+                />
+              </section>
+
+              {/* Center: construction graph */}
+              <section className="glass flex min-h-0 flex-col overflow-hidden">
+                <div className="flex items-center justify-between border-b border-black/10 px-4 py-3">
                   <div>
-                    <p className="text-sm font-semibold text-slate-800">{stageLabel}</p>
-                    <p className="mt-0.5 text-xs text-slate-400">
-                      {githubRestPipeline
-                        ? "GitHub run: the timeline and log advance while the API works; files pop onto the graph one by one when the response returns."
-                        : "Live WebSocket stream: logs, files, and graph update from the agent."}
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+                      Construction graph
+                    </p>
+                    <p className="text-[11px] text-black/70">
+                      {createdFiles.length > 0
+                        ? `${createdFiles.length} node${createdFiles.length === 1 ? "" : "s"} forming`
+                        : "Waiting for first files"}
                     </p>
                   </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2">
-                <Metric label="Sources in" value={sourceCount.toString()} />
-                <Metric label="Chars" value={formatCompact(totalChars)} />
-                <Metric label="Brain files" value={createdFiles.length.toString()} />
-              </div>
-            </div>
-            <BootstrapTimeline current={stage} completed={completedStages} restPulse={githubRestPipeline} />
-            {githubRestPipeline && (
-              <div className="mt-4 overflow-hidden rounded-2xl border border-violet-200/70 bg-gradient-to-br from-violet-50/90 via-white/80 to-sky-50/70 p-4 shadow-sm">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-900 text-white shadow-md">
-                      <GitBranch size={15} />
-                    </span>
-                    <div>
-                      <p className="text-xs font-semibold text-slate-800">GitHub → brain</p>
-                      <p className="text-[10px] text-slate-500">Clone, scan, distill—then we paint each markdown node</p>
-                    </div>
-                  </div>
-                  <span className="rounded-full bg-white/90 px-2.5 py-1 font-mono text-[11px] font-bold tabular-nums text-violet-700 ring-1 ring-violet-200/80">
-                    {Math.min(100, Math.round(restProgress))}%
-                  </span>
-                </div>
-                <div className="relative h-2.5 overflow-hidden rounded-full bg-white/90 ring-1 ring-violet-100">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-sky-500 transition-[width] duration-700 ease-out"
-                    style={{ width: `${Math.min(100, restProgress)}%` }}
-                  />
-                </div>
-                <p className="mt-3 text-[11px] leading-relaxed text-slate-600">
-                  <span className="font-semibold text-violet-800">{stageLabel}</span>
-                  <span className="text-slate-400"> · </span>
-                  Watch the stage cards above and the agent log on the right—nothing is frozen, even during a long POST.
-                </p>
-              </div>
-            )}
-          </div>
-
-          <div className="grid gap-5">
-            <div className="min-h-[640px] rounded-[2.25rem] border border-white/80 bg-white/80 p-5 shadow-2xl shadow-violet-200/30 backdrop-blur-2xl">
-              <div className="flex h-full min-h-0 flex-col">
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <Network size={15} className="text-violet-500" />
-                    <div>
-                      <h2 className="text-sm font-semibold text-slate-900">Construction Graph</h2>
-                      <p className="text-xs text-slate-500">Directories, markdown nodes, and retrieval links appear as the agent builds them</p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2">
-                    <div className={cn(
-                      "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-semibold",
-                      isDone
-                        ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                        : "border-violet-200 bg-violet-50 text-violet-700",
-                    )}>
-                      {isDone ? <CheckCircle2 size={12} /> : <Loader2 size={12} className="animate-spin" />}
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold",
+                        isDone
+                          ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200/70"
+                          : "bg-black/[0.06] text-black/70",
+                      )}
+                    >
+                      {isDone ? (
+                        <CheckCircle2 size={11} />
+                      ) : (
+                        <Loader2 size={11} className="animate-spin" />
+                      )}
                       {isDone ? "Ready" : "Building"}
-                    </div>
+                    </span>
                     {isDone && (
                       <Link
                         href="/brain"
-                        className="inline-flex items-center gap-1.5 rounded-full bg-emerald-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-emerald-700"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-black px-3 py-1 text-[10px] font-semibold text-white transition hover:bg-black/85"
                       >
-                        <Brain size={12} />
-                        View brain map
+                        <Brain size={11} />
+                        Open brain map
                       </Link>
                     )}
                   </div>
                 </div>
-                <BootstrapLiveGraph files={createdFiles} isRunning={isRunning} />
-              </div>
+                <div className="relative min-h-0 flex-1">
+                  <BootstrapLiveGraph
+                    files={createdFiles}
+                    isRunning={isRunning}
+                  />
+                </div>
+              </section>
+
+              {/* Right: stages + metrics */}
+              <section className="glass flex min-h-0 flex-col overflow-hidden">
+                <div className="border-b border-black/10 px-4 py-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+                    Pipeline
+                  </p>
+                  <p className="text-[11px] text-black/70">
+                    {completedStages}/{STAGES.length} stages complete
+                  </p>
+                </div>
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 py-3">
+                  <VerticalBootstrapTimeline
+                    current={stage}
+                    completed={completedStages}
+                  />
+                  {githubRestPipeline && (
+                    <div className="rounded-2xl border border-black/10 bg-white/70 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-black/70">
+                          <GitBranch size={11} />
+                          GitHub → brain
+                        </span>
+                        <span className="font-mono text-[10px] font-bold tabular-nums text-black/65">
+                          {Math.min(100, Math.round(restProgress))}%
+                        </span>
+                      </div>
+                      <div className="relative h-1.5 overflow-hidden rounded-full bg-black/[0.07]">
+                        <div
+                          className="h-full rounded-full bg-[color:var(--accent-600)] transition-[width] duration-700 ease-out"
+                          style={{
+                            width: `${Math.min(100, restProgress)}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <Metric
+                      label="Sources"
+                      value={sourceCount.toString()}
+                    />
+                    <Metric
+                      label="Chars"
+                      value={formatCompact(totalChars)}
+                    />
+                    <Metric
+                      label="Files"
+                      value={createdFiles.length.toString()}
+                    />
+                  </div>
+                </div>
+              </section>
             </div>
 
-            <div className="grid min-h-[420px] gap-5 lg:grid-cols-[1fr_1.05fr]">
-              <BrainDirectoryTree tree={tree} files={createdFiles} />
-              <AgentThinkingStream
-                thinking={thinking}
-                endRef={thinkingEndRef}
-                subtitle="Every initialization step streamed live"
-              />
-            </div>
-          </div>
-        </section>
+            {error ? <ErrorBanner message={error} /> : null}
+          </section>
+        </>
       )}
 
       {isDone && (
@@ -1005,149 +1043,388 @@ export function SessionStartPage() {
   );
 }
 
-function DocumentDropzone({
+function UniversalStartEntry({
+	text,
   docs,
+	githubRepos,
   isDragging,
   isRunning,
-  variant = "panel",
-  supportingFiles = false,
+	canSubmit,
+	onTextChange,
+	onPasteGithubRepos,
   onBrowse,
-  onRemove,
+	onRemoveDoc,
+	onRemoveRepo,
   onDragOver,
   onDragLeave,
   onDrop,
+	onSubmit,
 }: {
+	text: string;
   docs: UploadDoc[];
+	githubRepos: GithubRepoFormRow[];
   isDragging: boolean;
   isRunning: boolean;
-  variant?: "hero" | "panel";
-  /** When true, de-emphasize as optional extras (codebase URL is primary). */
-  supportingFiles?: boolean;
+	canSubmit: boolean;
+	onTextChange: (text: string) => void;
+	onPasteGithubRepos: (urls: string[]) => void;
   onBrowse: () => void;
-  onRemove: (id: string) => void;
+	onRemoveDoc: (id: string) => void;
+	onRemoveRepo: (id: string) => void;
   onDragOver: (event: React.DragEvent<HTMLDivElement>) => void;
   onDragLeave: () => void;
   onDrop: (event: React.DragEvent<HTMLDivElement>) => void;
+	onSubmit: () => void;
 }) {
-  const isHero = variant === "hero";
+	const taRef = useRef<HTMLTextAreaElement | null>(null);
+	const sourceCount = docs.length + githubRepos.length;
+	const canRun = sourceCount > 0 && canSubmit && !isRunning;
+
+	useEffect(() => {
+		const ta = taRef.current;
+		if (!ta) return;
+		ta.style.height = "auto";
+		const lineHeight = 20;
+		const next = Math.min(160, Math.max(lineHeight, ta.scrollHeight));
+		ta.style.height = `${next}px`;
+	}, [text]);
+
+	const hasAttachments = githubRepos.length > 0 || docs.length > 0;
+
   return (
     <div
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
-      className={cn(
-        "w-full border border-dashed bg-white/60 shadow-sm backdrop-blur-2xl transition-all duration-500",
-        isHero ? "max-w-3xl rounded-[2.5rem] p-5" : "rounded-[2rem] p-4",
-        isDragging ? "scale-[1.01] border-violet-400 bg-violet-50/80 shadow-2xl shadow-violet-200/50" : "border-slate-200/80",
-      )}
-    >
+			className="mx-auto w-[min(560px,calc(100vw-32px))]"
+		>
+			{hasAttachments && (
+				<div className="mb-2 flex min-w-0 flex-wrap items-center gap-1.5 px-1">
+					{githubRepos.map((repo) => {
+						const slug = parseRepoSlugFromUrl(repo.url) || repo.url;
+						return (
+							<AttachmentPill
+								key={repo.id}
+								icon={<GitBranch size={11} />}
+								label={slug}
+								disabled={isRunning}
+								onRemove={() => onRemoveRepo(repo.id)}
+							/>
+						);
+					})}
+					{docs.map((doc) => (
+						<AttachmentPill
+							key={doc.id}
+							icon={<FileText size={11} />}
+							label={doc.name}
+							disabled={isRunning}
+							onRemove={() => onRemoveDoc(doc.id)}
+						/>
+					))}
+				</div>
+			)}
+
+			<div
+				className={cn(
+					"relative flex min-h-9 items-center gap-2 rounded-2xl border border-black/10 bg-white px-3 py-1.5 shadow-[0_6px_18px_-12px_rgba(0,0,0,0.18)] transition",
+					isDragging && "border-violet-400 bg-violet-50/80",
+				)}
+			>
+				<button
+					type="button"
+					onClick={onBrowse}
+					disabled={isRunning}
+					title="Attach files"
+					className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-black/45 transition hover:bg-black/[0.06] hover:text-black/75 disabled:opacity-50"
+				>
+					<Paperclip size={14} />
+				</button>
+
+				<textarea
+					ref={taRef}
+					value={text}
+					disabled={isRunning}
+					onChange={(e) => onTextChange(e.target.value)}
+					onPaste={(e) => {
+						const pasted = e.clipboardData.getData("text");
+						const urls = extractGithubRepoUrls(pasted);
+						if (!urls.length) return;
+						e.preventDefault();
+						onPasteGithubRepos(urls);
+						const remainder = removeGithubRepoUrls(pasted).trim();
+						onTextChange(remainder);
+					}}
+					onKeyDown={(e) => {
+						if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+							e.preventDefault();
+							onSubmit();
+						}
+					}}
+					placeholder="Paste a GitHub repo URL or drop files…"
+					rows={1}
+					className={cn(
+						"m-0 block h-5 max-h-40 flex-1 resize-none self-center overflow-hidden border-none bg-transparent p-0 align-middle outline-none",
+						"text-[13px] leading-5 text-black placeholder:text-black/35 disabled:opacity-60",
+					)}
+				/>
+
+				<span className="flex-shrink-0 select-none whitespace-nowrap text-[10px] font-medium text-black/40">
+					⌘ + Enter
+				</span>
+
+				<button
+					type="button"
+					onClick={onSubmit}
+					disabled={!canRun}
+					title="Create brain (⌘/Ctrl + Enter)"
+					className={cn(
+						"flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition",
+						text.trim().length > 0 || sourceCount > 0
+							? "border-transparent bg-[color:var(--accent-600)] text-white hover:bg-[color:var(--accent-700)] disabled:opacity-60"
+							: "border-black/10 bg-white text-black/35",
+					)}
+				>
+					{isRunning ? (
+						<Loader2 size={14} className="animate-spin" />
+					) : (
+						<Send size={14} />
+					)}
+				</button>
+			</div>
+		</div>
+	);
+}
+
+function AttachmentPill({
+	icon,
+	label,
+	disabled,
+	onRemove,
+}: {
+	icon: React.ReactNode;
+	label: string;
+	disabled: boolean;
+	onRemove: () => void;
+}) {
+	return (
+		<span className="inline-flex min-w-0 max-w-[200px] items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-semibold text-violet-800 ring-1 ring-violet-200/80">
+			<span className="flex-shrink-0 text-violet-700">{icon}</span>
+			<span className="truncate">{label}</span>
+			{!disabled ? (
+				<button
+					type="button"
+					onClick={onRemove}
+					className="ml-0.5 flex-shrink-0 rounded-full p-0.5 text-violet-600/70 transition hover:bg-violet-200/70 hover:text-violet-900"
+					aria-label={`Remove ${label}`}
+				>
+					<X size={10} />
+                </button>
+			) : null}
+		</span>
+  );
+}
+
+function ThinkingHeader({
+  stageLabel,
+  stage,
+  completed,
+  isRunning,
+  isDone,
+  thinking,
+  endRef,
+  githubRestPipeline,
+  restProgress,
+}: {
+  stageLabel: string;
+  stage: StageId;
+  completed: number;
+  isRunning: boolean;
+  isDone: boolean;
+  thinking: string[];
+  endRef: React.RefObject<HTMLDivElement | null>;
+  githubRestPipeline: boolean;
+  restProgress: number;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const stageIndex = STAGES.findIndex((s) => s.id === stage);
+  const totalStages = STAGES.length;
+  const progressPct = githubRestPipeline
+    ? Math.min(100, restProgress)
+    : isDone
+      ? 100
+      : Math.round(((completed + (isRunning ? 0.5 : 0)) / totalStages) * 100);
+  const latest = thinking[thinking.length - 1] ?? "";
+  const summary = isDone
+    ? "Done thinking"
+    : isRunning
+      ? `Thinking · ${stageLabel}${stageIndex >= 0 ? ` (${stageIndex + 1}/${totalStages})` : ""}`
+      : stageLabel;
+
+  return (
+    <div className="glass overflow-hidden">
       <button
         type="button"
-        onClick={onBrowse}
-        disabled={isRunning}
-        className={cn(
-          "group relative flex w-full flex-col items-center justify-center overflow-hidden border border-white/80 bg-gradient-to-b from-violet-50/80 to-white/80 text-center transition hover:from-violet-100/80 disabled:opacity-60",
-          isHero && !supportingFiles ? "min-h-[360px] rounded-[2rem] px-8 py-12"
-            : isHero ? "min-h-[220px] rounded-[2rem] px-6 py-8"
-            : "rounded-[1.5rem] px-5 py-8",
-        )}
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-black/[0.02]"
       >
-        <div className="absolute inset-0 opacity-0 transition-opacity duration-500 group-hover:opacity-100">
-          <div className="absolute left-1/2 top-1/2 h-72 w-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-violet-300/20 blur-3xl" />
+        <span className="relative flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-black/[0.06]">
+          {isDone ? (
+            <CheckCircle2 size={14} className="text-emerald-600" />
+          ) : (
+            <>
+              <span className="absolute inset-0 animate-ping rounded-full bg-[color:var(--accent-400)]/30" />
+              <Brain size={14} className="relative text-[color:var(--accent-700)]" />
+            </>
+          )}
+        </span>
+
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-[13px] font-semibold text-black/90">
+              {summary}
+            </p>
+            {!isDone && isRunning ? (
+              <ShimmerDots />
+            ) : null}
+          </div>
+          {!expanded && latest ? (
+            <p className="mt-0.5 truncate text-[11px] text-black/55">
+              {latest}
+            </p>
+          ) : null}
         </div>
-        <div className={cn(
-          "relative flex items-center justify-center rounded-3xl bg-violet-100 ring-1 ring-violet-200/70 transition-transform duration-300 group-hover:scale-105",
-          isHero && !supportingFiles ? "h-20 w-20" : isHero ? "h-14 w-14" : "h-14 w-14",
-        )}>
-          <Upload size={isHero && !supportingFiles ? 32 : 22} className="text-violet-600" />
-        </div>
-        <p className={cn("relative mt-5 font-semibold text-slate-900", isHero && !supportingFiles ? "text-2xl" : isHero ? "text-lg" : "text-sm")}>
-          {supportingFiles ? "Extra files (optional)" : "Drop files here"}
-        </p>
-        <p className={cn("relative mt-2 max-w-md leading-6 text-slate-500", isHero ? "text-sm" : "text-xs")}>
-          {supportingFiles
-            ? "Specs, PDFs, meeting notes, or loose Markdown — skip this if the GitHub repo above is enough."
-            : "Add docs, notes, specs, code, Markdown. The agent turns them into a structured brain."}
-        </p>
-        <p className="relative mt-5 rounded-full border border-slate-200/70 bg-white/80 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400">
-          .pdf .docx .pptx .xlsx .md .txt .json .yaml .csv .ts .tsx .py
-        </p>
+
+        <span className="hidden items-center gap-2 sm:flex">
+          <div className="h-1 w-28 overflow-hidden rounded-full bg-black/[0.06]">
+            <div
+              className={cn(
+                "h-full rounded-full transition-[width] duration-700 ease-out",
+                isDone
+                  ? "bg-emerald-500"
+                  : "bg-[color:var(--accent-600)]",
+              )}
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
+          <span className="font-mono text-[10px] tabular-nums text-black/55">
+            {progressPct}%
+          </span>
+        </span>
+
+        <span className="ml-1 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg text-black/55 transition hover:bg-black/[0.05] hover:text-black/80">
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </span>
       </button>
 
-      {docs.length > 0 && (
-        <div className="mt-3 max-h-56 space-y-2 overflow-y-auto pr-1">
-          {docs.map((doc) => (
-            <div key={doc.id} className="flex items-center gap-3 rounded-2xl border border-slate-200/60 bg-white/80 px-3 py-2.5">
-              <div className={cn(
-                "flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-xl",
-                doc.status === "distilled" ? "bg-emerald-100" : doc.status === "scanned" ? "bg-blue-100" : "bg-slate-100",
-              )}>
-                {doc.status === "distilled"
-                  ? <CheckCircle2 size={14} className="text-emerald-600" />
-                  : <FileText size={14} className={doc.status === "scanned" ? "text-blue-600" : "text-slate-500"} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-semibold text-slate-700">{doc.name}</p>
-                <p className="text-[10px] text-slate-400">
-                  {doc.text ? `${formatNumber(doc.chars)} chars` : formatBytes(doc.size)} - {doc.status}
-                </p>
-              </div>
-              {!isRunning && (
-                <button onClick={() => onRemove(doc.id)} className="rounded-lg p-1 text-slate-300 hover:bg-slate-100 hover:text-slate-500">
-                  <X size={13} />
-                </button>
-              )}
-            </div>
-          ))}
+      {expanded ? (
+        <div className="border-t border-black/10">
+          <div className="max-h-56 space-y-1 overflow-y-auto px-4 py-3">
+            {thinking.map((line, index) => {
+              const isLast = index === thinking.length - 1;
+              return (
+                <div
+                  key={`${index}-${line.slice(0, 24)}`}
+                  className="flex gap-2 text-[12px] leading-5 text-black/70"
+                >
+                  <span
+                    className={cn(
+                      "mt-1.5 flex h-1.5 w-1.5 flex-shrink-0 rounded-full",
+                      isLast && isRunning && !isDone
+                        ? "bg-[color:var(--accent-500)] ring-2 ring-[color:var(--accent-200)]"
+                        : "bg-black/30",
+                    )}
+                  />
+                  <p className="min-w-0 flex-1">{line}</p>
+                </div>
+              );
+            })}
+            <div ref={endRef} />
+          </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
 
-function BootstrapTimeline({
+function ShimmerDots() {
+  return (
+    <span className="inline-flex items-center gap-0.5" aria-hidden>
+      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:0ms]" />
+      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:150ms]" />
+      <span className="h-1 w-1 animate-pulse rounded-full bg-black/40 [animation-delay:300ms]" />
+    </span>
+  );
+}
+
+function VerticalBootstrapTimeline({
   current,
   completed,
-  restPulse = false,
 }: {
   current: StageId;
   completed: number;
-  restPulse?: boolean;
 }) {
   return (
-    <div className="grid gap-2 md:grid-cols-6">
+    <ol className="relative space-y-1.5">
       {STAGES.map((step, index) => {
         const active = current === step.id;
         const done = current === "done" || index < completed;
+        const isLast = index === STAGES.length - 1;
         return (
-          <div key={step.id} className="relative">
-            {index < STAGES.length - 1 && (
-              <ChevronRight size={13} className="absolute -right-2 top-5 hidden text-slate-300 md:block" />
-            )}
-            <div className={cn(
-              "h-full rounded-2xl border p-3 transition-all duration-500",
-              done
-                ? "border-emerald-200/70 bg-emerald-50/80 text-emerald-700"
-                : active
-                ? "border-violet-200/70 bg-violet-50/80 text-violet-700 shadow-sm"
-                : "border-slate-200/60 bg-white/70 text-slate-400",
-              restPulse && active && !done && "ring-2 ring-violet-400/60 ring-offset-2 ring-offset-violet-50/80 shadow-[0_0_20px_rgba(139,92,246,0.2)]",
-            )}>
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold",
-                  done ? "bg-emerald-100" : active ? "bg-violet-100" : "bg-slate-100",
-                )}>
-                  {done ? <CheckCircle2 size={11} /> : index + 1}
-                </span>
-                <p className="text-xs font-semibold">{step.label}</p>
-              </div>
-              <p className="mt-1 text-[10px] opacity-70">{step.desc}</p>
+          <li key={step.id} className="relative pl-7">
+            {!isLast ? (
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute left-[11px] top-6 h-[calc(100%-12px)] w-px",
+                  done ? "bg-emerald-300/70" : "bg-black/10",
+                )}
+              />
+            ) : null}
+            <span
+              className={cn(
+                "absolute left-0 top-1.5 flex h-[22px] w-[22px] items-center justify-center rounded-full text-[10px] font-bold transition",
+                done
+                  ? "bg-emerald-100 text-emerald-700 ring-1 ring-emerald-300/70"
+                  : active
+                    ? "bg-[color:var(--accent-100)] text-[color:var(--accent-700)] ring-1 ring-[color:var(--accent-300)]"
+                    : "bg-black/[0.06] text-black/55",
+              )}
+            >
+              {done ? <CheckCircle2 size={11} /> : index + 1}
+            </span>
+            <div
+              className={cn(
+                "rounded-xl px-2.5 py-1.5 transition",
+                active && !done
+                  ? "bg-[color:var(--accent-50)] ring-1 ring-[color:var(--accent-200)]"
+                  : "",
+              )}
+            >
+              <p
+                className={cn(
+                  "text-[12px] font-semibold",
+                  done
+                    ? "text-emerald-700"
+                    : active
+                      ? "text-[color:var(--accent-800)]"
+                      : "text-black/75",
+                )}
+              >
+                {step.label}
+                {active && !done ? (
+                  <span className="ml-1.5 inline-flex">
+                    <ShimmerDots />
+                  </span>
+                ) : null}
+              </p>
+              <p className="text-[10px] leading-4 text-black/50">
+                {step.desc}
+              </p>
             </div>
-          </div>
+          </li>
         );
       })}
-    </div>
+    </ol>
   );
 }
 
@@ -1161,7 +1438,8 @@ function BootstrapLiveGraph({
   const arrivalRef = useRef<Map<string, number>>(new Map());
   const startRef = useRef<number>(0);
   useEffect(() => {
-    if (files.length > 0 && startRef.current === 0) startRef.current = Date.now();
+		if (files.length > 0 && startRef.current === 0)
+			startRef.current = Date.now();
     for (const f of files) {
       if (!arrivalRef.current.has(f.path)) {
         arrivalRef.current.set(f.path, Date.now());
@@ -1170,7 +1448,9 @@ function BootstrapLiveGraph({
   }, [files]);
 
   const visible = files.slice(0, 28);
-  const doneCount = visible.filter((f) => f.status === "done" && !f.isGhost).length;
+	const doneCount = visible.filter(
+		(f) => f.status === "done" && !f.isGhost,
+	).length;
   const dirSet = new Set(visible.map((f) => directoryOf(f.path)));
   const dirNames = Array.from(dirSet).sort((a, b) => {
     if (a === "brain") return -1;
@@ -1190,7 +1470,11 @@ function BootstrapLiveGraph({
   const POP_DUR = 0.7;
   const DRAW_DUR = 0.8;
 
-  const { width: W, dirX, pillHalfW } = layoutBootstrapDirectoryRow(dirNames, VIEW_MIN);
+	const {
+		width: W,
+		dirX,
+		pillHalfW,
+	} = layoutBootstrapDirectoryRow(dirNames, VIEW_MIN);
 
   const byDir = new Map<string, CreatedFile[]>();
   for (const f of visible) {
@@ -1231,7 +1515,9 @@ function BootstrapLiveGraph({
     fnodes.push({ file: f, x, y, order: order++ });
   }
 
-  const posByPath = new Map<string, FNode>(fnodes.map((fn) => [fn.file.path, fn]));
+	const posByPath = new Map<string, FNode>(
+		fnodes.map((fn) => [fn.file.path, fn]),
+	);
   const crossLinks: { from: FNode; to: FNode; ghostly: boolean }[] = [];
   const linkSeen = new Set<string>();
   for (const fn of fnodes) {
@@ -1243,7 +1529,11 @@ function BootstrapLiveGraph({
       const key = a < b ? `${a}\0${b}` : `${b}\0${a}`;
       if (linkSeen.has(key)) continue;
       linkSeen.add(key);
-      crossLinks.push({ from: fn, to: toNode, ghostly: Boolean(fn.file.isGhost || toNode.file.isGhost) });
+			crossLinks.push({
+				from: fn,
+				to: toNode,
+				ghostly: Boolean(fn.file.isGhost || toNode.file.isGhost),
+			});
     }
   }
 
@@ -1262,7 +1552,9 @@ function BootstrapLiveGraph({
 
       <div className="pointer-events-none absolute left-4 top-4 z-10 flex gap-2">
         <span className="rounded-full border border-slate-200 bg-white/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-slate-500 shadow-sm backdrop-blur">
-          {hasBrain ? `${dirNames.length} dir · ${visible.length} nodes` : "Waiting"}
+					{hasBrain
+						? `${dirNames.length} dir · ${visible.length} nodes`
+						: "Waiting"}
         </span>
         {doneCount > 0 && (
           <span className="rounded-full border border-emerald-200 bg-emerald-50/90 px-3 py-1 text-[10px] font-semibold uppercase tracking-widest text-emerald-700 shadow-sm backdrop-blur">
@@ -1301,9 +1593,29 @@ function BootstrapLiveGraph({
           <>
             {/* brain root node */}
             <g className="cg-pop" style={{ animationDelay: "0s" }}>
-              <circle cx={W / 2} cy={BRAIN_Y} r="22" fill="#ede9fe" stroke="#8b5cf6" strokeWidth="2.2" />
-              <circle cx={W / 2} cy={BRAIN_Y} r="6" fill="#7c3aed" />
-              <text x={W / 2} y={BRAIN_Y + 40} textAnchor="middle" fontSize="11" fontWeight="700" fontFamily="ui-sans-serif,system-ui,sans-serif" fill="#4c1d95">
+							<circle
+								cx={W / 2}
+								cy={BRAIN_Y}
+								r="22"
+								fill="#ede9fe"
+								stroke="#8b5cf6"
+								strokeWidth="2.2"
+							/>
+							<circle
+								cx={W / 2}
+								cy={BRAIN_Y}
+								r="6"
+								fill="#7c3aed"
+							/>
+							<text
+								x={W / 2}
+								y={BRAIN_Y + 40}
+								textAnchor="middle"
+								fontSize="11"
+								fontWeight="700"
+								fontFamily="ui-sans-serif,system-ui,sans-serif"
+								fill="#4c1d95"
+							>
                 brain/
               </text>
             </g>
@@ -1332,15 +1644,40 @@ function BootstrapLiveGraph({
             {/* directory nodes */}
             {dirNames.map((d, i) => {
               const dx = dirX.get(d)!;
-              const hw = pillHalfW.get(d) ?? Math.max(40, d.length * 5.6 + 24);
+							const hw =
+								pillHalfW.get(d) ??
+								Math.max(40, d.length * 5.6 + 24);
               const w = hw * 2;
               const delay = 0.4 + i * DIR_STAGGER;
               return (
-                <g key={`d-${d}`} className="cg-pop" style={{ animationDelay: `${delay}s` }}>
+								<g
+									key={`d-${d}`}
+									className="cg-pop"
+									style={{ animationDelay: `${delay}s` }}
+								>
                   <title>{`${d}/`}</title>
-                  <rect x={dx - hw} y={DIR_Y - 16} width={w} height="32" rx="10" fill="white" stroke="#a5b4fc" strokeWidth="1.4" />
-                  <text x={dx} y={DIR_Y + 5} textAnchor="middle" fontSize="10" fontWeight="700" fontFamily="ui-sans-serif,system-ui,sans-serif" fill="#4338ca">
-                    {d.length > 18 ? `${d.slice(0, 16)}\u2026` : d}
+									<rect
+										x={dx - hw}
+										y={DIR_Y - 16}
+										width={w}
+										height="32"
+										rx="10"
+										fill="white"
+										stroke="#a5b4fc"
+										strokeWidth="1.4"
+									/>
+									<text
+										x={dx}
+										y={DIR_Y + 5}
+										textAnchor="middle"
+										fontSize="10"
+										fontWeight="700"
+										fontFamily="ui-sans-serif,system-ui,sans-serif"
+										fill="#4338ca"
+									>
+										{d.length > 18
+											? `${d.slice(0, 16)}\u2026`
+											: d}
                   </text>
                 </g>
               );
@@ -1363,12 +1700,26 @@ function BootstrapLiveGraph({
                   y1={DIR_Y + 18}
                   x2={x}
                   y2={y - 14}
-                  stroke={ghost ? "#ddd6fe" : done ? "#86efac" : writ ? "#c4b5fd" : "#e2e8f0"}
+									stroke={
+										ghost
+											? "#ddd6fe"
+											: done
+												? "#86efac"
+												: writ
+													? "#c4b5fd"
+													: "#e2e8f0"
+									}
                   strokeWidth={writ ? 1.8 : 1.2}
-                  strokeDasharray={ghost ? "4 4" : done ? "none" : "5 5"}
+									strokeDasharray={
+										ghost ? "4 4" : done ? "none" : "5 5"
+									}
                   opacity={ghost ? 0.65 : 1}
                   className={writ ? "cg-flow" : "cg-draw"}
-                  style={!writ ? { animationDelay: `${delay}s` } : undefined}
+									style={
+										!writ
+											? { animationDelay: `${delay}s` }
+											: undefined
+									}
                 />
               );
             })}
@@ -1381,7 +1732,8 @@ function BootstrapLiveGraph({
               const dist = Math.hypot(dx, dy) || 1;
               const off = Math.min(36, 14 + dist * 0.08);
               const midX = (x1 + x2) / 2 - (dy / dist) * off;
-              const midY = (y1 + y2) / 2 + (dx / dist) * off * 0.55;
+							const midY =
+								(y1 + y2) / 2 + (dx / dist) * off * 0.55;
               const delay = 0.82 + li * 0.035;
               return (
                 <path
@@ -1405,38 +1757,113 @@ function BootstrapLiveGraph({
               const done = file.status === "done";
               const planned = file.status === "planned";
               const ghost = file.isGhost === true;
-              const special = file.path === "index.md" || file.path === "map.md";
+							const special =
+								file.path === "index.md" ||
+								file.path === "map.md";
               const r = special ? 14 : 11;
-              const baseName = file.path.split("/").pop()?.replace(/\.mdx?$/i, "") ?? "";
+							const baseName =
+								file.path
+									.split("/")
+									.pop()
+									?.replace(/\.mdx?$/i, "") ?? "";
               const name = truncateFileLabel(baseName, 17);
               const d = directoryOf(file.path);
               const dIdx = dirOrder.get(d) ?? 0;
               const baseDelay = 0.7 + dIdx * DIR_STAGGER;
               const delay = baseDelay + o * NODE_STAGGER;
               return (
-                <g key={file.path} className="cg-pop" style={{ animationDelay: `${delay}s`, opacity: ghost ? 0.82 : 1 }}>
+								<g
+									key={file.path}
+									className="cg-pop"
+									style={{
+										animationDelay: `${delay}s`,
+										opacity: ghost ? 0.82 : 1,
+									}}
+								>
                   <title>{file.path}</title>
                   {writ && (
-                    <circle cx={x} cy={y} r="22" fill="none" stroke="#8b5cf6" strokeWidth="1.5" className="cg-ring" opacity="0.3" />
+										<circle
+											cx={x}
+											cy={y}
+											r="22"
+											fill="none"
+											stroke="#8b5cf6"
+											strokeWidth="1.5"
+											className="cg-ring"
+											opacity="0.3"
+										/>
                   )}
                   <circle
-                    cx={x} cy={y} r={r}
-                    fill={ghost ? (done ? "#f5f3ff" : writ ? "#faf5ff" : "#fafafe") : done ? "#ecfdf5" : writ ? "#f5f3ff" : planned ? "#fafafe" : "#f8fafc"}
-                    stroke={special ? "#fbbf24" : ghost ? "#a78bfa" : done ? "#34d399" : writ ? "#a78bfa" : "#cbd5e1"}
+										cx={x}
+										cy={y}
+										r={r}
+										fill={
+											ghost
+												? done
+													? "#f5f3ff"
+													: writ
+														? "#faf5ff"
+														: "#fafafe"
+												: done
+													? "#ecfdf5"
+													: writ
+														? "#f5f3ff"
+														: planned
+															? "#fafafe"
+															: "#f8fafc"
+										}
+										stroke={
+											special
+												? "#fbbf24"
+												: ghost
+													? "#a78bfa"
+													: done
+														? "#34d399"
+														: writ
+															? "#a78bfa"
+															: "#cbd5e1"
+										}
                     strokeWidth={writ ? 2.2 : 1.5}
-                    strokeDasharray={ghost ? "3 3" : undefined}
+										strokeDasharray={
+											ghost ? "3 3" : undefined
+										}
                   />
                   <circle
-                    cx={x} cy={y} r="3"
-                    fill={special ? "#f59e0b" : ghost ? "#8b5cf6" : done ? "#10b981" : writ ? "#8b5cf6" : "#94a3b8"}
+										cx={x}
+										cy={y}
+										r="3"
+										fill={
+											special
+												? "#f59e0b"
+												: ghost
+													? "#8b5cf6"
+													: done
+														? "#10b981"
+														: writ
+															? "#8b5cf6"
+															: "#94a3b8"
+										}
                   />
                   <text
-                    x={x} y={y + r + 15}
-                    textAnchor="middle" fontSize="8" fontWeight="600"
+										x={x}
+										y={y + r + 15}
+										textAnchor="middle"
+										fontSize="8"
+										fontWeight="600"
                     fontFamily="ui-monospace,SFMono-Regular,monospace"
                     className="cg-fade"
-                    style={{ animationDelay: `${delay + 0.15}s` }}
-                    fill={ghost ? "#7c3aed" : done ? "#059669" : writ ? "#6d28d9" : "#64748b"}
+										style={{
+											animationDelay: `${delay + 0.15}s`,
+										}}
+										fill={
+											ghost
+												? "#7c3aed"
+												: done
+													? "#059669"
+													: writ
+														? "#6d28d9"
+														: "#64748b"
+										}
                   >
                     {name}
                   </text>
@@ -1483,14 +1910,18 @@ function GraphWaitingPlaceholder({ isRunning }: { isRunning: boolean }) {
         fontFamily="ui-sans-serif,system-ui,sans-serif"
         fill="#64748b"
       >
-        {isRunning ? "Planning brain structure\u2026" : "Waiting for files"}
+				{isRunning
+					? "Planning brain structure\u2026"
+					: "Waiting for files"}
       </text>
     </g>
   );
 }
 
 function pathsToVirtualTree(paths: string[]): BrainTreeNode[] {
-  const uniq = [...new Set(paths)].filter(Boolean).sort((a, b) => a.localeCompare(b));
+	const uniq = [...new Set(paths)]
+		.filter(Boolean)
+		.sort((a, b) => a.localeCompare(b));
   const rootChildren: BrainTreeNode[] = [];
   for (const path of uniq) {
     const segments = path.split("/").filter(Boolean);
@@ -1502,7 +1933,12 @@ function pathsToVirtualTree(paths: string[]): BrainTreeNode[] {
       const isLeaf = i === segments.length - 1;
       let node = parentList.find((c) => c.path === acc);
       if (!node) {
-        node = { name: seg, path: acc, type: isLeaf ? "file" : "directory", children: isLeaf ? undefined : [] };
+				node = {
+					name: seg,
+					path: acc,
+					type: isLeaf ? "file" : "directory",
+					children: isLeaf ? undefined : [],
+				};
         parentList.push(node);
       }
       if (!isLeaf) {
@@ -1524,35 +1960,60 @@ function pathsToVirtualTree(paths: string[]): BrainTreeNode[] {
   return rootChildren;
 }
 
-function BrainDirectoryTree({ tree, files }: { tree: BrainTreeNode[]; files: CreatedFile[] }) {
-  const virtualTree = useMemo(() => pathsToVirtualTree(files.map((f) => f.path)), [files]);
+function BuildFileTreeView({
+  tree,
+  files,
+}: {
+  tree: BrainTreeNode[];
+  files: CreatedFile[];
+}) {
+  const virtualTree = useMemo(
+    () => pathsToVirtualTree(files.map((f) => f.path)),
+    [files],
+  );
   const displayTree = tree.length > 0 ? tree : virtualTree;
-  const fileByPath = useMemo(() => new Map(files.map((f) => [f.path, f])), [files]);
-  const fileCount = files.filter((f) => f.path && !f.path.endsWith("/")).length;
+  const fileByPath = useMemo(
+    () => new Map(files.map((f) => [f.path, f])),
+    [files],
+  );
+  const fileCount = files.filter(
+    (f) => f.path && !f.path.endsWith("/"),
+  ).length;
 
   return (
-    <div className="flex min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
-      <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FolderOpen size={15} className="text-emerald-500" />
-          <div>
-            <h2 className="text-sm font-semibold text-slate-800">Brain Directory</h2>
-            <p className="text-xs text-slate-400">
-              {tree.length > 0 ? "Live snapshot from the agent" : "Built live from paths on the canvas (preview + real)"}
-            </p>
-          </div>
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex items-center justify-between border-b border-black/10 px-4 py-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+            Files
+          </p>
+          <p className="text-[11px] text-black/70">
+            {fileCount === 0
+              ? "Waiting for first files"
+              : `${fileCount} node${fileCount === 1 ? "" : "s"} forming`}
+          </p>
         </div>
-        <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-semibold text-emerald-700">
-          {fileCount} files
+        <span className="rounded-full bg-black/[0.06] px-2.5 py-1 font-mono text-[10px] text-black/70">
+          brain/
         </span>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border border-slate-200/60 bg-slate-50/70 p-3">
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
         {displayTree.length ? (
-          displayTree.map((node) => <TreeNode key={node.path} node={node} depth={0} fileByPath={fileByPath} />)
+          displayTree.map((node) => (
+            <BuildTreeNode
+              key={node.path}
+              node={node}
+              depth={0}
+              fileByPath={fileByPath}
+            />
+          ))
         ) : (
-          <div className="flex flex-col items-center justify-center py-10 text-center text-slate-400">
-            <Folder size={24} className="mb-2 opacity-40" />
-            <p className="text-xs font-medium">Waiting for generated brain files</p>
+          <div className="flex flex-col items-center justify-center py-10 text-center text-black/40">
+            <Folder size={20} className="mb-2 opacity-50" />
+            <p className="text-[11px] font-medium">
+              Files appear here as the agent writes them
+            </p>
           </div>
         )}
       </div>
@@ -1560,7 +2021,7 @@ function BrainDirectoryTree({ tree, files }: { tree: BrainTreeNode[]; files: Cre
   );
 }
 
-function TreeNode({
+function BuildTreeNode({
   node,
   depth,
   fileByPath,
@@ -1569,103 +2030,117 @@ function TreeNode({
   depth: number;
   fileByPath: Map<string, CreatedFile>;
 }) {
+  const [open, setOpen] = useState(true);
   const hint = node.type === "file" ? fileByPath.get(node.path) : undefined;
   const ghost = hint?.isGhost === true;
   const writing = hint?.status === "writing";
+  const done = hint?.status === "done";
+
+  if (node.type === "directory") {
+    const childCount = node.children?.length ?? 0;
+    return (
+      <div className="mb-0.5">
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="flex w-full items-center gap-1 rounded-lg px-2 py-1.5 text-left transition hover:bg-black/[0.05]"
+          style={{ paddingLeft: 8 + depth * 14 }}
+        >
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center text-black/55">
+            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          </span>
+          <Folder size={13} className="flex-shrink-0 text-black/65" />
+          <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-black/80">
+            {node.name}
+          </span>
+          <span className="flex-shrink-0 rounded-md bg-black/[0.06] px-1.5 py-0.5 text-[9px] font-semibold tabular-nums text-black/60">
+            {childCount}
+          </span>
+        </button>
+        {open ? (
+          <div className="space-y-0.5">
+            {node.children?.map((child) => (
+              <BuildTreeNode
+                key={child.path}
+                node={child}
+                depth={depth + 1}
+                fileByPath={fileByPath}
+              />
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <div
+    <div
+      className={cn(
+        "flex items-start gap-2 rounded-xl px-2 py-1.5 transition",
+        writing
+          ? "bg-[color:var(--accent-50)] ring-1 ring-[color:var(--accent-200)]"
+          : "hover:bg-black/[0.04]",
+        ghost && "opacity-80",
+      )}
+      style={{ paddingLeft: 8 + depth * 14 }}
+    >
+      <FileText
+        size={13}
         className={cn(
-          "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition",
-          node.type === "directory" ? "bg-amber-50/60" : "hover:bg-white/80",
-          ghost && "border border-dashed border-violet-200/90 bg-violet-50/40",
-          writing && "ring-1 ring-violet-400/50",
+          "mt-0.5 flex-shrink-0",
+          done
+            ? "text-emerald-600"
+            : writing
+              ? "text-[color:var(--accent-700)]"
+              : ghost
+                ? "text-[color:var(--accent-500)]"
+                : "text-black/65",
         )}
-        style={{ paddingLeft: 8 + depth * 16 }}
-      >
-        {node.type === "directory" ? <Folder size={13} className="text-amber-500" /> : <FileText size={13} className={ghost ? "text-violet-500" : "text-emerald-500"} />}
-        <span className={node.type === "directory" ? "font-semibold text-slate-700" : "font-mono text-slate-600"}>
+      />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-mono text-[11px] leading-tight text-black/80">
           {node.name}
         </span>
-        {node.type === "file" && ghost && (
-          <span className="ml-auto rounded px-1 text-[9px] font-bold uppercase tracking-wide text-violet-600">preview</span>
-        )}
-        {node.type === "file" && !ghost && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400" />}
-      </div>
-      {node.children?.map((child) => <TreeNode key={child.path} node={child} depth={depth + 1} fileByPath={fileByPath} />)}
-    </div>
-  );
-}
-
-function AgentThinkingStream({
-  thinking,
-  endRef,
-  subtitle = "Every initialization step streamed live",
-}: {
-  thinking: string[];
-  endRef: React.RefObject<HTMLDivElement | null>;
-  subtitle?: string;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col rounded-[2rem] border border-white/80 bg-white/65 p-4 shadow-sm backdrop-blur-2xl">
-      <div className="mb-3 flex items-center gap-2">
-        <Bot size={15} className="text-violet-500" />
-        <div>
-          <h2 className="text-sm font-semibold text-slate-800">Session log</h2>
-          <p className="text-xs text-slate-400">{subtitle}</p>
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-2xl border border-violet-100/70 bg-violet-50/40 p-3">
-        {thinking.map((line, index) => (
-          <div key={`${line}-${index}`} className="flex gap-2 rounded-xl bg-white/70 px-3 py-2 text-[12px] leading-5 text-slate-600">
-            <Sparkles size={11} className="mt-1 flex-shrink-0 text-violet-400" />
-            <p>{line}</p>
-          </div>
-        ))}
-        <div ref={endRef} />
-      </div>
-    </div>
-  );
-}
-
-function AgentStatus({ online, compact = false }: { online: boolean | null; compact?: boolean }) {
-  return (
-    <div className={cn(
-      "flex items-start gap-3 rounded-[1.5rem] border p-4 shadow-sm backdrop-blur-xl",
-      compact && "w-full sm:w-auto sm:min-w-72",
-      online === true
-        ? "border-emerald-200/60 bg-emerald-50/80"
-        : online === false
-        ? "border-amber-200/60 bg-amber-50/80"
-        : "border-slate-200/60 bg-white/70",
-    )}>
-      {online === null ? <Loader2 size={15} className="mt-0.5 animate-spin text-slate-400" /> : online ? <Wifi size={15} className="mt-0.5 text-emerald-600" /> : <WifiOff size={15} className="mt-0.5 text-amber-600" />}
-      <div>
-        <p className={cn("text-xs font-semibold", online ? "text-emerald-700" : online === false ? "text-amber-800" : "text-slate-600")}>
-          {online === null ? "Checking agent API" : online ? "Agent API connected" : "Agent API offline"}
-        </p>
-        <p className="mt-1 text-[11px] leading-4 text-slate-500">
-          {online === false ? "Start it with `cd agent && uv run brain-api` or run `./start.sh`." : "The session builder streams initialization over a WebSocket."}
-        </p>
-      </div>
+      </span>
+      {writing ? (
+        <Loader2
+          size={11}
+          className="ml-1 mt-0.5 flex-shrink-0 animate-spin text-[color:var(--accent-600)]"
+        />
+      ) : ghost ? (
+        <span className="ml-1 mt-0.5 rounded bg-[color:var(--accent-100)] px-1 text-[8px] font-bold uppercase tracking-wider text-[color:var(--accent-700)]">
+          preview
+        </span>
+      ) : done ? (
+        <span className="ml-1 mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-emerald-500" />
+      ) : (
+        <span className="ml-1 mt-1.5 h-1.5 w-1.5 flex-shrink-0 rounded-full bg-black/25" />
+      )}
     </div>
   );
 }
 
 function ErrorBanner({ message }: { message: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-[1.5rem] border border-red-200/60 bg-red-50/80 p-4 text-red-700 shadow-sm backdrop-blur-xl">
-      <AlertCircle size={15} className="mt-0.5 flex-shrink-0" />
-      <div>
-        <p className="text-xs font-semibold">Session failed</p>
-        <p className="mt-1 whitespace-pre-line text-[11px] leading-4">{message}</p>
+    <div className="flex items-start gap-3 rounded-2xl border border-red-200/70 bg-red-50/80 px-4 py-3 text-red-700 shadow-sm backdrop-blur-xl">
+      <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[12px] font-semibold">Session failed</p>
+        <p className="mt-0.5 whitespace-pre-line text-[11px] leading-4">
+          {message}
+        </p>
       </div>
     </div>
   );
 }
 
-function CompletionBar({ resultText, onReset }: { resultText: string; onReset: () => void }) {
+function CompletionBar({
+	resultText,
+	onReset,
+}: {
+	resultText: string;
+	onReset: () => void;
+}) {
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-emerald-200/70 bg-white/85 px-6 py-4 shadow-2xl shadow-emerald-900/10 backdrop-blur-2xl">
       <div className="mx-auto flex max-w-screen-2xl flex-wrap items-center gap-4">
@@ -1673,19 +2148,31 @@ function CompletionBar({ resultText, onReset }: { resultText: string; onReset: (
           <CheckCircle2 size={22} className="text-emerald-600" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-800">Brain is ready</p>
+					<p className="text-sm font-semibold text-slate-800">
+						Brain is ready
+					</p>
           <p className="truncate text-xs text-slate-500">
-            {resultText || "Stay on this screen as long as you like—open the map only when you choose."}
+						{resultText ||
+							"Stay on this screen as long as you like—open the map only when you choose."}
           </p>
         </div>
-        <button onClick={onReset} className="rounded-full border border-slate-200/70 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50">
+				<button
+					onClick={onReset}
+					className="rounded-full border border-slate-200/70 bg-white px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+				>
           New session
         </button>
-        <Link href="/brain" className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-emerald-200/70 transition hover:bg-emerald-700">
+				<Link
+					href="/brain"
+					className="inline-flex items-center gap-2 rounded-full bg-emerald-600 px-5 py-2.5 text-xs font-semibold text-white shadow-md shadow-emerald-200/70 transition hover:bg-emerald-700"
+				>
           <Brain size={13} />
           View brain map
         </Link>
-        <Link href="/agent" className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-violet-200/70 transition hover:bg-violet-700">
+				<Link
+					href="/agent"
+					className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-violet-200/70 transition hover:bg-violet-700"
+				>
           <Cpu size={13} />
           Watch Agent
           <ArrowRight size={12} />
@@ -1697,9 +2184,13 @@ function CompletionBar({ resultText, onReset }: { resultText: string; onReset: (
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-slate-200/60 bg-white/70 p-3">
-      <p className="text-2xl font-bold tabular-nums text-slate-800">{value}</p>
-      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">{label}</p>
+    <div className="rounded-xl border border-black/10 bg-white/60 px-2 py-2">
+      <p className="text-base font-bold tabular-nums leading-tight text-black/85">
+        {value}
+      </p>
+      <p className="text-[9px] font-semibold uppercase tracking-widest text-black/45">
+        {label}
+      </p>
     </div>
   );
 }
@@ -1709,18 +2200,40 @@ function extensionOf(name: string) {
   return idx === -1 ? "" : name.slice(idx).toLowerCase();
 }
 
+function extractGithubRepoUrls(text: string): string[] {
+	const matches = text.match(/https?:\/\/github\.com\/[^\s"'<>]+/gi) ?? [];
+	return matches
+		.map(normalizeGithubRepoUrl)
+		.filter((url): url is string => Boolean(url));
+}
+
+function removeGithubRepoUrls(text: string): string {
+	return text
+		.replace(/https?:\/\/github\.com\/[^\s"'<>]+/gi, "")
+		.replace(/\s+/g, " ");
+}
+
+function normalizeGithubRepoUrl(raw: string): string | null {
+	try {
+		const url = new URL(raw.trim().replace(/[),.;\]]+$/g, ""));
+		if (url.hostname.toLowerCase() !== "github.com") return null;
+		const [owner, repo] = url.pathname.split("/").filter(Boolean);
+		if (!owner || !repo) return null;
+		return `https://github.com/${owner}/${repo.replace(/\.git$/i, "")}`;
+	} catch {
+		return null;
+	}
+}
+
 function formatNumber(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
 function formatCompact(value: number) {
-  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(value);
-}
-
-function formatBytes(value: number) {
-  if (value < 1024) return `${value} B`;
-  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
-  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+	return new Intl.NumberFormat("en-US", {
+		notation: "compact",
+		maximumFractionDigits: 1,
+	}).format(value);
 }
 
 function upsertFile(files: CreatedFile[], next: CreatedFile) {
@@ -1761,11 +2274,17 @@ function truncateFileLabel(s: string, max = 16): string {
 function layoutBootstrapDirectoryRow(
   dirNames: string[],
   viewMin: number,
-): { width: number; dirX: Map<string, number>; pillHalfW: Map<string, number> } {
+): {
+	width: number;
+	dirX: Map<string, number>;
+	pillHalfW: Map<string, number>;
+} {
   const sidePad = 44;
   const minBetween = 16;
   const pillPadX = 24;
-  const halfWidths = dirNames.map((d) => Math.max(40, d.length * 5.6 + pillPadX));
+	const halfWidths = dirNames.map((d) =>
+		Math.max(40, d.length * 5.6 + pillPadX),
+	);
   const pillHalfW = new Map<string, number>();
   dirNames.forEach((d, i) => pillHalfW.set(d, halfWidths[i]!));
 
@@ -1774,7 +2293,11 @@ function layoutBootstrapDirectoryRow(
   }
   if (dirNames.length === 1) {
     const d0 = dirNames[0]!;
-    return { width: viewMin, dirX: new Map([[d0, viewMin / 2]]), pillHalfW };
+		return {
+			width: viewMin,
+			dirX: new Map([[d0, viewMin / 2]]),
+			pillHalfW,
+		};
   }
 
   const centers: number[] = [];
@@ -1784,7 +2307,10 @@ function layoutBootstrapDirectoryRow(
     x = centers[i - 1]! + halfWidths[i - 1]! + minBetween + halfWidths[i]!;
     centers.push(x);
   }
-  const rawRight = centers[centers.length - 1]! + halfWidths[halfWidths.length - 1]! + sidePad;
+	const rawRight =
+		centers[centers.length - 1]! +
+		halfWidths[halfWidths.length - 1]! +
+		sidePad;
   const width = Math.max(viewMin, Math.ceil(rawRight + 8));
   const shift = (width - rawRight) / 2;
   const dirX = new Map<string, number>();
@@ -1796,13 +2322,16 @@ function readFileAsDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result ?? ""));
-    reader.onerror = () => reject(reader.error ?? new Error(`Could not read ${file.name}`));
+		reader.onerror = () =>
+			reject(reader.error ?? new Error(`Could not read ${file.name}`));
     reader.readAsDataURL(file);
   });
 }
 
 function resolveBootstrapWsUrl() {
-  if (process.env.NEXT_PUBLIC_AGENT_WS_URL) return process.env.NEXT_PUBLIC_AGENT_WS_URL;
+  if (process.env.NEXT_PUBLIC_AGENT_WS_URL) {
+    return process.env.NEXT_PUBLIC_AGENT_WS_URL;
+  }
   const base = env.agentApiUrlPublic;
   if (base) {
     try {
@@ -1810,7 +2339,7 @@ function resolveBootstrapWsUrl() {
       const wsProto = u.protocol === "https:" ? "wss:" : "ws:";
       return `${wsProto}//${u.host}/bootstrap/ws`;
     } catch {
-      /* fall through */
+      /* use localhost fallback */
     }
   }
   const protocol = window.location.protocol === "https:" ? "wss" : "ws";
@@ -1821,12 +2350,19 @@ function stageTitle(stage: StageId) {
   return STAGES.find((item) => item.id === stage)?.label ?? stage;
 }
 
-function formatInitializeErrorDetail(raw: { detail?: unknown }, status: number): string {
+function formatInitializeErrorDetail(
+	raw: { detail?: unknown },
+	status: number,
+): string {
   const d = raw.detail;
   if (typeof d === "string") return d;
   if (Array.isArray(d)) {
     return d
-      .map((item) => (typeof item === "object" && item && "msg" in item ? String((item as { msg: unknown }).msg) : JSON.stringify(item)))
+			.map((item) =>
+				typeof item === "object" && item && "msg" in item
+					? String((item as { msg: unknown }).msg)
+					: JSON.stringify(item),
+			)
       .join("; ");
   }
   if (d != null && typeof d === "object") return JSON.stringify(d);

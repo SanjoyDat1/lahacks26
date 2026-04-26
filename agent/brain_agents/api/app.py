@@ -7,6 +7,7 @@ from .routes import (
     bootstrap,
     bootstrap_stream,
     compat,
+    files,
     github,
     health,
     query,
@@ -31,6 +32,7 @@ def create_app() -> FastAPI:
 
     app.include_router(compat.router)
     app.include_router(health.router)
+    app.include_router(files.router)
     app.include_router(query.router)
     app.include_router(update.router)
     app.include_router(github.router)

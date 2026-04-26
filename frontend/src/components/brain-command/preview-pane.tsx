@@ -386,59 +386,72 @@ export function PreviewPane({
     [file, allFiles],
   );
 
+  const answerBlock = lastAnswer ? (
+    <div className="space-y-4">
+      <div className="max-w-none">
+        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+          Assistant
+        </p>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
+          {lastAnswer.markdown}
+        </ReactMarkdown>
+      </div>
+
+      {lastAnswer.sources?.length ? (
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
+            Sources
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {lastAnswer.sources.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => onSelectSource(s)}
+                className={cn(
+                  "rounded-full border border-black/10 bg-white/70 px-3 py-1 text-[11px] font-medium text-black/75 transition",
+                  "hover:bg-white hover:text-black",
+                )}
+                style={{ boxShadow: `inset 0 0 0 1px ${accentForPath(s)}33` }}
+                title={s}
+              >
+                <span className="font-mono">{s}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  ) : null;
+
   const body = (sized: "inline" | "expanded") => (
     <div className={cn("min-h-0 flex-1 overflow-y-auto", sized === "expanded" ? "px-10 py-8" : "px-5 py-5")}>
       {file ? (
-        <div className="max-w-none">
-          {displayTitle ? (
-            <h1 className="mt-0 mb-3 text-2xl font-semibold tracking-tight text-black">
-              {displayTitle}
-            </h1>
+        <div className="max-w-none space-y-8">
+          {answerBlock ? (
+            <div className="rounded-xl border border-black/10 bg-white/60 p-4 shadow-sm">{answerBlock}</div>
           ) : null}
 
-          <ConnectedPagesList
-            pages={connectedPages}
-            accentForPath={accentForPath}
-            onSelect={onSelectSource}
-          />
+          <div>
+            {displayTitle ? (
+              <h1 className="mt-0 mb-3 text-2xl font-semibold tracking-tight text-black">
+                {displayTitle}
+              </h1>
+            ) : null}
 
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-            {contentBody}
-          </ReactMarkdown>
-        </div>
-      ) : lastAnswer ? (
-        <div className="space-y-4">
-          <div className="max-w-none">
+            <ConnectedPagesList
+              pages={connectedPages}
+              accentForPath={accentForPath}
+              onSelect={onSelectSource}
+            />
+
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
-              {lastAnswer.markdown}
+              {contentBody}
             </ReactMarkdown>
           </div>
-
-          {lastAnswer.sources?.length ? (
-            <div>
-              <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-black/55">
-                Sources
-              </p>
-              <div className="flex flex-wrap gap-2">
-                {lastAnswer.sources.map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => onSelectSource(s)}
-                    className={cn(
-                      "rounded-full border border-black/10 bg-white/70 px-3 py-1 text-[11px] font-medium text-black/75 transition",
-                      "hover:bg-white hover:text-black",
-                    )}
-                    style={{ boxShadow: `inset 0 0 0 1px ${accentForPath(s)}33` }}
-                    title={s}
-                  >
-                    <span className="font-mono">{s}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
         </div>
+      ) : lastAnswer ? (
+        answerBlock
       ) : (
         <div className="flex h-full items-center justify-center text-center text-black/55">
           <div>
