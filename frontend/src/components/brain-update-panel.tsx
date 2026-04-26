@@ -26,7 +26,6 @@ import {
   githubReposForApi,
   type GithubRepoFormRow,
 } from "@/lib/brain/github-ingest";
-import { resolveAgentWsUrl } from "@/lib/agent-ws";
 import { cn } from "@/lib/utils";
 
 function newGithubRepoRow(): GithubRepoFormRow {
@@ -267,7 +266,10 @@ export function BrainUpdatePanel({ onClose, onEvent, onDone }: Props) {
     }
     setGithubIngestStatus(ghMap);
 
-    const wsUrl = resolveAgentWsUrl("/update/ws");
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const wsUrl =
+      process.env.NEXT_PUBLIC_AGENT_WS_URL?.replace("/bootstrap/ws", "/update/ws") ??
+      `${protocol}://${window.location.hostname}:8000/update/ws`;
 
     const ws = new WebSocket(wsUrl);
     socketRef.current = ws;

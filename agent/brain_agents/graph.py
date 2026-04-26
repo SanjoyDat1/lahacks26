@@ -119,73 +119,6 @@ def _extract_content_blocks(content: object) -> tuple[list[str], list[str]]:
     return texts, thoughts
 
 
-_GRAPH_NOISE_NAMES = frozenset({
-    "LangGraph",
-    "RunnableSequence",
-    "RunnableParallel",
-    "RunnableBinding",
-    "RunnableAssign",
-    "RunnableLambda",
-    "RunnableWithFallbacks",
-    "RunnableEach",
-    "Prompt",
-    "ChatPromptTemplate",
-    "__start__",
-    "",
-})
-
-_GRAPH_NODE_LABELS: dict[str, str] = {
-    "agent": "Agent — plan & respond",
-    "tools": "Tools — execute",
-}
-
-
-def _graph_step_payload(
-    phase: Literal["reader", "writer"],
-    etype: str,
-    node_name: str,
-) -> dict[str, Any] | None:
-    """Map LangGraph astream_events chain boundaries to UI-friendly steps."""
-    if not node_name or node_name in _GRAPH_NOISE_NAMES:
-        return None
-    if etype == "on_chain_start":
-        edge = "enter"
-    elif etype == "on_chain_end":
-        edge = "exit"
-    else:
-        return None
-    key_lower = node_name.lower()
-    label = (
-        _GRAPH_NODE_LABELS.get(node_name)
-        or _GRAPH_NODE_LABELS.get(key_lower)
-        or node_name.replace("_", " ").strip()
-        or node_name
-    )
-    return {
-        "type": "graph_step",
-        "phase": phase,
-        "edge": edge,
-        "node": node_name,
-        "label": label,
-    }
-
-
-def _tool_call_summary(tool: str, inp: dict[str, Any]) -> str:
-    """One-line hint for log UIs (paths, queries, top keys)."""
-    parts: list[str] = []
-    for key in ("path", "file_path", "target_path", "query", "task", "pattern"):
-        v = inp.get(key)
-        if v is not None and str(v).strip():
-            parts.append(f"{key}={str(v)[:120]}")
-    if not parts and inp:
-        # fall back to first few keys
-        for k, v in list(inp.items())[:3]:
-            if k in ("messages",):
-                continue
-            parts.append(f"{k}={str(v)[:80]}")
-    return "; ".join(parts) if parts else ""
-
-
 async def run_task_streaming(
     user: str,
     task: Literal["query", "update"],
@@ -195,8 +128,7 @@ async def run_task_streaming(
 
     Event shapes emitted:
     - {"type": "agent_start",  "agent": "reader"|"writer"}
-    - {"type": "graph_step",   "phase": "reader"|"writer", "edge": "enter"|"exit", "node": str, "label": str}
-    - {"type": "tool_call",    "agent": ..., "tool": ..., "input": {...}, "summary": str, "run_id": ...}
+    - {"type": "tool_call",    "agent": ..., "tool": ..., "input": {...}, "run_id": ...}
     - {"type": "tool_result",  "agent": ..., "tool": ..., "output": ..., "run_id": ...}
     - {"type": "token",        "agent": ..., "content": ...}
     - {"type": "thinking",     "agent": ..., "content": ...}
@@ -227,11 +159,6 @@ async def run_task_streaming(
         ename: str = event.get("name", "")
         edata: dict[str, Any] = event.get("data", {}) or {}
 
-        if etype in ("on_chain_start", "on_chain_end"):
-            step = _graph_step_payload("reader", etype, ename)
-            if step:
-                yield step
-
         if etype == "on_tool_start":
             inp = edata.get("input") or {}
             if not isinstance(inp, dict):
@@ -241,7 +168,6 @@ async def run_task_streaming(
                 "agent": "reader",
                 "tool": ename,
                 "input": inp,
-                "summary": _tool_call_summary(ename, inp),
                 "run_id": event.get("run_id", ""),
             }
 
@@ -312,11 +238,6 @@ async def run_task_streaming(
         ename = event.get("name", "")
         edata = event.get("data", {}) or {}
 
-        if etype in ("on_chain_start", "on_chain_end"):
-            step = _graph_step_payload("writer", etype, ename)
-            if step:
-                yield step
-
         if etype == "on_tool_start":
             inp = edata.get("input") or {}
             if not isinstance(inp, dict):
@@ -326,7 +247,6 @@ async def run_task_streaming(
                 "agent": "writer",
                 "tool": ename,
                 "input": inp,
-                "summary": _tool_call_summary(ename, inp),
                 "run_id": event.get("run_id", ""),
             }
 

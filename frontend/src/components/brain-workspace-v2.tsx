@@ -32,7 +32,6 @@ import { BrainAgentSim } from "@/components/brain-agent-sim";
 import { BrainChat } from "@/components/brain-chat";
 import { BrainGraph } from "@/components/brain-graph";
 import type { UpdateVisuState } from "@/components/brain-graph";
-import { ContextMapRebuildNotifier } from "@/components/context-map-rebuild-notifier";
 import { BrainUpdatePanel } from "@/components/brain-update-panel";
 import type { UpdateEvent } from "@/components/brain-update-panel";
 import type { BrianFile, GraphData, GraphLink, GraphNode } from "@/lib/brian/reader";
@@ -495,7 +494,6 @@ export function BrainWorkspaceV2({ files, graphData }: Props) {
 
   return (
     <div className="flex h-[calc(100vh-57px)] overflow-hidden">
-      <ContextMapRebuildNotifier />
       {/* ── Left sidebar ────────────────────────────────────────── */}
       <aside
         className={cn(

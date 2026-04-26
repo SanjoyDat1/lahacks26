@@ -5,7 +5,6 @@ import Link from "next/link";
 import { ChevronLeft, Loader2, RefreshCw } from "lucide-react";
 
 import { BrainCommand } from "@/components/brain-command";
-import { ContextMapRebuildNotifier } from "@/components/context-map-rebuild-notifier";
 import {
   buildGraphData,
   type BrianFile,
@@ -138,14 +137,6 @@ export default function BrainPage() {
 
   return (
     <>
-      <ContextMapRebuildNotifier
-        onRebuildDone={() => {
-          // Small delay: ensures agent has finished writing + invalidation before we re-fetch.
-          setTimeout(() => {
-            void load();
-          }, 250);
-        }}
-      />
       <BrainCommand files={files ?? []} graphData={graphData} />
       {/* Floating refresh / source indicator so it's visually clear which agent
           the graph is reflecting. */}

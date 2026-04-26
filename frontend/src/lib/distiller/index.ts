@@ -4,8 +4,6 @@ import { completeJson, embedText } from "@/lib/llm/client";
 import type { BrainFile, StoredEvent } from "@/lib/types";
 import { truncate } from "@/lib/utils";
 
-const AGENT_API = process.env.AGENT_API_URL ?? "http://localhost:8000";
-
 type Significance = {
   significant: boolean;
   significance: "high" | "medium" | "low" | "none";
@@ -87,35 +85,6 @@ ${canonicalText}`,
     content,
     message: `brain: update ${targetPath.replace("brain/", "")} from ${event.source} event`,
   });
-
-  // Notify the agent so connected web clients can see live rebuild logs.
-  // Best-effort: this should not block or fail the webhook ingestion path.
-  console.info("[ctxmap] trigger rebuild", { agent: AGENT_API, eventId: event.id, source: event.source });
-  void fetch(`${AGENT_API}/context-map/rebuild`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      text: canonicalText,
-      label: `${event.source}-webhook`,
-      update_mode: "deterministic",
-      source: {
-        kind: event.source,
-        url: event.sourceUrl,
-        actor: event.actor,
-        eventType: event.eventType,
-        repository: event.repository,
-        channel: event.channel,
-        eventId: event.id,
-      },
-    }),
-  })
-    .then(async (res) => {
-      const text = await res.text().catch(() => "");
-      console.info("[ctxmap] trigger rebuild response", res.status, text.slice(0, 400));
-    })
-    .catch((err) => {
-      console.warn("[ctxmap] trigger rebuild failed", err instanceof Error ? err.message : String(err));
-    });
 
   const update = await createBrainUpdate({
     eventId: event.id,
