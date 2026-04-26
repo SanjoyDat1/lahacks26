@@ -1023,9 +1023,8 @@ export function SessionStartPage() {
 						text={entryText}
 						standaloneDocs={standaloneDocs}
 						contextPills={contextPills}
-						githubRepos={githubRepos.filter((repo) =>
-							repo.url.trim(),
-						)}
+						githubRepos={githubRepos.filter((repo) => repo.url.trim().length > 0)}
+						hasBootstrapSource={hasBootstrapSource}
 						isDragging={isDragging}
 						isRunning={isRunning}
 						canSubmit={hasBootstrapSource && agentOnline !== false}
@@ -1249,6 +1248,7 @@ function UniversalStartEntry({
   standaloneDocs,
   contextPills,
   githubRepos,
+  hasBootstrapSource,
   isDragging,
   isRunning,
   canSubmit,
@@ -1268,6 +1268,8 @@ function UniversalStartEntry({
   standaloneDocs: UploadDoc[];
   contextPills: ContextBundlePill[];
   githubRepos: GithubRepoFormRow[];
+  /** Same as parent session state: any docs or GitHub repos to bootstrap (don’t gate submit on a fragile local count). */
+  hasBootstrapSource: boolean;
   isDragging: boolean;
   isRunning: boolean;
   canSubmit: boolean;
@@ -1287,8 +1289,9 @@ function UniversalStartEntry({
   const attachWrapRef = useRef<HTMLDivElement | null>(null);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
 
-  const sourceCount = standaloneDocs.length + contextPills.length + githubRepos.length;
-  const canRun = sourceCount > 0 && canSubmit && !isRunning;
+  // canSubmit already requires hasBootstrapSource + agent reachable; don’t also require a
+  // derived attachment count — it could disagree with parent after Google import and block submit.
+  const canRun = canSubmit && !isRunning;
 
   useEffect(() => {
     const ta = taRef.current;
@@ -1435,10 +1438,10 @@ function UniversalStartEntry({
             onTextChange(remainder);
           }}
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-              e.preventDefault();
-              onSubmit();
-            }
+            if (e.key !== "Enter") return;
+            if (e.shiftKey && !e.metaKey && !e.ctrlKey) return;
+            e.preventDefault();
+            if (canRun) onSubmit();
           }}
           placeholder="Paste a GitHub URL, or use the clip to add files & Google…"
           rows={1}
@@ -1449,18 +1452,18 @@ function UniversalStartEntry({
           )}
         />
 
-        <span className="flex-shrink-0 select-none whitespace-nowrap text-[10px] font-medium text-black/40">
-          ⌘ + Enter
+        <span className="hidden max-w-[5.5rem] flex-shrink-0 select-none text-right text-[10px] font-medium leading-tight text-black/40 sm:inline">
+          Enter or ⌘↵
         </span>
 
         <button
           type="button"
           onClick={onSubmit}
           disabled={!canRun}
-          title="Create brain (⌘/Ctrl + Enter)"
+          title="Create brain (Enter or ⌘/Ctrl+Enter)"
           className={cn(
             "flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg border transition",
-            text.trim().length > 0 || sourceCount > 0
+            hasBootstrapSource || text.trim().length > 0
               ? "border-transparent bg-[color:var(--accent-600)] text-white hover:bg-[color:var(--accent-700)] disabled:opacity-60"
               : "border-black/10 bg-white text-black/35",
           )}
