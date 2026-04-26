@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import bootstrap, bootstrap_stream, github, health, query, retrieval, stream, update, update_stream
+from .routes import bootstrap, bootstrap_stream, compat, github, health, query, retrieval, stream, update, update_stream
 
 
 def create_app() -> FastAPI:
@@ -17,6 +17,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(compat.router)
     app.include_router(health.router)
     app.include_router(query.router)
     app.include_router(update.router)
