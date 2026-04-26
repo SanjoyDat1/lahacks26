@@ -17,11 +17,9 @@ keywords: [open questions, unresolved issues]
 
 # Open Questions
 
-This document lists unresolved issues and considerations for the project. 
-
-- Should the landing page support multiple languages?
-- What analytics tools should be integrated for user tracking?
+- Should the app support multiple separate landing pages for different products?
+- What are the performance implications of using certain libraries?
 
 ## Source Evidence
-- Should the landing page support multiple languages?
-- What analytics tools should be integrated for user tracking?
+- Should the app support multiple separate landing pages for different products?
+- What are the performance implications of using certain libraries?

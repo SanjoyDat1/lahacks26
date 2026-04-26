@@ -38,7 +38,6 @@ export function PromptBar({
   const [text, setText] = useState("");
   const [showResults, setShowResults] = useState(true);
   const [messages, setMessages] = useState<Message[]>([]);
-  const [sources, setSources] = useState<string[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [pendingUpdate, setPendingUpdate] = useState<{
     instruction: string;
@@ -123,7 +122,6 @@ export function PromptBar({
 
     onStatusChange("chatting");
     setStreaming(true);
-    setSources([]);
 
     const nextMessages: Message[] = [...messages, { role: "user", content: instruction }];
     setMessages(nextMessages);
@@ -137,9 +135,25 @@ export function PromptBar({
         body: JSON.stringify({ messages: nextMessages }),
       });
 
-      if (!res.ok || !res.body) {
+      if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string; detail?: string };
         throw new Error(err.error ?? err.detail ?? `Chat failed (${res.status})`);
+      }
+
+      const contentType = res.headers.get("content-type") ?? "";
+      if (contentType.includes("application/json")) {
+        const data = (await res.json()) as { content?: string; sources?: string[] };
+        const md = data.content ?? "";
+        out = md;
+        localSources = data.sources ?? [];
+        setMessages([...nextMessages, { role: "assistant", content: out }]);
+        onAnswer({ markdown: out, sources: localSources });
+        onStatusChange("done");
+        return;
+      }
+
+      if (!res.body) {
+        throw new Error("Chat returned an empty response");
       }
 
       const reader = res.body.getReader();
@@ -162,7 +176,6 @@ export function PromptBar({
           const msg = JSON.parse(payload) as { delta?: string; sources?: string[] };
           if (msg.sources?.length) {
             localSources = msg.sources;
-            setSources(msg.sources);
           }
           if (msg.delta) {
             out += msg.delta;
@@ -180,7 +193,7 @@ export function PromptBar({
     } finally {
       setStreaming(false);
     }
-  }, [messages, onAnswer, onStatusChange, sources, text]);
+  }, [messages, onAnswer, onStatusChange, text]);
 
   const applyPending = useCallback(async () => {
     if (!pendingUpdate) return;

@@ -7,7 +7,7 @@ importance: critical
 updated: 2026-04-25
 links:
   - index.md
-  - map.md- brian.index
+  - map.md- brain.index
   - architecture.system_overview
 keywords:
   - summary

@@ -1,5 +1,5 @@
 ---
-id: brian.index
+id: brain.index
 type: index
 title: Brain Index
 status: active
@@ -9,6 +9,7 @@ links:
   - map.md
   - summaries/project_summary.md- map.md
   - summaries/project_summary.md
+  - projects/iris_landing/overview.md
 keywords:
   - source of truth
   - project memory
@@ -34,11 +35,26 @@ Treat this file as the required entry point. Every generated working brain shoul
 
 - [Brain Map](map.md)
 - [Project Summary](summaries/project_summary.md)
+- [Architecture Summary](summaries/architecture_summary.md)
+- [System Overview](architecture/system_overview.md)
+- [Data Model](architecture/data_model.md)
+- [Runtime Flow](architecture/runtime_flow.md)
+- [Ingestion Pipeline](architecture/ingestion_pipeline.md)
+- [Distillation Pipeline](architecture/distillation_pipeline.md)
+- [Brain Storage](architecture/brain_storage.md)
+- [Product Goals](goals/product_goals.md)
+- [Decision Log](decisions/decision_log.md)
+- [Constraints](context/constraints.md)
+- [Open Questions](context/open_questions.md)
+- [Coding Agent Prompt](agents/coding_agent_prompt.md)
+- [Distiller Agent Prompt](agents/distiller_agent_prompt.md)
+- [GitHub Integration](integrations/github.md)
+- [Slack Integration](integrations/slack.md)
+- [Meetings Integration](integrations/meetings.md)
 
 ## Generated Brain Files
 
-- [projects/iris_landing/overview.md](projects/iris_landing/overview.md)
 - [projects/iris_landing/architecture.md](projects/iris_landing/architecture.md)
-- [projects/iris_landing/data_flow.md](projects/iris_landing/data_flow.md)
+- [projects/iris_landing/data_model.md](projects/iris_landing/data_model.md)
 - [projects/iris_landing/timeline.md](projects/iris_landing/timeline.md)
 - [projects/iris_landing/open_questions.md](projects/iris_landing/open_questions.md)
