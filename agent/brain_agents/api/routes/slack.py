@@ -76,7 +76,7 @@ async def slack_events(request: Request):
         try:
             out = agent_runner.update(
                 text,
-                update_mode="llm",
+                update_mode="deterministic",
                 apply=False,
                 source=source,
             )
@@ -131,7 +131,7 @@ async def slack_command(
     try:
         out = agent_runner.update(
             text,
-            update_mode="llm",
+            update_mode="deterministic",
             apply=False,
             source=source,
         )

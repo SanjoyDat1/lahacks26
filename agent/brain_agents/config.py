@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     retrieval_enabled: bool = Field(default=True, validation_alias="RETRIEVAL_ENABLED")
     retrieval_dense_enabled: bool = Field(default=True, validation_alias="RETRIEVAL_DENSE_ENABLED")
 
+    # ── Slack ─────────────────────────────────────────────────────────────────
+    # Empty string => fail-open in dev (no signature check). Set in production
+    # to enforce HMAC-SHA256 verification on every Events API request.
+    slack_signing_secret: str = Field(default="", validation_alias="SLACK_SIGNING_SECRET")
+
     @field_validator("brian_reference_dir", mode="before")
     @classmethod
     def ref_path(cls, v: Any) -> Path:
